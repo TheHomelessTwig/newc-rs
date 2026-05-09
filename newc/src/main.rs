@@ -11,7 +11,20 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        None | Some(Command::Gui) => run_gui(),
+        None => {
+            // Auto-detect cwd as project
+            let cwd = std::env::current_dir().ok();
+            let initial = cwd.filter(|p| newc_core::project::Project::is_newc_project(p));
+            run_gui(initial)
+        }
+        Some(Command::Gui { path }) => {
+            let initial = path.or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .filter(|p| newc_core::project::Project::is_newc_project(p))
+            });
+            run_gui(initial)
+        }
         Some(cmd) => cli::run(cmd),
     }
 }
@@ -22,7 +35,7 @@ fn is_wsl2() -> bool {
         .unwrap_or(false)
 }
 
-fn run_gui() -> anyhow::Result<()> {
+fn run_gui(initial_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     // WSL2 has no hardware EGL — force Mesa software renderer before any GL init
     if is_wsl2() {
         unsafe {
@@ -41,7 +54,7 @@ fn run_gui() -> anyhow::Result<()> {
     eframe::run_native(
         "newc",
         options,
-        Box::new(|cc| Ok(Box::new(app::NewcApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(app::NewcApp::new(cc, initial_path.clone())))),
     )
     .map_err(|e| anyhow::anyhow!("GUI error: {e}"))
 }

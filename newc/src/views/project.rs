@@ -1,5 +1,5 @@
 use egui::{Color32, RichText, Ui};
-use newc_core::project::Project;
+use newc_core::{meta::ProjectMeta, project::Project};
 
 pub enum ProjectAction {
     None,
@@ -21,9 +21,13 @@ pub enum ProjectAction {
     OpenNotes,
     OpenGitPanel,
     SaveAsTemplate,
+    OpenBuildHistory,
+    OpenMetaEditor,
+    OpenUsageTracker,
+    OpenMakefile,
 }
 
-pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectAction {
+pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectMeta) -> ProjectAction {
     let mut action = ProjectAction::None;
 
     // Header row
@@ -49,6 +53,15 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
         if ui.button("Git").on_hover_text("Git status, log and commit").clicked() {
             action = ProjectAction::OpenGitPanel;
         }
+        if ui.button("History").on_hover_text("Build history log").clicked() {
+            action = ProjectAction::OpenBuildHistory;
+        }
+        if ui.button("Usage").on_hover_text("Library function usage per file").clicked() {
+            action = ProjectAction::OpenUsageTracker;
+        }
+        if ui.button("Makefile").on_hover_text("View/edit the project Makefile").clicked() {
+            action = ProjectAction::OpenMakefile;
+        }
         if ui.button("Export ZIP").on_hover_text("Bundle src/, include/, Makefile into a ZIP").clicked() {
             action = ProjectAction::ExportZip;
         }
@@ -63,6 +76,47 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
             action = ProjectAction::OpenMainBuilder;
         }
     });
+
+    // Metadata badge row
+    if !meta.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            if !meta.course.is_empty() {
+                ui.label(
+                    RichText::new(format!("📚 {}", meta.course))
+                        .small()
+                        .color(Color32::from_rgb(100, 180, 255)),
+                );
+            }
+            if !meta.assignment.is_empty() {
+                ui.label(RichText::new(format!("📝 {}", meta.assignment)).small().color(Color32::LIGHT_GRAY));
+            }
+            if let Some(days) = meta.days_until_due() {
+                let (text, color) = if days < 0 {
+                    (format!("⚠ Overdue by {} days", -days), Color32::from_rgb(255, 80, 80))
+                } else if days == 0 {
+                    ("⚠ Due today".to_string(), Color32::from_rgb(255, 160, 0))
+                } else if days <= 3 {
+                    (format!("⏰ Due in {days} days"), Color32::from_rgb(255, 160, 0))
+                } else {
+                    (format!("📅 Due in {days} days ({})", meta.due_date), Color32::LIGHT_GRAY)
+                };
+                ui.label(RichText::new(text).small().color(color));
+            }
+            if let Some(m) = meta.marks_display() {
+                ui.label(RichText::new(format!("🎯 {m}")).small().color(Color32::from_rgb(100, 220, 100)));
+            }
+            if ui.small_button("Edit Metadata").clicked() {
+                action = ProjectAction::OpenMetaEditor;
+            }
+        });
+    } else {
+        ui.horizontal(|ui| {
+            if ui.small_button("+ Add Metadata").on_hover_text("Add course, assignment, due date").clicked() {
+                action = ProjectAction::OpenMetaEditor;
+            }
+        });
+    }
+
     ui.separator();
 
     // Build targets

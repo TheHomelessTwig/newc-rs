@@ -2117,7 +2117,7 @@ dependencies = [
 
 [[package]]
 name = "newc"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2129,16 +2129,18 @@ dependencies = [
  "newc-core",
  "rfd",
  "serde",
+ "toml",
 ]
 
 [[package]]
 name = "newc-core"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "dirs",
  "regex",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "toml",
  "walkdir",

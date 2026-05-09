@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod build_history;
 pub mod config;
 pub mod cref;
 pub mod error;
@@ -7,6 +8,7 @@ pub mod function_lib;
 pub mod git;
 pub mod header;
 pub mod main_builder;
+pub mod meta;
 pub mod module;
 pub mod notes;
 pub mod project;

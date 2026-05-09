@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use egui::{CentralPanel, Color32, Context, RichText, SidePanel, TopBottomPanel};
 use newc_core::{
     analysis,
+    build_history::{self, BuildRecord},
     export,
     header,
     main_builder::MainBuilderState,
+    meta,
     module,
     notes,
     project::Project,
@@ -16,7 +18,7 @@ use newc_core::{
 };
 
 use crate::build_runner::{BuildLine, BuildRunner, LineKind};
-use crate::state::{AppState, BuildState, View};
+use crate::state::{AppState, BuildState, View, save_known_projects};
 use crate::views;
 use crate::views::import_c::ImportState;
 
@@ -28,10 +30,17 @@ pub struct NewcApp {
 }
 
 impl NewcApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, initial_path: Option<PathBuf>) -> Self {
         let mut state = AppState::new();
+
+        // Merge discovered projects (don't replace loaded known_projects)
         let scan_paths = state.config.scan_paths();
-        state.known_projects = Project::discover(&scan_paths);
+        let discovered = Project::discover(&scan_paths);
+        for p in discovered {
+            if !state.known_projects.contains(&p) {
+                state.known_projects.push(p);
+            }
+        }
 
         // Apply theme from config immediately
         if state.config.is_dark() {
@@ -41,13 +50,33 @@ impl NewcApp {
         }
 
         let runner = BuildRunner::spawn(cc.egui_ctx.clone());
-        Self { state, runner, build_panel_open: true, build_auto_scroll: true }
+        let mut app = Self { state, runner, build_panel_open: true, build_auto_scroll: true };
+
+        // Open initial project if provided
+        if let Some(path) = initial_path {
+            app.open_project(path);
+        }
+
+        app
     }
 
     fn drain_build_output(&mut self) {
         for line in self.runner.drain() {
-            if let LineKind::Done { exit_code, .. } = line.kind {
+            if let LineKind::Done { exit_code, duration_ms } = line.kind {
                 self.state.build_state = BuildState::Done { exit_code };
+                // Record build history
+                if let Some(project) = self.state.current_project() {
+                    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    build_history::append(
+                        &project.root.clone(),
+                        BuildRecord {
+                            timestamp,
+                            target: self.state.build_target_current.clone(),
+                            exit_code,
+                            duration_ms,
+                        },
+                    );
+                }
                 self.state.build_lines.push(line);
             } else {
                 self.state.build_state = BuildState::Running;
@@ -61,8 +90,11 @@ impl NewcApp {
             Ok(p) => {
                 if !self.state.known_projects.contains(&path) {
                     self.state.known_projects.push(path);
+                    save_known_projects(&self.state.known_projects);
                 }
                 self.state.cached_stats = None;
+                // Load metadata for the project
+                self.state.meta_draft = meta::load(&p.root);
                 self.state.view = View::ProjectDetail(p);
             }
             Err(e) => self.state.set_error(e.to_string()),
@@ -86,6 +118,9 @@ impl eframe::App for NewcApp {
 
         // Shortcuts modal (? key)
         views::shortcuts::show(ctx, &mut self.state);
+
+        // Snippets panel
+        views::snippets::show_panel(ctx, &mut self.state.show_snippets);
 
         // Top bar
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -113,6 +148,7 @@ impl eframe::App for NewcApp {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.toggle_value(&mut self.build_panel_open, "Build Output");
+                    ui.toggle_value(&mut self.state.show_snippets, "Snippets");
                     if ui.small_button("?").on_hover_text("Keyboard shortcuts").clicked() {
                         self.state.show_shortcuts = true;
                     }
@@ -331,6 +367,61 @@ impl eframe::App for NewcApp {
                     });
                 if !open {
                     self.state.show_save_template_modal = false;
+                }
+            }
+        }
+
+        // Project metadata editor modal
+        if self.state.show_meta_editor {
+            if let Some(project) = self.state.current_project().cloned() {
+                let mut open = true;
+                egui::Window::new("Project Metadata")
+                    .open(&mut open)
+                    .collapsible(false)
+                    .resizable(false)
+                    .min_width(340.0)
+                    .show(ctx, |ui| {
+                        let draft = &mut self.state.meta_draft;
+                        egui::Grid::new("meta_grid").num_columns(2).min_col_width(100.0).show(ui, |ui| {
+                            ui.label("Course:");
+                            ui.text_edit_singleline(&mut draft.course);
+                            ui.end_row();
+                            ui.label("Assignment:");
+                            ui.text_edit_singleline(&mut draft.assignment);
+                            ui.end_row();
+                            ui.label("Due date:");
+                            ui.add(egui::TextEdit::singleline(&mut draft.due_date).hint_text("YYYY-MM-DD"));
+                            ui.end_row();
+                            ui.label("Max marks:");
+                            let mut max_str = draft.max_marks.map(|v| v.to_string()).unwrap_or_default();
+                            ui.text_edit_singleline(&mut max_str);
+                            draft.max_marks = max_str.trim().parse().ok();
+                            ui.end_row();
+                            ui.label("Received marks:");
+                            let mut rec_str = draft.received_marks.map(|v| v.to_string()).unwrap_or_default();
+                            ui.text_edit_singleline(&mut rec_str);
+                            draft.received_marks = rec_str.trim().parse().ok();
+                            ui.end_row();
+                            ui.label("Notes:");
+                            ui.text_edit_multiline(&mut draft.notes);
+                            ui.end_row();
+                        });
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Save").clicked() {
+                                match meta::save(&project.root, &self.state.meta_draft) {
+                                    Ok(_) => self.state.set_status("Metadata saved."),
+                                    Err(e) => self.state.set_error(e.to_string()),
+                                }
+                                self.state.show_meta_editor = false;
+                            }
+                            if ui.button("Cancel").clicked() {
+                                self.state.show_meta_editor = false;
+                            }
+                        });
+                    });
+                if !open {
+                    self.state.show_meta_editor = false;
                 }
             }
         }
@@ -651,7 +742,17 @@ impl eframe::App for NewcApp {
                 }
 
                 View::Home => {
-                    let action = views::home::show(ui, &self.state.known_projects, self.state.is_first_run);
+                    let config_clone = self.state.config.clone();
+                    let action = views::home::show(
+                        ui,
+                        &self.state.known_projects,
+                        self.state.is_first_run,
+                        &config_clone,
+                        &mut self.state.active_workspace,
+                        &mut self.state.show_archived,
+                        &mut self.state.workspace_input,
+                        &mut self.state.show_new_workspace,
+                    );
                     if action.go_create {
                         self.state.view = View::CreateProject;
                     }
@@ -660,10 +761,33 @@ impl eframe::App for NewcApp {
                     }
                     if let Some(i) = action.remove_project {
                         self.state.known_projects.remove(i);
+                        save_known_projects(&self.state.known_projects);
                     }
                     if action.browse_for_project {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
                             self.open_project(path);
+                        }
+                    }
+                    if let Some(path) = action.archive_project {
+                        self.state.config.archive(path);
+                        let _ = self.state.config.save();
+                        self.state.config_draft = self.state.config.clone();
+                    }
+                    if let Some((path, ws_name)) = action.move_to_workspace {
+                        if ws_name == "__unarchive__" {
+                            self.state.config.unarchive(&path);
+                        } else {
+                            self.state.config.remove_from_all_workspaces(&path);
+                            self.state.config.add_to_workspace(&ws_name, path);
+                        }
+                        let _ = self.state.config.save();
+                        self.state.config_draft = self.state.config.clone();
+                    }
+                    if let Some(ws_name) = action.new_workspace {
+                        if self.state.config.add_workspace(&ws_name) {
+                            let _ = self.state.config.save();
+                            self.state.config_draft = self.state.config.clone();
+                            self.state.set_status(format!("Workspace '{ws_name}' created."));
                         }
                     }
                 }
@@ -748,7 +872,8 @@ impl eframe::App for NewcApp {
                 View::ProjectDetail(ref project) => {
                     let project = project.clone();
                     let build_running = self.state.build_state == BuildState::Running;
-                    let action = views::project::show(ui, &project, build_running);
+                    let meta_snapshot = self.state.meta_draft.clone();
+                    let action = views::project::show(ui, &project, build_running, &meta_snapshot);
 
                     match action {
                         views::project::ProjectAction::GoHome => {
@@ -764,17 +889,7 @@ impl eframe::App for NewcApp {
                             self.state.func_selected.clear();
                             self.state.view = View::AddModule { project: project.clone() };
                         }
-                        views::project::ProjectAction::RemoveModule(name) => {
-                            match module::remove_module(&project.root, &name) {
-                                Ok(()) => {
-                                    self.state.set_status(format!("Removed module '{name}'."));
-                                    if let View::ProjectDetail(ref mut p) = self.state.view {
-                                        let _ = p.refresh_modules();
-                                    }
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
+                        views::project::ProjectAction::RemoveModule(_) => {}
                         views::project::ProjectAction::ConfirmRemoveModule(name) => {
                             self.state.confirm_remove_module = Some((project.clone(), name));
                         }
@@ -837,6 +952,7 @@ impl eframe::App for NewcApp {
                             }
                         }
                         views::project::ProjectAction::RunMake(target) => {
+                            self.state.build_target_current = target.clone();
                             self.state.build_state = BuildState::Running;
                             self.build_panel_open = true;
                             self.runner.run(&target, project.root.clone());
@@ -871,6 +987,24 @@ impl eframe::App for NewcApp {
                             self.state.git_commit_msg.clear();
                             self.state.view = View::GitPanel(project.clone());
                         }
+                        views::project::ProjectAction::OpenBuildHistory => {
+                            self.state.view = View::BuildHistory(project.clone());
+                        }
+                        views::project::ProjectAction::OpenMetaEditor => {
+                            self.state.meta_draft = meta::load(&project.root);
+                            self.state.show_meta_editor = true;
+                        }
+                        views::project::ProjectAction::OpenUsageTracker => {
+                            self.state.usage_search.clear();
+                            self.state.view = View::UsageTracker(project.clone());
+                        }
+                        views::project::ProjectAction::OpenMakefile => {
+                            let makefile_path = project.root.join("Makefile");
+                            self.state.makefile_content = std::fs::read_to_string(&makefile_path)
+                                .unwrap_or_else(|_| "# Makefile not found".to_string());
+                            self.state.makefile_dirty = false;
+                            self.state.view = View::MakefileEditor(project.clone());
+                        }
                         views::project::ProjectAction::SaveAsTemplate => {
                             self.state.save_template_name = project.name.clone();
                             self.state.save_template_desc.clear();
@@ -903,6 +1037,7 @@ impl eframe::App for NewcApp {
                         ui,
                         &module_name,
                         &src_path,
+                        &project.root,
                         &mut self.state.module_detail_state,
                         &lib,
                     );
@@ -912,7 +1047,12 @@ impl eframe::App for NewcApp {
                         }
                         views::module_detail::ModuleDetailAction::SaveFunction { name, new_impl } => {
                             match update_function_in_source(&src_path, &name, &new_impl) {
-                                Ok(()) => self.state.set_status(format!("Saved {name}.")),
+                                Ok(()) => {
+                                    self.state.set_status(format!("Saved {name}."));
+                                    // Check for prototype mismatch
+                                    self.state.module_detail_state.proto_mismatch =
+                                        views::module_detail::check_proto_mismatch(&src_path, &module_name);
+                                }
                                 Err(e) => self.state.set_error(e.to_string()),
                             }
                         }
@@ -931,6 +1071,28 @@ impl eframe::App for NewcApp {
                         views::module_detail::ModuleDetailAction::OpenHeaderEditor => {
                             self.state.header_editor_state = Default::default();
                             self.state.view = View::HeaderEditor { project, module_name };
+                        }
+                        views::module_detail::ModuleDetailAction::SyncNow => {
+                            match sync::sync_module(&project.root, &module_name) {
+                                Ok(()) => self.state.set_status(format!("Synced {module_name}.h")),
+                                Err(e) => self.state.set_error(e.to_string()),
+                            }
+                        }
+                        views::module_detail::ModuleDetailAction::AutoFixInclude(header_module) => {
+                            // Prepend #include "header.h" after last existing #include
+                            let include_line = format!("#include \"{header_module}.h\"\n");
+                            if let Ok(mut content) = std::fs::read_to_string(&src_path) {
+                                // Insert after last #include line
+                                let mut insert_pos = 0;
+                                for (i, line) in content.lines().enumerate() {
+                                    if line.trim().starts_with("#include") {
+                                        insert_pos = content.lines().take(i + 1).map(|l| l.len() + 1).sum();
+                                    }
+                                }
+                                content.insert_str(insert_pos, &include_line);
+                                let _ = std::fs::write(&src_path, content);
+                                self.state.set_status(format!("Added #include \"{header_module}.h\""));
+                            }
                         }
                         views::module_detail::ModuleDetailAction::None => {}
                     }
@@ -996,6 +1158,62 @@ impl eframe::App for NewcApp {
 
                 View::GitPanel(_) => {
                     views::git_panel::show(ctx, &mut self.state);
+                }
+
+                View::BuildHistory(_) => {
+                    views::build_history::show(ctx, &mut self.state);
+                }
+
+                View::UsageTracker(_) => {
+                    views::usage_tracker::show(ctx, &mut self.state);
+                }
+
+                View::MakefileEditor(ref project) => {
+                    let project = project.clone();
+                    ui.horizontal(|ui| {
+                        if ui.button("← Back").clicked() {
+                            if self.state.makefile_dirty {
+                                let _ = std::fs::write(
+                                    project.root.join("Makefile"),
+                                    &self.state.makefile_content,
+                                );
+                            }
+                            self.state.view = View::ProjectDetail(project.clone());
+                            return;
+                        }
+                        ui.heading(format!("Makefile — {}", project.name));
+                        if self.state.makefile_dirty {
+                            if ui.button("Save (Ctrl+S)").clicked()
+                                || ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl)
+                            {
+                                let _ = std::fs::write(
+                                    project.root.join("Makefile"),
+                                    &self.state.makefile_content,
+                                );
+                                self.state.makefile_dirty = false;
+                                self.state.set_status("Makefile saved.");
+                            }
+                        }
+                    });
+                    ui.separator();
+                    let before = self.state.makefile_content.clone();
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.state.makefile_content)
+                                .code_editor()
+                                .desired_rows(35)
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+                    if self.state.makefile_content != before {
+                        self.state.makefile_dirty = true;
+                    }
+                    // Ctrl+S
+                    if ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl) && self.state.makefile_dirty {
+                        let _ = std::fs::write(project.root.join("Makefile"), &self.state.makefile_content);
+                        self.state.makefile_dirty = false;
+                        self.state.set_status("Makefile saved.");
+                    }
                 }
 
                 View::AddModule { ref project, .. } => {

@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use newc_core::{config::AppConfig, function_lib::FunctionLibrary, main_builder::MainBuilderState, project::Project, stats::ProjectStats};
+use newc_core::{
+    config::AppConfig, function_lib::FunctionLibrary, main_builder::MainBuilderState,
+    meta::ProjectMeta, project::Project, stats::ProjectStats,
+};
 use crate::views::cref::CRefState;
 use crate::views::header_editor::HeaderEditorState;
 use crate::views::import_c::ImportState;
@@ -24,6 +27,9 @@ pub enum View {
     MainBuilder(Project),
     AddModule { project: Project },
     GitPanel(Project),
+    BuildHistory(Project),
+    UsageTracker(Project),
+    MakefileEditor(Project),
     Settings,
 }
 
@@ -105,6 +111,24 @@ pub struct AppState {
     pub show_save_template_modal: bool,
     pub save_template_name: String,
     pub save_template_desc: String,
+    // Project metadata
+    pub show_meta_editor: bool,
+    pub meta_draft: ProjectMeta,
+    // Build target currently running (for history)
+    pub build_target_current: String,
+    // Workspaces
+    pub active_workspace: Option<String>,
+    pub show_archived: bool,
+    pub workspace_input: String,
+    pub show_new_workspace: bool,
+    pub move_to_workspace_project: Option<PathBuf>,
+    // Makefile editor
+    pub makefile_content: String,
+    pub makefile_dirty: bool,
+    // Usage tracker search
+    pub usage_search: String,
+    // Code snippets panel
+    pub show_snippets: bool,
 }
 
 impl AppState {
@@ -116,9 +140,10 @@ impl AppState {
             .map(|d| d.join("newc").exists())
             .unwrap_or(false);
         let is_first_run = !config_dir_exists;
+        let known_projects = load_known_projects();
         Self {
             view: View::Home,
-            known_projects: Vec::new(),
+            known_projects,
             function_lib: FunctionLibrary::load(),
             config,
             build_lines: Vec::new(),
@@ -165,6 +190,18 @@ impl AppState {
             show_save_template_modal: false,
             save_template_name: String::new(),
             save_template_desc: String::new(),
+            show_meta_editor: false,
+            meta_draft: ProjectMeta::default(),
+            build_target_current: String::new(),
+            active_workspace: None,
+            show_archived: false,
+            workspace_input: String::new(),
+            show_new_workspace: false,
+            move_to_workspace_project: None,
+            makefile_content: String::new(),
+            makefile_dirty: false,
+            usage_search: String::new(),
+            show_snippets: false,
         }
     }
 
@@ -182,7 +219,10 @@ impl AppState {
             | View::ProjectStats(p)
             | View::ProjectNotes(p)
             | View::MainBuilder(p)
-            | View::GitPanel(p) => Some(p),
+            | View::GitPanel(p)
+            | View::BuildHistory(p)
+            | View::UsageTracker(p)
+            | View::MakefileEditor(p) => Some(p),
             View::ModuleDetail { project, .. }
             | View::HeaderEditor { project, .. }
             | View::AddModule { project, .. } => Some(project),
@@ -192,11 +232,38 @@ impl AppState {
 
     pub fn get_or_compute_stats(&mut self) -> Option<&ProjectStats> {
         let root = self.current_project()?.root.clone();
-        // Recompute if project changed
         if self.cached_stats.as_ref().map(|(p, _)| p) != Some(&root) {
             let s = newc_core::stats::compute(&root);
             self.cached_stats = Some((root, s));
         }
         self.cached_stats.as_ref().map(|(_, s)| s)
+    }
+}
+
+// ── Known-projects persistence ────────────────────────────────────────────────
+
+fn projects_path() -> Option<std::path::PathBuf> {
+    dirs::config_dir().map(|d| d.join("newc").join("projects.toml"))
+}
+
+pub fn load_known_projects() -> Vec<PathBuf> {
+    let Some(path) = projects_path() else { return Vec::new() };
+    let Ok(content) = std::fs::read_to_string(&path) else { return Vec::new() };
+    #[derive(serde::Deserialize)]
+    struct ProjectsList { projects: Vec<PathBuf> }
+    toml::from_str::<ProjectsList>(&content)
+        .map(|pl| pl.projects)
+        .unwrap_or_default()
+}
+
+pub fn save_known_projects(projects: &[PathBuf]) {
+    let Some(path) = projects_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    #[derive(serde::Serialize)]
+    struct ProjectsList<'a> { projects: &'a [PathBuf] }
+    if let Ok(content) = toml::to_string_pretty(&ProjectsList { projects }) {
+        let _ = std::fs::write(path, content);
     }
 }

@@ -1,19 +1,36 @@
-use egui::{RichText, Ui};
+use egui::{Color32, RichText, Ui};
 use std::path::PathBuf;
+
+use newc_core::config::AppConfig;
 
 pub struct HomeAction {
     pub open_project: Option<PathBuf>,
     pub remove_project: Option<usize>,
     pub go_create: bool,
     pub browse_for_project: bool,
+    pub archive_project: Option<PathBuf>,
+    pub move_to_workspace: Option<(PathBuf, String)>,
+    pub new_workspace: Option<String>,
 }
 
-pub fn show(ui: &mut Ui, known_projects: &[PathBuf], is_first_run: bool) -> HomeAction {
+pub fn show(
+    ui: &mut Ui,
+    known_projects: &[PathBuf],
+    is_first_run: bool,
+    config: &AppConfig,
+    active_workspace: &mut Option<String>,
+    show_archived: &mut bool,
+    workspace_input: &mut String,
+    show_new_workspace: &mut bool,
+) -> HomeAction {
     let mut action = HomeAction {
         open_project: None,
         remove_project: None,
         go_create: false,
         browse_for_project: false,
+        archive_project: None,
+        move_to_workspace: None,
+        new_workspace: None,
     };
 
     ui.heading("Projects");
@@ -43,6 +60,50 @@ pub fn show(ui: &mut Ui, known_projects: &[PathBuf], is_first_run: bool) -> Home
         ui.add_space(12.0);
     }
 
+    // ── Workspace tabs ────────────────────────────────────────────────────────
+    ui.horizontal_wrapped(|ui| {
+        let all_sel = active_workspace.is_none() && !*show_archived;
+        if ui.selectable_label(all_sel, "All").clicked() {
+            *active_workspace = None;
+            *show_archived = false;
+        }
+        for ws in &config.workspaces {
+            let is_sel = active_workspace.as_deref() == Some(&ws.name);
+            if ui.selectable_label(is_sel, &ws.name).clicked() {
+                *active_workspace = Some(ws.name.clone());
+                *show_archived = false;
+            }
+        }
+        let archived_sel = *show_archived;
+        if ui.selectable_label(archived_sel, "Archived").clicked() {
+            *show_archived = !*show_archived;
+            *active_workspace = None;
+        }
+        if ui.small_button("+").on_hover_text("New workspace").clicked() {
+            *show_new_workspace = true;
+        }
+    });
+
+    // New workspace input
+    if *show_new_workspace {
+        ui.horizontal(|ui| {
+            ui.text_edit_singleline(workspace_input);
+            let valid = !workspace_input.trim().is_empty();
+            if ui.add_enabled(valid, egui::Button::new("Create")).clicked() {
+                action.new_workspace = Some(workspace_input.trim().to_string());
+                workspace_input.clear();
+                *show_new_workspace = false;
+            }
+            if ui.button("Cancel").clicked() {
+                *show_new_workspace = false;
+                workspace_input.clear();
+            }
+        });
+    }
+
+    ui.add_space(4.0);
+
+    // Toolbar
     ui.horizontal(|ui| {
         if ui.button("New Project").clicked() {
             action.go_create = true;
@@ -60,33 +121,94 @@ pub fn show(ui: &mut Ui, known_projects: &[PathBuf], is_first_run: bool) -> Home
         return action;
     }
 
+    // Filter projects for current workspace/archived view
+    let archived_paths: Vec<PathBuf> = config
+        .workspaces
+        .iter()
+        .find(|w| w.name == "__archived__")
+        .map(|w| w.paths.clone())
+        .unwrap_or_default();
+
+    let workspace_paths: Option<&[PathBuf]> = active_workspace.as_ref().and_then(|ws_name| {
+        config.workspaces.iter().find(|w| &w.name == ws_name).map(|w| w.paths.as_slice())
+    });
+
+    let visible_projects: Vec<(usize, &PathBuf)> = known_projects
+        .iter()
+        .enumerate()
+        .filter(|(_, path)| {
+            let is_archived = archived_paths.contains(path);
+            if *show_archived {
+                return is_archived;
+            }
+            if is_archived {
+                return false;
+            }
+            match &workspace_paths {
+                Some(ws_paths) => ws_paths.contains(path),
+                None => true,
+            }
+        })
+        .collect();
+
+    if visible_projects.is_empty() {
+        ui.label(RichText::new("No projects in this workspace.").color(Color32::GRAY));
+        return action;
+    }
+
     let mut to_remove: Option<usize> = None;
     egui::Grid::new("projects_grid")
-        .num_columns(2)
+        .num_columns(4)
         .striped(true)
         .show(ui, |ui| {
-            for (i, path) in known_projects.iter().enumerate() {
+            for (i, path) in &visible_projects {
                 let name = path
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.display().to_string());
                 let exists = path.exists();
-                let label = if exists {
-                    name
-                } else {
-                    format!("{name} (missing)")
-                };
+                let label = if exists { name } else { format!("{name} (missing)") };
 
                 if ui.selectable_label(false, &label).clicked() && exists {
-                    action.open_project = Some(path.clone());
+                    action.open_project = Some((*path).clone());
                 }
                 ui.label(
-                    egui::RichText::new(path.display().to_string())
+                    RichText::new(path.display().to_string())
                         .small()
-                        .color(egui::Color32::GRAY),
+                        .color(Color32::GRAY),
                 );
+
+                // Workspace move menu
+                let response = ui.small_button("⋮").on_hover_text("Project options");
+                if response.clicked() {
+                    // We'll show it as a popup
+                }
+                egui::popup::popup_below_widget(ui, egui::Id::new(("proj_menu", i)), &response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                    ui.set_min_width(140.0);
+                    if !*show_archived {
+                        if ui.button("Archive").clicked() {
+                            action.archive_project = Some((*path).clone());
+                        }
+                        for ws in &config.workspaces {
+                            if ws.name == "__archived__" { continue; }
+                            let in_ws = ws.paths.contains(path);
+                            let label = if in_ws {
+                                format!("✓ {}", ws.name)
+                            } else {
+                                format!("Move to {}", ws.name)
+                            };
+                            if ui.button(label).clicked() && !in_ws {
+                                action.move_to_workspace = Some(((*path).clone(), ws.name.clone()));
+                            }
+                        }
+                    } else if ui.button("Unarchive").clicked() {
+                        // Move out of archived
+                        action.move_to_workspace = Some(((*path).clone(), "__unarchive__".to_string()));
+                    }
+                });
+
                 if ui.small_button("✕").clicked() {
-                    to_remove = Some(i);
+                    to_remove = Some(*i);
                 }
                 ui.end_row();
             }

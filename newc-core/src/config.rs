@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::project::expand_tilde;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Workspace {
+    pub name: String,
+    #[serde(default)]
+    pub paths: Vec<PathBuf>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default = "default_terminal")]
@@ -14,6 +21,8 @@ pub struct AppConfig {
     pub scan_dirs: Vec<String>,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub workspaces: Vec<Workspace>,
 }
 
 impl Default for AppConfig {
@@ -23,6 +32,7 @@ impl Default for AppConfig {
             editor: default_editor(),
             scan_dirs: default_scan_dirs(),
             theme: default_theme(),
+            workspaces: Vec::new(),
         }
     }
 }
@@ -106,6 +116,50 @@ impl AppConfig {
 
     pub fn is_dark(&self) -> bool {
         self.theme != "light"
+    }
+
+    pub fn add_workspace(&mut self, name: impl Into<String>) -> bool {
+        let name = name.into();
+        if self.workspaces.iter().any(|w| w.name == name) {
+            return false;
+        }
+        self.workspaces.push(Workspace { name, paths: Vec::new() });
+        true
+    }
+
+    pub fn add_to_workspace(&mut self, name: &str, path: PathBuf) {
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.name == name) {
+            if !ws.paths.contains(&path) {
+                ws.paths.push(path);
+            }
+        } else {
+            self.workspaces.push(Workspace { name: name.to_string(), paths: vec![path] });
+        }
+    }
+
+    pub fn remove_from_all_workspaces(&mut self, path: &PathBuf) {
+        for ws in &mut self.workspaces {
+            ws.paths.retain(|p| p != path);
+        }
+    }
+
+    pub fn archive(&mut self, path: PathBuf) {
+        self.remove_from_all_workspaces(&path);
+        self.add_to_workspace("__archived__", path);
+    }
+
+    pub fn unarchive(&mut self, path: &PathBuf) {
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.name == "__archived__") {
+            ws.paths.retain(|p| p != path);
+        }
+    }
+
+    pub fn is_archived(&self, path: &PathBuf) -> bool {
+        self.workspaces
+            .iter()
+            .find(|w| w.name == "__archived__")
+            .map(|w| w.paths.contains(path))
+            .unwrap_or(false)
     }
 
     /// Launch the project root in the user's configured editor+terminal.
