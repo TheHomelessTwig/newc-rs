@@ -120,3 +120,146 @@ pub fn commit(root: &Path, message: &str) -> Result<()> {
         Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
     }
 }
+
+// ── Diff ──────────────────────────────────────────────────────────────────────
+
+pub fn diff(root: &Path) -> String {
+    if !is_repo(root) { return String::new(); }
+    Command::new("git")
+        .args(["diff"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default()
+}
+
+pub fn diff_staged(root: &Path) -> String {
+    if !is_repo(root) { return String::new(); }
+    Command::new("git")
+        .args(["diff", "--cached"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default()
+}
+
+// ── Per-file staging ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct ChangedFile {
+    pub path: String,
+    pub staged: bool,
+    pub unstaged: bool,
+    pub untracked: bool,
+}
+
+pub fn changed_files(root: &Path) -> Vec<ChangedFile> {
+    if !is_repo(root) { return Vec::new(); }
+    let out = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    out.lines()
+        .filter(|l| l.len() >= 3)
+        .map(|line| {
+            let x = line.chars().next().unwrap_or(' ');
+            let y = line.chars().nth(1).unwrap_or(' ');
+            let path = line[3..].to_string();
+            let untracked = x == '?' && y == '?';
+            ChangedFile {
+                path,
+                staged: !untracked && x != ' ' && x != '?',
+                unstaged: !untracked && y != ' ' && y != '?',
+                untracked,
+            }
+        })
+        .collect()
+}
+
+pub fn stage_file(root: &Path, path: &str) -> Result<()> {
+    let out = Command::new("git").args(["add", path]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+pub fn unstage_file(root: &Path, path: &str) -> Result<()> {
+    let out = Command::new("git").args(["restore", "--staged", path]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+// ── Branches ─────────────────────────────────────────────────────────────────
+
+pub fn branches(root: &Path) -> Vec<String> {
+    if !is_repo(root) { return Vec::new(); }
+    let out = Command::new("git")
+        .args(["branch", "--format=%(refname:short)"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+    out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+}
+
+pub fn current_branch(root: &Path) -> String {
+    if !is_repo(root) { return String::new(); }
+    Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+pub fn switch_branch(root: &Path, name: &str) -> Result<()> {
+    let out = Command::new("git").args(["switch", name]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+pub fn new_branch(root: &Path, name: &str) -> Result<()> {
+    let out = Command::new("git").args(["switch", "-c", name]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+// ── Push / Pull ───────────────────────────────────────────────────────────────
+
+pub fn push(root: &Path) -> Result<String> {
+    let out = Command::new("git").arg("push").current_dir(root).output()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    if out.status.success() { Ok(text) }
+    else { Err(NewcError::Other(text)) }
+}
+
+pub fn pull(root: &Path) -> Result<String> {
+    let out = Command::new("git").arg("pull").current_dir(root).output()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    if out.status.success() { Ok(text) }
+    else { Err(NewcError::Other(text)) }
+}

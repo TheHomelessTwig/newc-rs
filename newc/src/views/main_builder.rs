@@ -172,7 +172,7 @@ fn show_left_panel(
         ui.horizontal(|ui| {
             ui.label(RichText::new("main() Blocks").strong());
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.small_button("+ Var").clicked() {
                 builder.blocks.push(MainBlock::VarDecl {
                     type_name: "int".into(), name: "var".into(),
@@ -188,12 +188,22 @@ fn show_left_panel(
             if ui.small_button("+ Comment").clicked() { builder.blocks.push(MainBlock::Comment(String::new())); }
             if ui.small_button("+ Raw").clicked() { builder.blocks.push(MainBlock::RawCode(String::new())); }
             if ui.small_button("+ Blank").clicked() { builder.blocks.push(MainBlock::BlankLine); }
+            if ui.small_button("+ If").clicked() {
+                builder.blocks.push(MainBlock::IfBlock { condition: String::new(), body: Vec::new(), else_body: Vec::new() });
+            }
+            if ui.small_button("+ While").clicked() {
+                builder.blocks.push(MainBlock::WhileLoop { condition: String::new(), body: Vec::new() });
+            }
+            if ui.small_button("+ For").clicked() {
+                builder.blocks.push(MainBlock::ForLoop { init: "int i = 0".into(), condition: "i < n".into(), increment: "i++".into(), body: Vec::new() });
+            }
         });
         ui.add_space(4.0);
 
         let available_funcs: Vec<String> = func_sigs.keys().cloned().collect::<Vec<_>>().tap_sort();
 
         let mut to_remove: Option<usize> = None;
+        let mut to_duplicate: Option<usize> = None;
         let mut move_up: Option<usize> = None;
         let mut move_down: Option<usize> = None;
         let n = builder.blocks.len();
@@ -209,15 +219,17 @@ fn show_left_panel(
                         ui.label(RichText::new(block.label()).small().color(block_label_color(block)));
                         if i > 0 && ui.small_button("↑").clicked() { move_up = Some(i); }
                         if i + 1 < n && ui.small_button("↓").clicked() { move_down = Some(i); }
+                        if ui.small_button("⧉").on_hover_text("Duplicate block").clicked() { to_duplicate = Some(i); }
                         if ui.small_button("✕").clicked() { to_remove = Some(i); }
                     });
                     show_block_editor(ui, block, &available_funcs, func_sigs);
                 });
         }
 
-        if let Some(i) = to_remove { builder.blocks.remove(i); }
-        if let Some(i) = move_up { builder.blocks.swap(i - 1, i); }
-        if let Some(i) = move_down { builder.blocks.swap(i, i + 1); }
+        if let Some(i) = to_remove { if i < builder.blocks.len() { builder.blocks.remove(i); } }
+        if let Some(i) = to_duplicate { if i < builder.blocks.len() { let b = builder.blocks[i].clone(); builder.blocks.insert(i + 1, b); } }
+        if let Some(i) = move_up { if i > 0 && i < builder.blocks.len() { builder.blocks.swap(i - 1, i); } }
+        if let Some(i) = move_down { if i + 1 < builder.blocks.len() { builder.blocks.swap(i, i + 1); } }
     });
 }
 
@@ -305,29 +317,82 @@ fn show_block_editor(
         MainBlock::BlankLine => {
             ui.label(RichText::new("(blank line)").color(Color32::GRAY).small());
         }
-        MainBlock::IfBlock { condition, .. } => {
+        MainBlock::IfBlock { condition, body, else_body } => {
             ui.horizontal(|ui| {
-                ui.label("Condition:");
-                ui.add(egui::TextEdit::singleline(condition).hint_text("e.g. x > 0").desired_width(f32::INFINITY));
+                ui.label("if (");
+                ui.add(egui::TextEdit::singleline(condition).hint_text("x > 0").desired_width(160.0));
+                ui.label(") {");
             });
-            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+            show_nested_blocks(ui, body, funcs, func_sigs, "if_body");
+            if ui.small_button("+ Add to body").clicked() {
+                body.push(MainBlock::BlankLine);
+            }
+            ui.collapsing("} else {", |ui| {
+                show_nested_blocks(ui, else_body, funcs, func_sigs, "else_body");
+                if ui.small_button("+ Add to else").clicked() {
+                    else_body.push(MainBlock::BlankLine);
+                }
+            });
         }
-        MainBlock::WhileLoop { condition, .. } => {
+        MainBlock::WhileLoop { condition, body } => {
             ui.horizontal(|ui| {
-                ui.label("Condition:");
-                ui.add(egui::TextEdit::singleline(condition).hint_text("e.g. i < n").desired_width(f32::INFINITY));
+                ui.label("while (");
+                ui.add(egui::TextEdit::singleline(condition).hint_text("i < n").desired_width(160.0));
+                ui.label(") {");
             });
-            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+            show_nested_blocks(ui, body, funcs, func_sigs, "while_body");
+            if ui.small_button("+ Add to body").clicked() {
+                body.push(MainBlock::BlankLine);
+            }
         }
-        MainBlock::ForLoop { init, condition, increment, .. } => {
+        MainBlock::ForLoop { init, condition, increment, body } => {
             egui::Grid::new(ui.next_auto_id()).num_columns(2).show(ui, |ui| {
                 ui.label("Init:"); ui.add(egui::TextEdit::singleline(init).hint_text("int i = 0")); ui.end_row();
                 ui.label("Condition:"); ui.add(egui::TextEdit::singleline(condition).hint_text("i < n")); ui.end_row();
                 ui.label("Increment:"); ui.add(egui::TextEdit::singleline(increment).hint_text("i++")); ui.end_row();
             });
-            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+            show_nested_blocks(ui, body, funcs, func_sigs, "for_body");
+            if ui.small_button("+ Add to body").clicked() {
+                body.push(MainBlock::BlankLine);
+            }
         }
     }
+}
+
+fn show_nested_blocks(
+    ui: &mut Ui,
+    blocks: &mut Vec<MainBlock>,
+    funcs: &[String],
+    func_sigs: &HashMap<String, Vec<FuncParam>>,
+    id_salt: &str,
+) {
+    let mut to_remove: Option<usize> = None;
+    let mut move_up: Option<usize> = None;
+    let mut move_down: Option<usize> = None;
+    let n = blocks.len();
+
+    if n == 0 {
+        ui.label(RichText::new("  (empty)").small().color(Color32::GRAY));
+    }
+    for i in 0..n {
+        egui::Frame::new()
+            .fill(Color32::from_rgba_premultiplied(30, 40, 60, 200))
+            .inner_margin(egui::Margin::same(4))
+            .outer_margin(egui::Margin { left: 16, top: 1, right: 0, bottom: 1 })
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(blocks[i].label()).small().color(block_label_color(&blocks[i])));
+                    if i > 0 && ui.small_button("↑").clicked() { move_up = Some(i); }
+                    if i + 1 < n && ui.small_button("↓").clicked() { move_down = Some(i); }
+                    if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                });
+                show_block_editor(ui, &mut blocks[i], funcs, func_sigs);
+            });
+    }
+    if let Some(i) = to_remove { blocks.remove(i); }
+    if let Some(i) = move_up { blocks.swap(i - 1, i); }
+    if let Some(i) = move_down { blocks.swap(i, i + 1); }
+    let _ = id_salt; // used for future DnD id
 }
 
 fn block_label_color(block: &MainBlock) -> Color32 {

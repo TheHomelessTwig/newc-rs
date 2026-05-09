@@ -380,11 +380,6 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
             }
             ui.end_row();
 
-            // Allow typing module name directly if desired
-            ui.label("Group (type):");
-            ui.text_edit_singleline(&mut draft.module);
-            ui.end_row();
-
             ui.label("Description:");
             ui.text_edit_singleline(&mut draft.description);
             ui.end_row();

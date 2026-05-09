@@ -4,6 +4,7 @@ use egui::{CentralPanel, Color32, Context, RichText, SidePanel, TopBottomPanel};
 use newc_core::{
     analysis,
     build_history::{self, BuildRecord},
+    diag,
     export,
     header,
     main_builder::MainBuilderState,
@@ -12,6 +13,7 @@ use newc_core::{
     notes,
     project::Project,
     project_template,
+    report,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
     sync::{self, extract_function_implementations, update_function_in_source},
     user_template::UserTemplate,
@@ -61,10 +63,10 @@ impl NewcApp {
     }
 
     fn drain_build_output(&mut self) {
+        let mut new_stderr_lines: Vec<String> = Vec::new();
         for line in self.runner.drain() {
             if let LineKind::Done { exit_code, duration_ms } = line.kind {
                 self.state.build_state = BuildState::Done { exit_code };
-                // Record build history
                 if let Some(project) = self.state.current_project() {
                     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                     build_history::append(
@@ -77,8 +79,13 @@ impl NewcApp {
                         },
                     );
                 }
+                // Parse diagnostics from accumulated stderr
+                self.state.diagnostics = diag::parse(&new_stderr_lines);
                 self.state.build_lines.push(line);
             } else {
+                if matches!(line.kind, LineKind::Stderr) {
+                    new_stderr_lines.push(line.text.clone());
+                }
                 self.state.build_state = BuildState::Running;
                 self.state.build_lines.push(line);
             }
@@ -89,11 +96,17 @@ impl NewcApp {
         match Project::open(path.clone()) {
             Ok(p) => {
                 if !self.state.known_projects.contains(&path) {
-                    self.state.known_projects.push(path);
+                    self.state.known_projects.push(path.clone());
                     save_known_projects(&self.state.known_projects);
                 }
+                // Update recents (last 5)
+                self.state.recent_projects.retain(|r| r != &path);
+                self.state.recent_projects.insert(0, path.clone());
+                self.state.recent_projects.truncate(5);
+                crate::state::save_recent_projects(&self.state.recent_projects);
+
                 self.state.cached_stats = None;
-                // Load metadata for the project
+                self.state.health_computed = false;
                 self.state.meta_draft = meta::load(&p.root);
                 self.state.view = View::ProjectDetail(p);
             }
@@ -194,37 +207,102 @@ impl eframe::App for NewcApp {
                             BuildState::Idle => {}
                         }
                     });
-                    views::build_panel::show(
-                        ui,
-                        &self.state.build_lines,
-                        &mut self.build_auto_scroll,
-                    );
+                    // Diagnostics tab toggle
+                    if !self.state.diagnostics.is_empty() {
+                        ui.separator();
+                        ui.toggle_value(&mut self.state.diag_tab_raw, "Raw");
+                        ui.label(RichText::new(format!("{} diagnostics", self.state.diagnostics.len())).small());
+                    }
+                    if !self.state.diag_tab_raw && !self.state.diagnostics.is_empty() {
+                        egui::ScrollArea::vertical().id_salt("diag_scroll").show(ui, |ui| {
+                            egui::Grid::new("diag_grid").num_columns(4).striped(true).show(ui, |ui| {
+                                for d in &self.state.diagnostics.clone() {
+                                    let color = if d.is_error() { Color32::from_rgb(255, 80, 80) } else { Color32::from_rgb(255, 200, 60) };
+                                    ui.label(RichText::new(if d.is_error() { "✗" } else { "⚠" }).color(color));
+                                    let file_label = egui::Label::new(RichText::new(&d.file).monospace().small().color(Color32::from_rgb(100, 180, 255))).sense(egui::Sense::click());
+                                    if ui.add(file_label).clicked() {
+                                        let module = d.file.trim_end_matches(".c").to_string();
+                                        if let Some(project) = self.state.current_project().cloned() {
+                                            let src = project.root.join("src").join(&d.file);
+                                            if src.exists() {
+                                                self.state.module_detail_state = Default::default();
+                                                self.state.view = View::ModuleDetail { project, module_name: module };
+                                            }
+                                        }
+                                    }
+                                    ui.label(RichText::new(format!(":{}", d.line)).monospace().small().color(Color32::GRAY));
+                                    ui.label(RichText::new(&d.message).small());
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                    } else {
+                        views::build_panel::show(
+                            ui,
+                            &self.state.build_lines,
+                            &mut self.build_auto_scroll,
+                        );
+                    }
                 });
         }
 
-        // Left sidebar — project list
+        // Left sidebar — project list (respects workspace filter)
+        let archived_paths: Vec<std::path::PathBuf> = self.state.config.workspaces
+            .iter()
+            .find(|w| w.name == "__archived__")
+            .map(|w| w.paths.clone())
+            .unwrap_or_default();
         SidePanel::left("sidebar")
             .min_width(180.0)
             .max_width(280.0)
             .show(ctx, |ui| {
-                ui.label(RichText::new("Projects").strong());
+                ui.label(egui::RichText::new("Projects").strong());
+                // Recent projects
+                if !self.state.recent_projects.is_empty() {
+                    ui.label(egui::RichText::new("Recent").small().color(egui::Color32::GRAY));
+                    for path in &self.state.recent_projects.clone() {
+                        let name = path.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        if ui.small_button(&name).clicked() {
+                            self.open_project(path.clone());
+                        }
+                    }
+                    ui.separator();
+                }
                 ui.separator();
                 let projects = self.state.known_projects.clone();
+                let ws_filter = self.state.active_workspace.clone();
+                let show_archived = self.state.show_archived;
+                let ws_paths: Option<Vec<std::path::PathBuf>> = ws_filter.as_ref().and_then(|ws_name| {
+                    self.state.config.workspaces.iter().find(|w| &w.name == ws_name)
+                        .map(|w| w.paths.clone())
+                });
+
                 for path in &projects {
+                    let is_archived = archived_paths.contains(path);
+                    if show_archived && !is_archived { continue; }
+                    if !show_archived && is_archived { continue; }
+                    if let Some(ref wps) = ws_paths {
+                        if !wps.contains(path) { continue; }
+                    }
+
                     let name = path
                         .file_name()
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.display().to_string());
-                    let active = self
-                        .state
-                        .current_project()
-                        .map(|p| &p.root == path)
-                        .unwrap_or(false);
+                    let active = self.state.current_project().map(|p| &p.root == path).unwrap_or(false);
                     if ui.selectable_label(active, &name).clicked() {
                         self.open_project(path.clone());
                     }
                 }
             });
+
+        // Build panel hint (from git push/pull)
+        if self.state.build_panel_open_hint {
+            self.build_panel_open = true;
+            self.state.build_panel_open_hint = false;
+        }
 
         // Error modal
         if self.state.error_msg.is_some() {
@@ -998,6 +1076,32 @@ impl eframe::App for NewcApp {
                             self.state.usage_search.clear();
                             self.state.view = View::UsageTracker(project.clone());
                         }
+                        views::project::ProjectAction::OpenHealth => {
+                            self.state.health_computed = false;
+                            self.state.view = View::HealthDashboard(project.clone());
+                        }
+                        views::project::ProjectAction::OpenSearch => {
+                            self.state.search_query.clear();
+                            self.state.search_results.clear();
+                            self.state.view = View::ProjectSearch(project.clone());
+                        }
+                        views::project::ProjectAction::ExportReport => {
+                            let content = newc_core::report::generate(&project.root, &project.name);
+                            let default_name = format!("{}-report.md", project.name);
+                            let parent = project.root.parent()
+                                .map(|p| p.to_path_buf())
+                                .unwrap_or_else(|| std::path::PathBuf::from("."));
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_file_name(&default_name)
+                                .set_directory(&parent)
+                                .save_file()
+                            {
+                                match std::fs::write(&path, content) {
+                                    Ok(_) => self.state.set_status(format!("Report exported to {}", path.display())),
+                                    Err(e) => self.state.set_error(e.to_string()),
+                                }
+                            }
+                        }
                         views::project::ProjectAction::OpenMakefile => {
                             let makefile_path = project.root.join("Makefile");
                             self.state.makefile_content = std::fs::read_to_string(&makefile_path)
@@ -1076,6 +1180,16 @@ impl eframe::App for NewcApp {
                             match sync::sync_module(&project.root, &module_name) {
                                 Ok(()) => self.state.set_status(format!("Synced {module_name}.h")),
                                 Err(e) => self.state.set_error(e.to_string()),
+                            }
+                        }
+                        views::module_detail::ModuleDetailAction::ClangFormat => {
+                            let style = &self.state.config.clang_format_style.clone();
+                            match run_clang_format(&self.state.module_detail_state.edit_buf, style) {
+                                Ok(formatted) => {
+                                    self.state.module_detail_state.edit_buf = formatted;
+                                    self.state.set_status("Formatted with clang-format.");
+                                }
+                                Err(e) => self.state.set_error(format!("clang-format: {e}")),
                             }
                         }
                         views::module_detail::ModuleDetailAction::AutoFixInclude(header_module) => {
@@ -1166,6 +1280,14 @@ impl eframe::App for NewcApp {
 
                 View::UsageTracker(_) => {
                     views::usage_tracker::show(ctx, &mut self.state);
+                }
+
+                View::ProjectSearch(_) => {
+                    views::project_search::show(ctx, &mut self.state);
+                }
+
+                View::HealthDashboard(_) => {
+                    views::health::show(ctx, &mut self.state);
                 }
 
                 View::MakefileEditor(ref project) => {
@@ -1322,5 +1444,24 @@ fn delete_user_function(name: &str, lib: &newc_core::function_lib::FunctionLibra
             }
         }
         break;
+    }
+}
+
+fn run_clang_format(code: &str, style: &str) -> anyhow::Result<String> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("clang-format")
+        .args([&format!("-style={style}"), "-"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(code.as_bytes())?;
+    }
+    let output = child.wait_with_output()?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr)))
     }
 }

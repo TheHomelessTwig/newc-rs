@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use egui::{Color32, RichText, ScrollArea, SidePanel, CentralPanel, Ui};
 use newc_core::{
     function_lib::FunctionLibrary,
+    lint,
     sync::{ExtractedFunction, extract_function_implementations, extract_signatures},
 };
 
@@ -32,6 +33,7 @@ pub enum ModuleDetailAction {
     OpenHeaderEditor,
     SyncNow,
     AutoFixInclude(String),
+    ClangFormat,
 }
 
 pub fn show(
@@ -241,11 +243,41 @@ pub fn show(
                     state.edit_mode = false;
                     state.edit_buf.clear();
                 }
+                let clang_avail = which_clang_format();
+                if ui.add_enabled(clang_avail, egui::Button::new("Format"))
+                    .on_hover_text(if clang_avail { "Run clang-format on this function" } else { "clang-format not found in PATH" })
+                    .clicked()
+                {
+                    action = ModuleDetailAction::ClangFormat;
+                }
             });
+
+            // Lint warnings for current edit buffer
+            let lint_warns = lint::lint_file(&state.edit_buf);
+            if !lint_warns.is_empty() {
+                ui.add_space(4.0);
+                ui.label(RichText::new(format!("Lint ({} warning(s)):", lint_warns.len())).small().strong());
+                for w in &lint_warns {
+                    let color = match w.severity {
+                        lint::LintSeverity::Error => Color32::from_rgb(255, 80, 80),
+                        lint::LintSeverity::Warning => Color32::from_rgb(255, 200, 60),
+                        lint::LintSeverity::Info => Color32::from_rgb(100, 180, 255),
+                    };
+                    ui.label(
+                        RichText::new(format!("  L{}: [{}] {}", w.line_no, w.code, w.message))
+                            .small()
+                            .monospace()
+                            .color(color),
+                    );
+                }
+            }
         } else {
+            // Syntax-highlighted signature
             ui.label(RichText::new("Signature:").strong());
             egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                ui.label(RichText::new(&func.signature).monospace());
+                let is_dark = ui.visuals().dark_mode;
+                let job = crate::highlight::highlight_c(&func.signature, is_dark, 12.0);
+                ui.label(job);
             });
             ui.add_space(4.0);
 
@@ -267,23 +299,58 @@ pub fn show(
             }
 
             ui.label(RichText::new("Body:").strong());
-            ScrollArea::vertical().id_salt("mod_body_scroll").max_height(340.0).show(ui, |ui| {
+            ScrollArea::vertical().id_salt("mod_body_scroll").max_height(320.0).show(ui, |ui| {
                 egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(&func.body).monospace().size(12.0),
-                        )
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                    );
+                    let is_dark = ui.visuals().dark_mode;
+                    let job = crate::highlight::highlight_c(&func.body, is_dark, 12.0);
+                    ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
                 });
             });
+
+            // Lint warnings for viewed function
+            let full_code = format!("{}\n{}", func.signature, func.body);
+            let lint_warns = lint::lint_file(&full_code);
+            if !lint_warns.is_empty() {
+                ui.add_space(4.0);
+                ui.collapsing(
+                    RichText::new(format!("Lint ({} warning(s))", lint_warns.len()))
+                        .small()
+                        .color(Color32::from_rgb(255, 200, 60)),
+                    |ui| {
+                        for w in &lint_warns {
+                            let color = match w.severity {
+                                lint::LintSeverity::Error => Color32::from_rgb(255, 80, 80),
+                                lint::LintSeverity::Warning => Color32::from_rgb(255, 200, 60),
+                                lint::LintSeverity::Info => Color32::from_rgb(100, 180, 255),
+                            };
+                            ui.label(
+                                RichText::new(format!("L{}: [{}] {}", w.line_no, w.code, w.message))
+                                    .small()
+                                    .color(color),
+                            );
+                        }
+                    },
+                );
+            }
         }
     });
 
     action
 }
 
+fn which_clang_format() -> bool {
+    std::process::Command::new("which")
+        .arg("clang-format")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 // ── Missing include detection ─────────────────────────────────────────────────
+
+pub fn compute_missing_includes_for_health(src_content: &str, lib: &FunctionLibrary) -> Vec<String> {
+    compute_missing_includes(src_content, lib)
+}
 
 fn compute_missing_includes(src_content: &str, lib: &FunctionLibrary) -> Vec<String> {
     let mut warnings = Vec::new();

@@ -25,12 +25,15 @@ pub enum ProjectAction {
     OpenMetaEditor,
     OpenUsageTracker,
     OpenMakefile,
+    OpenHealth,
+    OpenSearch,
+    ExportReport,
 }
 
 pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectMeta) -> ProjectAction {
     let mut action = ProjectAction::None;
 
-    // Header row
+    // Row 1: navigation + name
     ui.horizontal(|ui| {
         if ui.button("← Home").clicked() {
             action = ProjectAction::GoHome;
@@ -44,17 +47,26 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
         if ui.button("Open in Editor").clicked() {
             action = ProjectAction::OpenInEditor;
         }
+    });
+    // Row 2: tools
+    ui.horizontal_wrapped(|ui| {
         if ui.button("Stats").clicked() {
             action = ProjectAction::OpenStats;
         }
         if ui.button("Notes").on_hover_text("Project notepad").clicked() {
             action = ProjectAction::OpenNotes;
         }
-        if ui.button("Git").on_hover_text("Git status, log and commit").clicked() {
+        if ui.button("Git").on_hover_text("Git status, log, staging, push/pull").clicked() {
             action = ProjectAction::OpenGitPanel;
         }
         if ui.button("History").on_hover_text("Build history log").clicked() {
             action = ProjectAction::OpenBuildHistory;
+        }
+        if ui.button("Health").on_hover_text("Project health dashboard").clicked() {
+            action = ProjectAction::OpenHealth;
+        }
+        if ui.button("Search").on_hover_text("Search across all source files").clicked() {
+            action = ProjectAction::OpenSearch;
         }
         if ui.button("Usage").on_hover_text("Library function usage per file").clicked() {
             action = ProjectAction::OpenUsageTracker;
@@ -64,6 +76,9 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
         }
         if ui.button("Export ZIP").on_hover_text("Bundle src/, include/, Makefile into a ZIP").clicked() {
             action = ProjectAction::ExportZip;
+        }
+        if ui.button("Export Report").on_hover_text("Generate Markdown project report").clicked() {
+            action = ProjectAction::ExportReport;
         }
         if ui.button("Save as Template").on_hover_text("Save this project structure as a reusable template").clicked() {
             action = ProjectAction::SaveAsTemplate;

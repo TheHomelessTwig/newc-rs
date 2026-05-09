@@ -23,6 +23,8 @@ pub struct AppConfig {
     pub theme: String,
     #[serde(default)]
     pub workspaces: Vec<Workspace>,
+    #[serde(default = "default_clang_format_style")]
+    pub clang_format_style: String,
 }
 
 impl Default for AppConfig {
@@ -33,8 +35,13 @@ impl Default for AppConfig {
             scan_dirs: default_scan_dirs(),
             theme: default_theme(),
             workspaces: Vec::new(),
+            clang_format_style: default_clang_format_style(),
         }
     }
+}
+
+fn default_clang_format_style() -> String {
+    "file".to_string()
 }
 
 fn default_terminal() -> String {

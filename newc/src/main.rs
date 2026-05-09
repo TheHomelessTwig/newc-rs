@@ -1,5 +1,6 @@
 mod cli;
 mod app;
+mod highlight;
 mod state;
 mod build_runner;
 pub mod views;

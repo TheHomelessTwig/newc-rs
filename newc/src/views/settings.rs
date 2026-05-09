@@ -32,6 +32,16 @@ pub fn show(ui: &mut Ui, config: &mut AppConfig) -> SettingsAction {
                     ui.selectable_value(&mut config.theme, "light".to_string(), "Light");
                 });
             ui.end_row();
+
+            ui.label("clang-format style:");
+            egui::ComboBox::from_id_salt("clang_style_combo")
+                .selected_text(&config.clang_format_style)
+                .show_ui(ui, |ui| {
+                    for style in ["file", "LLVM", "Google", "Chromium", "GNU", "Microsoft"] {
+                        ui.selectable_value(&mut config.clang_format_style, style.to_string(), style);
+                    }
+                });
+            ui.end_row();
         });
 
     ui.add_space(8.0);
