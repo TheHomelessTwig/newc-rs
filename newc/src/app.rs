@@ -12,6 +12,7 @@ use newc_core::{
     project_template,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
     sync::{self, extract_function_implementations, update_function_in_source},
+    user_template::UserTemplate,
 };
 
 use crate::build_runner::{BuildLine, BuildRunner, LineKind};
@@ -32,13 +33,20 @@ impl NewcApp {
         let scan_paths = state.config.scan_paths();
         state.known_projects = Project::discover(&scan_paths);
 
+        // Apply theme from config immediately
+        if state.config.is_dark() {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            cc.egui_ctx.set_visuals(egui::Visuals::light());
+        }
+
         let runner = BuildRunner::spawn(cc.egui_ctx.clone());
         Self { state, runner, build_panel_open: true, build_auto_scroll: true }
     }
 
     fn drain_build_output(&mut self) {
         for line in self.runner.drain() {
-            if let LineKind::Done { exit_code } = line.kind {
+            if let LineKind::Done { exit_code, .. } = line.kind {
                 self.state.build_state = BuildState::Done { exit_code };
                 self.state.build_lines.push(line);
             } else {
@@ -66,8 +74,18 @@ impl eframe::App for NewcApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.drain_build_output();
 
+        // Apply theme every frame (cheap — egui deduplicates)
+        if self.state.config.is_dark() {
+            ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            ctx.set_visuals(egui::Visuals::light());
+        }
+
         // Handle Ctrl+P quick search shortcut
         views::quick_search::handle_shortcut(ctx, &mut self.state.quick_search);
+
+        // Shortcuts modal (? key)
+        views::shortcuts::show(ctx, &mut self.state);
 
         // Top bar
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -95,6 +113,9 @@ impl eframe::App for NewcApp {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.toggle_value(&mut self.build_panel_open, "Build Output");
+                    if ui.small_button("?").on_hover_text("Keyboard shortcuts").clicked() {
+                        self.state.show_shortcuts = true;
+                    }
                     ui.label(
                         RichText::new("Ctrl+P")
                             .small()
@@ -220,6 +241,98 @@ impl eframe::App for NewcApp {
                         }
                     });
                 });
+        }
+
+        // Confirm remove module modal
+        if let Some((project, mod_name)) = self.state.confirm_remove_module.clone() {
+            let mut open = true;
+            egui::Window::new("Remove Module")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label(format!("Delete module '{mod_name}'?"));
+                    ui.label(
+                        RichText::new(format!(
+                            "This removes src/{mod_name}.c and include/{mod_name}.h."
+                        ))
+                        .small()
+                        .color(Color32::GRAY),
+                    );
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(egui::Button::new("Delete").fill(Color32::from_rgb(160, 40, 40)))
+                            .clicked()
+                        {
+                            match module::remove_module(&project.root, &mod_name) {
+                                Ok(()) => {
+                                    self.state.set_status(format!("Removed module '{mod_name}'."));
+                                    if let View::ProjectDetail(ref mut p) = self.state.view {
+                                        let _ = p.refresh_modules();
+                                    }
+                                }
+                                Err(e) => self.state.set_error(e.to_string()),
+                            }
+                            self.state.confirm_remove_module = None;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.state.confirm_remove_module = None;
+                        }
+                    });
+                });
+            if !open {
+                self.state.confirm_remove_module = None;
+            }
+        }
+
+        // Save as template modal
+        if self.state.show_save_template_modal {
+            if let Some(project) = self.state.current_project().cloned() {
+                let mut open = true;
+                egui::Window::new("Save as Template")
+                    .open(&mut open)
+                    .collapsible(false)
+                    .resizable(false)
+                    .min_width(340.0)
+                    .show(ctx, |ui| {
+                        egui::Grid::new("save_tpl_grid").num_columns(2).show(ui, |ui| {
+                            ui.label("Name:");
+                            ui.text_edit_singleline(&mut self.state.save_template_name);
+                            ui.end_row();
+                            ui.label("Description:");
+                            ui.text_edit_singleline(&mut self.state.save_template_desc);
+                            ui.end_row();
+                        });
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            let valid = !self.state.save_template_name.trim().is_empty();
+                            if ui.add_enabled(valid, egui::Button::new("Save")).clicked() {
+                                let builder_state = MainBuilderState::load_from_main_c(&project.root);
+                                let tpl = UserTemplate {
+                                    name: self.state.save_template_name.trim().to_string(),
+                                    description: self.state.save_template_desc.trim().to_string(),
+                                    modules: project.modules.iter().map(|m| m.name.clone()).collect(),
+                                    blocks: builder_state.blocks,
+                                    globals: builder_state.globals,
+                                };
+                                match newc_core::user_template::save(&tpl) {
+                                    Ok(_) => self.state.set_status(format!("Template '{}' saved.", tpl.name)),
+                                    Err(e) => self.state.set_error(e.to_string()),
+                                }
+                                self.state.show_save_template_modal = false;
+                                self.state.save_template_name.clear();
+                                self.state.save_template_desc.clear();
+                            }
+                            if ui.button("Cancel").clicked() {
+                                self.state.show_save_template_modal = false;
+                            }
+                        });
+                    });
+                if !open {
+                    self.state.show_save_template_modal = false;
+                }
+            }
         }
 
         // Import from .c modal
@@ -490,6 +603,13 @@ impl eframe::App for NewcApp {
                                 let _ = newc_core::function_lib::FunctionLibrary::save_user_function(&func);
                             }
                         }
+                        views::library::LibraryAction::ToggleStar(name) => {
+                            if let Some(f) = self.state.function_lib.get_mut(&name) {
+                                f.starred = !f.starred;
+                                let func = f.clone();
+                                let _ = newc_core::function_lib::FunctionLibrary::save_user_function(&func);
+                            }
+                        }
                         views::library::LibraryAction::OpenImport => {
                             self.state.show_import = true;
                         }
@@ -531,7 +651,7 @@ impl eframe::App for NewcApp {
                 }
 
                 View::Home => {
-                    let action = views::home::show(ui, &self.state.known_projects);
+                    let action = views::home::show(ui, &self.state.known_projects, self.state.is_first_run);
                     if action.go_create {
                         self.state.view = View::CreateProject;
                     }
@@ -597,6 +717,7 @@ impl eframe::App for NewcApp {
                                             self.state.composer_redo.clear();
                                         }
                                     }
+                                    self.state.is_first_run = false;
                                     self.open_project(root);
                                     self.state.set_status(format!("Project '{name}' created."));
                                     self.state.create_name.clear();
@@ -653,6 +774,9 @@ impl eframe::App for NewcApp {
                                 }
                                 Err(e) => self.state.set_error(e.to_string()),
                             }
+                        }
+                        views::project::ProjectAction::ConfirmRemoveModule(name) => {
+                            self.state.confirm_remove_module = Some((project.clone(), name));
                         }
                         views::project::ProjectAction::SyncModule(name) => {
                             match sync::sync_module(&project.root, &name) {
@@ -742,6 +866,15 @@ impl eframe::App for NewcApp {
                             self.state.composer_undo.clear();
                             self.state.composer_redo.clear();
                             self.state.view = View::MainBuilder(project.clone());
+                        }
+                        views::project::ProjectAction::OpenGitPanel => {
+                            self.state.git_commit_msg.clear();
+                            self.state.view = View::GitPanel(project.clone());
+                        }
+                        views::project::ProjectAction::SaveAsTemplate => {
+                            self.state.save_template_name = project.name.clone();
+                            self.state.save_template_desc.clear();
+                            self.state.show_save_template_modal = true;
                         }
                         views::project::ProjectAction::ExportZip => {
                             let parent = project.root.parent()
@@ -859,6 +992,10 @@ impl eframe::App for NewcApp {
                         views::main_builder::BuilderAction::None
                         | views::main_builder::BuilderAction::Snapshot => {}
                     }
+                }
+
+                View::GitPanel(_) => {
+                    views::git_panel::show(ctx, &mut self.state);
                 }
 
                 View::AddModule { ref project, .. } => {

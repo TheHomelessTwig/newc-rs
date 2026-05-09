@@ -1,4 +1,4 @@
-use egui::Ui;
+use egui::{RichText, Ui};
 use std::path::PathBuf;
 
 pub struct HomeAction {
@@ -8,7 +8,7 @@ pub struct HomeAction {
     pub browse_for_project: bool,
 }
 
-pub fn show(ui: &mut Ui, known_projects: &[PathBuf]) -> HomeAction {
+pub fn show(ui: &mut Ui, known_projects: &[PathBuf], is_first_run: bool) -> HomeAction {
     let mut action = HomeAction {
         open_project: None,
         remove_project: None,
@@ -18,6 +18,30 @@ pub fn show(ui: &mut Ui, known_projects: &[PathBuf]) -> HomeAction {
 
     ui.heading("Projects");
     ui.separator();
+
+    // First-run onboarding
+    if is_first_run && known_projects.is_empty() {
+        egui::Frame::new()
+            .inner_margin(egui::Margin::same(12))
+            .corner_radius(egui::CornerRadius::same(6))
+            .fill(ui.visuals().faint_bg_color)
+            .show(ui, |ui| {
+                ui.label(RichText::new("Welcome to newc!").heading());
+                ui.add_space(6.0);
+                ui.label("newc helps you scaffold, build and manage C projects with reusable function libraries.");
+                ui.add_space(8.0);
+                ui.label(RichText::new("Getting started:").strong());
+                ui.label("1. Create your first project with \"New Project\"");
+                ui.label("2. Add modules and import functions from the Function Library");
+                ui.label("3. Use Compose main() to visually build your main.c");
+                ui.label("4. Browse the C Reference for stdlib documentation");
+                ui.add_space(8.0);
+                if ui.button("Create first project").clicked() {
+                    action.go_create = true;
+                }
+            });
+        ui.add_space(12.0);
+    }
 
     ui.horizontal(|ui| {
         if ui.button("New Project").clicked() {
@@ -29,8 +53,10 @@ pub fn show(ui: &mut Ui, known_projects: &[PathBuf]) -> HomeAction {
     });
     ui.add_space(8.0);
 
-    if known_projects.is_empty() {
+    if known_projects.is_empty() && !is_first_run {
         ui.label("No projects yet. Create one or open an existing folder.");
+        return action;
+    } else if known_projects.is_empty() {
         return action;
     }
 

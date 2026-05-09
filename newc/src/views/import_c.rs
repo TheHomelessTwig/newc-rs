@@ -124,6 +124,7 @@ pub fn show(ui: &mut Ui, state: &mut ImportState) -> ImportAction {
                     } else {
                         format!("Imported comment:\n{}", f.comment)
                     },
+                    starred: false,
                 })
                 .collect();
             action = ImportAction::Import(funcs);

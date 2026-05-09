@@ -104,6 +104,10 @@ impl AppConfig {
             .collect()
     }
 
+    pub fn is_dark(&self) -> bool {
+        self.theme != "light"
+    }
+
     /// Launch the project root in the user's configured editor+terminal.
     pub fn open_in_editor(&self, root: &std::path::Path) {
         let root_str = root.display().to_string();

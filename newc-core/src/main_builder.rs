@@ -18,6 +18,21 @@ pub enum MainBlock {
     Comment(String),
     RawCode(String),
     BlankLine,
+    IfBlock {
+        condition: String,
+        body: Vec<MainBlock>,
+        else_body: Vec<MainBlock>,
+    },
+    WhileLoop {
+        condition: String,
+        body: Vec<MainBlock>,
+    },
+    ForLoop {
+        init: String,
+        condition: String,
+        increment: String,
+        body: Vec<MainBlock>,
+    },
 }
 
 impl MainBlock {
@@ -28,6 +43,9 @@ impl MainBlock {
             MainBlock::Comment(_) => "Comment",
             MainBlock::RawCode(_) => "Raw",
             MainBlock::BlankLine => "Blank",
+            MainBlock::IfBlock { .. } => "If",
+            MainBlock::WhileLoop { .. } => "While",
+            MainBlock::ForLoop { .. } => "For",
         }
     }
 
@@ -42,15 +60,16 @@ impl MainBlock {
             }
             MainBlock::FunctionCall { func_name, args, assign_to, .. } => {
                 let call = format!("{func_name}({})", args.join(", "));
-                if assign_to.is_empty() {
-                    call
-                } else {
-                    format!("{assign_to} = {call}")
-                }
+                if assign_to.is_empty() { call } else { format!("{assign_to} = {call}") }
             }
             MainBlock::Comment(s) => format!("// {}", s.lines().next().unwrap_or("")),
             MainBlock::RawCode(s) => s.lines().next().unwrap_or("").to_string(),
             MainBlock::BlankLine => String::new(),
+            MainBlock::IfBlock { condition, .. } => format!("if ({condition})"),
+            MainBlock::WhileLoop { condition, .. } => format!("while ({condition})"),
+            MainBlock::ForLoop { init, condition, increment, .. } => {
+                format!("for ({init}; {condition}; {increment})")
+            }
         }
     }
 
@@ -94,8 +113,34 @@ impl MainBlock {
                 .collect::<Vec<_>>()
                 .join("\n"),
             MainBlock::BlankLine => String::new(),
+            MainBlock::IfBlock { condition, body, else_body } => {
+                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                if else_body.is_empty() {
+                    format!("\tif ({condition}) {{\n{body_str}\n\t}}")
+                } else {
+                    let else_str = else_body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                    format!("\tif ({condition}) {{\n{body_str}\n\t}} else {{\n{else_str}\n\t}}")
+                }
+            }
+            MainBlock::WhileLoop { condition, body } => {
+                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                format!("\twhile ({condition}) {{\n{body_str}\n\t}}")
+            }
+            MainBlock::ForLoop { init, condition, increment, body } => {
+                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                format!("\tfor ({init}; {condition}; {increment}) {{\n{body_str}\n\t}}")
+            }
         }
     }
+}
+
+/// Add one extra tab level to all lines of a block's C output.
+fn indent_block(block: &MainBlock) -> String {
+    block.to_c()
+        .lines()
+        .map(|l| format!("\t{l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

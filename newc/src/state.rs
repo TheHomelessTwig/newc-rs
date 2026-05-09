@@ -23,6 +23,7 @@ pub enum View {
     HeaderEditor { project: Project, module_name: String },
     MainBuilder(Project),
     AddModule { project: Project },
+    GitPanel(Project),
     Settings,
 }
 
@@ -92,6 +93,18 @@ pub struct AppState {
     // Project notes (content loaded per-project)
     pub notes_content: String,
     pub notes_dirty: bool,
+    // Shortcuts modal
+    pub show_shortcuts: bool,
+    // First-run onboarding
+    pub is_first_run: bool,
+    // Confirm module removal
+    pub confirm_remove_module: Option<(Project, String)>,
+    // Git panel
+    pub git_commit_msg: String,
+    // Save-as-template modal
+    pub show_save_template_modal: bool,
+    pub save_template_name: String,
+    pub save_template_desc: String,
 }
 
 impl AppState {
@@ -99,6 +112,10 @@ impl AppState {
         let author = newc_core::scaffold::detect_author();
         let config = AppConfig::load();
         let config_draft = config.clone();
+        let config_dir_exists = dirs::config_dir()
+            .map(|d| d.join("newc").exists())
+            .unwrap_or(false);
+        let is_first_run = !config_dir_exists;
         Self {
             view: View::Home,
             known_projects: Vec::new(),
@@ -141,6 +158,13 @@ impl AppState {
             cref_state: CRefState::default(),
             notes_content: String::new(),
             notes_dirty: false,
+            show_shortcuts: false,
+            is_first_run,
+            confirm_remove_module: None,
+            git_commit_msg: String::new(),
+            show_save_template_modal: false,
+            save_template_name: String::new(),
+            save_template_desc: String::new(),
         }
     }
 
@@ -157,7 +181,8 @@ impl AppState {
             View::ProjectDetail(p)
             | View::ProjectStats(p)
             | View::ProjectNotes(p)
-            | View::MainBuilder(p) => Some(p),
+            | View::MainBuilder(p)
+            | View::GitPanel(p) => Some(p),
             View::ModuleDetail { project, .. }
             | View::HeaderEditor { project, .. }
             | View::AddModule { project, .. } => Some(project),

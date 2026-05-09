@@ -6,6 +6,7 @@ pub enum ProjectAction {
     GoHome,
     AddModule,
     RemoveModule(String),
+    ConfirmRemoveModule(String),
     SyncModule(String),
     SyncAll,
     Check,
@@ -18,6 +19,8 @@ pub enum ProjectAction {
     OpenMainBuilder,
     ExportZip,
     OpenNotes,
+    OpenGitPanel,
+    SaveAsTemplate,
 }
 
 pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectAction {
@@ -43,8 +46,14 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
         if ui.button("Notes").on_hover_text("Project notepad").clicked() {
             action = ProjectAction::OpenNotes;
         }
+        if ui.button("Git").on_hover_text("Git status, log and commit").clicked() {
+            action = ProjectAction::OpenGitPanel;
+        }
         if ui.button("Export ZIP").on_hover_text("Bundle src/, include/, Makefile into a ZIP").clicked() {
             action = ProjectAction::ExportZip;
+        }
+        if ui.button("Save as Template").on_hover_text("Save this project structure as a reusable template").clicked() {
+            action = ProjectAction::SaveAsTemplate;
         }
         if ui
             .add(egui::Button::new("Compose main()").fill(Color32::from_rgb(60, 80, 140)))
@@ -122,7 +131,7 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
                         action = ProjectAction::SyncModule(module.name.clone());
                     }
                     if ui.small_button("Remove").on_hover_text("Delete this module").clicked() {
-                        action = ProjectAction::RemoveModule(module.name.clone());
+                        action = ProjectAction::ConfirmRemoveModule(module.name.clone());
                     }
                     ui.end_row();
                 }

@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Instant;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use egui::Context;
@@ -17,7 +18,7 @@ pub enum LineKind {
     Stdout,
     Stderr,
     Info,
-    Done { exit_code: Option<i32> },
+    Done { exit_code: Option<i32>, duration_ms: u64 },
 }
 
 #[allow(dead_code)]
@@ -35,11 +36,7 @@ impl BuildRunner {
     pub fn spawn(ctx: Context) -> Self {
         let (cmd_tx, cmd_rx) = bounded::<BuildCommand>(8);
         let (line_tx, line_rx) = bounded::<BuildLine>(512);
-
-        thread::spawn(move || {
-            runner_loop(cmd_rx, line_tx, ctx);
-        });
-
+        thread::spawn(move || runner_loop(cmd_rx, line_tx, ctx));
         Self { cmd_tx, line_rx }
     }
 
@@ -74,6 +71,8 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                 });
                 ctx.request_repaint();
 
+                let start = Instant::now();
+
                 let mut child = match Command::new("make")
                     .arg(&target)
                     .current_dir(&cwd)
@@ -89,7 +88,7 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                         });
                         let _ = line_tx.send(BuildLine {
                             text: String::new(),
-                            kind: LineKind::Done { exit_code: None },
+                            kind: LineKind::Done { exit_code: None, duration_ms: start.elapsed().as_millis() as u64 },
                         });
                         ctx.request_repaint();
                         continue;
@@ -125,9 +124,10 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                 if let Some(t) = stderr_thread { let _ = t.join(); }
 
                 let exit_code = child.wait().ok().and_then(|s| s.code());
+                let duration_ms = start.elapsed().as_millis() as u64;
                 let _ = line_tx.send(BuildLine {
                     text: String::new(),
-                    kind: LineKind::Done { exit_code },
+                    kind: LineKind::Done { exit_code, duration_ms },
                 });
                 ctx.request_repaint();
             }

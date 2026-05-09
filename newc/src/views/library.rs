@@ -26,6 +26,7 @@ impl LibraryState {
             requires: Vec::new(),
             tags: Vec::new(),
             notes: String::new(),
+            starred: false,
         }
     }
 }
@@ -35,6 +36,7 @@ pub enum LibraryAction {
     Save(FunctionTemplate),
     Delete(String),
     UpdateNotes { name: String, notes: String },
+    ToggleStar(String),
     OpenImport,
     CreateGroup { name: String, description: String },
     RenameGroup { old: String, new: String },
@@ -122,6 +124,15 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                     state.selected = None;
                 }
 
+                // "Starred" filter
+                let starred_count = lib.all().iter().filter(|f| f.starred).count();
+                let starred_sel = state.active_group.as_deref() == Some("__starred__");
+                if ui.selectable_label(starred_sel, format!("★ Starred ({})", starred_count)).clicked() {
+                    state.active_group = Some("__starred__".to_string());
+                    state.selected = None;
+                }
+                ui.separator();
+
                 for group in &lib.groups {
                     let count = lib.by_module(&group.name).len();
                     let is_sel = state.active_group.as_deref() == Some(&group.name);
@@ -159,10 +170,10 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
     // ── Right: function list + detail ────────────────────────────────────────
     // Build candidate list filtered by active group and search
     let candidates: Vec<_> = {
-        let by_group: Vec<_> = if let Some(g) = &state.active_group {
-            lib.all().iter().filter(|f| &f.module == g).collect()
-        } else {
-            lib.all().iter().collect()
+        let by_group: Vec<_> = match state.active_group.as_deref() {
+            Some("__starred__") => lib.all().iter().filter(|f| f.starred).collect(),
+            Some(g) => lib.all().iter().filter(|f| f.module == g).collect(),
+            None => lib.all().iter().collect(),
         };
         if state.search.is_empty() {
             by_group
@@ -194,13 +205,19 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                     ui.collapsing(module.as_str(), |ui| {
                         for func in candidates.iter().filter(|f| &f.module == module) {
                             let selected = state.selected.as_deref() == Some(&func.name);
-                            if ui.selectable_label(selected, &func.name).clicked() {
-                                if state.selected.as_deref() != Some(&func.name) {
-                                    state.selected = Some(func.name.clone());
-                                    state.edit_mode = false;
-                                    state.draft = None;
+                            ui.horizontal(|ui| {
+                                let star = if func.starred { "★" } else { "☆" };
+                                if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
+                                    action = LibraryAction::ToggleStar(func.name.clone());
                                 }
-                            }
+                                if ui.selectable_label(selected, &func.name).clicked() {
+                                    if state.selected.as_deref() != Some(&func.name) {
+                                        state.selected = Some(func.name.clone());
+                                        state.edit_mode = false;
+                                        state.draft = None;
+                                    }
+                                }
+                            });
                         }
                     });
                 }

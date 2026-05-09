@@ -305,6 +305,28 @@ fn show_block_editor(
         MainBlock::BlankLine => {
             ui.label(RichText::new("(blank line)").color(Color32::GRAY).small());
         }
+        MainBlock::IfBlock { condition, .. } => {
+            ui.horizontal(|ui| {
+                ui.label("Condition:");
+                ui.add(egui::TextEdit::singleline(condition).hint_text("e.g. x > 0").desired_width(f32::INFINITY));
+            });
+            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+        }
+        MainBlock::WhileLoop { condition, .. } => {
+            ui.horizontal(|ui| {
+                ui.label("Condition:");
+                ui.add(egui::TextEdit::singleline(condition).hint_text("e.g. i < n").desired_width(f32::INFINITY));
+            });
+            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+        }
+        MainBlock::ForLoop { init, condition, increment, .. } => {
+            egui::Grid::new(ui.next_auto_id()).num_columns(2).show(ui, |ui| {
+                ui.label("Init:"); ui.add(egui::TextEdit::singleline(init).hint_text("int i = 0")); ui.end_row();
+                ui.label("Condition:"); ui.add(egui::TextEdit::singleline(condition).hint_text("i < n")); ui.end_row();
+                ui.label("Increment:"); ui.add(egui::TextEdit::singleline(increment).hint_text("i++")); ui.end_row();
+            });
+            ui.label(RichText::new("(edit nested blocks via sub-list)").small().color(Color32::GRAY));
+        }
     }
 }
 
@@ -315,6 +337,9 @@ fn block_label_color(block: &MainBlock) -> Color32 {
         MainBlock::Comment(_)          => Color32::from_rgb(180, 180, 100),
         MainBlock::RawCode(_)          => Color32::from_rgb(200, 130, 100),
         MainBlock::BlankLine           => Color32::GRAY,
+        MainBlock::IfBlock { .. }      => Color32::from_rgb(200, 120, 220),
+        MainBlock::WhileLoop { .. }    => Color32::from_rgb(220, 160, 80),
+        MainBlock::ForLoop { .. }      => Color32::from_rgb(220, 130, 80),
     }
 }
 

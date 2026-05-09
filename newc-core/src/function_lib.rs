@@ -18,6 +18,8 @@ pub struct FunctionTemplate {
     pub tags: Vec<String>,
     #[serde(default)]
     pub notes: String,
+    #[serde(default)]
+    pub starred: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
