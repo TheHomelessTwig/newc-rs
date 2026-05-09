@@ -112,7 +112,7 @@ See [docs/building.md](docs/building.md) for detailed platform-specific instruct
 ### Quick start (Linux)
 
 ```bash
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
@@ -191,7 +191,7 @@ clang_format_style = "file" # clang-format style (file/LLVM/Google/Chromium/GNU/
 scan_dirs = ["~/projects"]  # directories scanned for existing projects on startup
 
 [[workspaces]]
-name = "ICT159"
+name = "CS101"
 paths = ["/home/user/projects/assignment1", "/home/user/projects/assignment2"]
 ```
 

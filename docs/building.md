@@ -25,7 +25,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
 # Build
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 
@@ -41,7 +41,7 @@ sudo pacman -S base-devel git clang rustup
 rustup toolchain install stable
 rustup default stable
 
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
@@ -55,7 +55,7 @@ sudo dnf install gcc gcc-c++ make git clang-tools-extra curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
@@ -103,7 +103,7 @@ brew install rustup-init
 rustup-init
 source "$HOME/.cargo/env"
 
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 cp target/release/newc /usr/local/bin/newc
@@ -127,7 +127,7 @@ The "Open in Editor" feature uses AppleScript to open a new Terminal window.
 ### Build
 
 ```powershell
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build --release
 ```

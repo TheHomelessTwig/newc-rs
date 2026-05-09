@@ -21,7 +21,7 @@ scan_dirs = [
 
 # Each workspace groups a set of project paths
 [[workspaces]]
-name = "ICT159"
+name = "CS101"
 paths = [
     "/home/user/projects/assignment1",
     "/home/user/projects/assignment2",
@@ -179,7 +179,7 @@ The `blocks` array serialises `MainBlock` enum variants. The `type` field discri
 Per-project academic metadata.
 
 ```toml
-course = "ICT159"
+course = "CS101"
 assignment = "Assignment 2 — Linked Lists"
 due_date = "2025-05-30"    # YYYY-MM-DD; empty string if not set
 max_marks = 100

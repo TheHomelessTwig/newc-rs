@@ -12,7 +12,7 @@
 ### Clone and build
 
 ```bash
-git clone https://github.com/TheHomelessTwig/newc-rs.git
+git clone https://github.com/your-username/newc-rs.git
 cd newc-rs
 cargo build
 ```
