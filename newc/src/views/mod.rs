@@ -3,6 +3,7 @@ pub mod create;
 pub mod project;
 pub mod add_module;
 pub mod build_panel;
+pub mod cref;
 pub mod function_picker;
 pub mod header_editor;
 pub mod import_c;

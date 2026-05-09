@@ -280,8 +280,9 @@ fn groups_path() -> Option<PathBuf> {
 }
 
 const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
-    ("input",   include_str!("../../assets/functions/input.toml")),
-    ("math",    include_str!("../../assets/functions/math.toml")),
-    ("display", include_str!("../../assets/functions/display.toml")),
-    ("array",   include_str!("../../assets/functions/array.toml")),
+    ("input",      include_str!("../../assets/functions/input.toml")),
+    ("math",       include_str!("../../assets/functions/math.toml")),
+    ("display",    include_str!("../../assets/functions/display.toml")),
+    ("array",      include_str!("../../assets/functions/array.toml")),
+    ("algorithms", include_str!("../../assets/functions/algorithms.toml")),
 ];

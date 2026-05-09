@@ -1,11 +1,13 @@
 pub mod analysis;
 pub mod config;
+pub mod cref;
 pub mod error;
 pub mod export;
 pub mod function_lib;
 pub mod header;
 pub mod main_builder;
 pub mod module;
+pub mod notes;
 pub mod project;
 pub mod project_template;
 pub mod scaffold;

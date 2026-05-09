@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use newc_core::{config::AppConfig, function_lib::FunctionLibrary, main_builder::MainBuilderState, project::Project, stats::ProjectStats};
+use crate::views::cref::CRefState;
 use crate::views::header_editor::HeaderEditorState;
 use crate::views::import_c::ImportState;
 use crate::views::library::LibraryState;
@@ -14,8 +15,10 @@ pub enum View {
     Home,
     CreateProject,
     FunctionLibrary,
+    CReference,
     ProjectDetail(Project),
     ProjectStats(Project),
+    ProjectNotes(Project),
     ModuleDetail { project: Project, module_name: String },
     HeaderEditor { project: Project, module_name: String },
     MainBuilder(Project),
@@ -84,6 +87,11 @@ pub struct AppState {
     pub cached_stats: Option<(PathBuf, ProjectStats)>,
     // Settings draft (edited copy before save)
     pub config_draft: AppConfig,
+    // C reference
+    pub cref_state: CRefState,
+    // Project notes (content loaded per-project)
+    pub notes_content: String,
+    pub notes_dirty: bool,
 }
 
 impl AppState {
@@ -130,6 +138,9 @@ impl AppState {
             error_msg: None,
             cached_stats: None,
             config_draft,
+            cref_state: CRefState::default(),
+            notes_content: String::new(),
+            notes_dirty: false,
         }
     }
 
@@ -145,6 +156,7 @@ impl AppState {
         match &self.view {
             View::ProjectDetail(p)
             | View::ProjectStats(p)
+            | View::ProjectNotes(p)
             | View::MainBuilder(p) => Some(p),
             View::ModuleDetail { project, .. }
             | View::HeaderEditor { project, .. }

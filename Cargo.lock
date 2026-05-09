@@ -2117,7 +2117,7 @@ dependencies = [
 
 [[package]]
 name = "newc"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2133,7 +2133,7 @@ dependencies = [
 
 [[package]]
 name = "newc-core"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "chrono",
  "dirs",

@@ -7,6 +7,7 @@ use newc_core::{
     header,
     main_builder::MainBuilderState,
     module,
+    notes,
     project::Project,
     project_template,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
@@ -86,6 +87,10 @@ impl eframe::App for NewcApp {
                 }
                 if ui.selectable_label(is_settings, "Settings").clicked() {
                     self.state.view = View::Settings;
+                }
+                let is_cref = matches!(self.state.view, View::CReference);
+                if ui.selectable_label(is_cref, "C Reference").clicked() {
+                    self.state.view = View::CReference;
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -402,6 +407,59 @@ impl eframe::App for NewcApp {
                     }
                 }
 
+                View::CReference => {
+                    views::cref::show(ui, &mut self.state.cref_state);
+                }
+
+                View::ProjectNotes(ref project) => {
+                    let project = project.clone();
+                    ui.horizontal(|ui| {
+                        if ui.button("← Project").clicked() {
+                            if self.state.notes_dirty {
+                                let _ = notes::save(&project.root, &self.state.notes_content);
+                                self.state.notes_dirty = false;
+                            }
+                            self.state.view = View::ProjectDetail(project.clone());
+                        }
+                        ui.heading(format!("Notes — {}", project.name));
+                        if self.state.notes_dirty {
+                            if ui.button("Save").clicked() {
+                                let _ = notes::save(&project.root, &self.state.notes_content);
+                                self.state.notes_dirty = false;
+                                self.state.set_status("Notes saved.");
+                            }
+                        }
+                        ui.label(
+                            egui::RichText::new("(Ctrl+S to save)")
+                                .small()
+                                .color(egui::Color32::GRAY),
+                        );
+                    });
+                    ui.separator();
+
+                    // Ctrl+S save
+                    if ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl)
+                        && self.state.notes_dirty
+                    {
+                        let _ = notes::save(&project.root, &self.state.notes_content);
+                        self.state.notes_dirty = false;
+                        self.state.set_status("Notes saved.");
+                    }
+
+                    let before = self.state.notes_content.clone();
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.state.notes_content)
+                                .desired_rows(30)
+                                .desired_width(f32::INFINITY)
+                                .hint_text("Project notes, ideas, algorithm plans…"),
+                        );
+                    });
+                    if self.state.notes_content != before {
+                        self.state.notes_dirty = true;
+                    }
+                }
+
                 View::FunctionLibrary => {
                     if self.state.show_import {
                         return; // import modal is shown as a Window overlay
@@ -666,6 +724,11 @@ impl eframe::App for NewcApp {
                             if let View::ProjectDetail(ref mut p) = self.state.view {
                                 let _ = p.refresh_modules();
                             }
+                        }
+                        views::project::ProjectAction::OpenNotes => {
+                            self.state.notes_content = notes::load(&project.root);
+                            self.state.notes_dirty = false;
+                            self.state.view = View::ProjectNotes(project.clone());
                         }
                         views::project::ProjectAction::OpenModuleDetail(module_name) => {
                             self.state.module_detail_state = Default::default();

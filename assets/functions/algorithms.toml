@@ -1,0 +1,727 @@
+module = "algorithms"
+
+[[functions]]
+name = "insertion_sort"
+module = "algorithms"
+description = "Sort int array using insertion sort — efficient for small/nearly-sorted arrays"
+signature = "void insertion_sort(int arr[], int size)"
+tags = ["sort", "int", "insertion", "O(n²)"]
+requires = []
+header_code = "/* Sorts arr in-place using insertion sort */\nvoid insertion_sort(int arr[], int size);"
+impl_code = '''
+/*
+ * Function:
+ *     insertion_sort
+ * Input:
+ *     arr  - the integer array to sort
+ *     size - number of elements
+ * Output:
+ *     None (sorts in-place)
+ * Algorithm:
+ *     for each element from index 1 onward
+ *         save it as key
+ *         shift all larger preceding elements right by one
+ *         insert key into the gap
+ */
+void insertion_sort(int arr[], int size)
+{
+	for (int i = 1; i < size; i++) {
+		int key = arr[i];
+		int j = i - 1;
+		while (j >= 0 && arr[j] > key) {
+			arr[j + 1] = arr[j];
+			j--;
+		}
+		arr[j + 1] = key;
+	}
+}
+'''
+
+[[functions]]
+name = "selection_sort"
+module = "algorithms"
+description = "Sort int array using selection sort — always O(n²) but minimal swaps"
+signature = "void selection_sort(int arr[], int size)"
+tags = ["sort", "int", "selection", "O(n²)"]
+requires = []
+header_code = "/* Sorts arr in-place using selection sort */\nvoid selection_sort(int arr[], int size);"
+impl_code = '''
+/*
+ * Function:
+ *     selection_sort
+ * Input:
+ *     arr  - the integer array to sort
+ *     size - number of elements
+ * Output:
+ *     None (sorts in-place)
+ * Algorithm:
+ *     for each position i from 0 to size-2
+ *         find the index of the minimum element from i onward
+ *         swap arr[i] with the minimum element
+ */
+void selection_sort(int arr[], int size)
+{
+	for (int i = 0; i < size - 1; i++) {
+		int min_idx = i;
+		for (int j = i + 1; j < size; j++) {
+			if (arr[j] < arr[min_idx]) {
+				min_idx = j;
+			}
+		}
+		if (min_idx != i) {
+			int temp = arr[i];
+			arr[i] = arr[min_idx];
+			arr[min_idx] = temp;
+		}
+	}
+}
+'''
+
+[[functions]]
+name = "merge_sort_helper"
+module = "algorithms"
+description = "Internal merge helper for merge_sort — merges two sorted halves"
+signature = "static void merge_sort_helper(int arr[], int left, int mid, int right)"
+tags = ["sort", "int", "merge", "internal"]
+requires = []
+header_code = ""
+impl_code = '''
+/*
+ * Function:
+ *     merge_sort_helper
+ * Input:
+ *     arr   - the array
+ *     left  - start index of left half
+ *     mid   - end index of left half
+ *     right - end index of right half
+ * Output:
+ *     None (merges in-place)
+ * Algorithm:
+ *     copy left and right halves into temporary arrays
+ *     merge them back in sorted order
+ */
+static void merge_sort_helper(int arr[], int left, int mid, int right)
+{
+	int n1 = mid - left + 1;
+	int n2 = right - mid;
+	int L[n1], R[n2];
+	for (int i = 0; i < n1; i++) L[i] = arr[left + i];
+	for (int j = 0; j < n2; j++) R[j] = arr[mid + 1 + j];
+	int i = 0, j = 0, k = left;
+	while (i < n1 && j < n2) {
+		if (L[i] <= R[j]) arr[k++] = L[i++];
+		else arr[k++] = R[j++];
+	}
+	while (i < n1) arr[k++] = L[i++];
+	while (j < n2) arr[k++] = R[j++];
+}
+'''
+
+[[functions]]
+name = "merge_sort"
+module = "algorithms"
+description = "Sort int array using merge sort — stable, O(n log n). Call as merge_sort(arr, 0, size-1)"
+signature = "void merge_sort(int arr[], int left, int right)"
+tags = ["sort", "int", "merge", "O(n log n)", "stable"]
+requires = ["merge_sort_helper"]
+header_code = "/* Sorts arr[left..right] using merge sort. Call: merge_sort(arr, 0, size-1) */\nvoid merge_sort(int arr[], int left, int right);"
+impl_code = '''
+/*
+ * Function:
+ *     merge_sort
+ * Input:
+ *     arr   - the integer array to sort
+ *     left  - start index (usually 0)
+ *     right - end index (usually size-1)
+ * Output:
+ *     None (sorts in-place)
+ * Algorithm:
+ *     if left < right
+ *         find midpoint
+ *         recursively sort left half
+ *         recursively sort right half
+ *         merge the two sorted halves
+ */
+void merge_sort(int arr[], int left, int right)
+{
+	if (left < right) {
+		int mid = left + (right - left) / 2;
+		merge_sort(arr, left, mid);
+		merge_sort(arr, mid + 1, right);
+		merge_sort_helper(arr, left, mid, right);
+	}
+}
+'''
+
+[[functions]]
+name = "quick_sort_partition"
+module = "algorithms"
+description = "Internal partition helper for quick_sort"
+signature = "static int quick_sort_partition(int arr[], int low, int high)"
+tags = ["sort", "int", "quick", "internal"]
+requires = []
+header_code = ""
+impl_code = '''
+/*
+ * Function:
+ *     quick_sort_partition
+ * Input:
+ *     arr  - the array
+ *     low  - start index
+ *     high - end index (pivot)
+ * Output:
+ *     final index of pivot after partitioning
+ * Algorithm:
+ *     use last element as pivot
+ *     move all elements <= pivot to the left of i
+ *     place pivot at i+1
+ */
+static int quick_sort_partition(int arr[], int low, int high)
+{
+	int pivot = arr[high];
+	int i = low - 1;
+	for (int j = low; j < high; j++) {
+		if (arr[j] <= pivot) {
+			i++;
+			int temp = arr[i];
+			arr[i] = arr[j];
+			arr[j] = temp;
+		}
+	}
+	int temp = arr[i + 1];
+	arr[i + 1] = arr[high];
+	arr[high] = temp;
+	return i + 1;
+}
+'''
+
+[[functions]]
+name = "quick_sort"
+module = "algorithms"
+description = "Sort int array using quick sort — O(n log n) average. Call as quick_sort(arr, 0, size-1)"
+signature = "void quick_sort(int arr[], int low, int high)"
+tags = ["sort", "int", "quick", "O(n log n)"]
+requires = ["quick_sort_partition"]
+header_code = "/* Sorts arr[low..high] using quick sort. Call: quick_sort(arr, 0, size-1) */\nvoid quick_sort(int arr[], int low, int high);"
+impl_code = '''
+/*
+ * Function:
+ *     quick_sort
+ * Input:
+ *     arr  - the integer array to sort
+ *     low  - start index (usually 0)
+ *     high - end index (usually size-1)
+ * Output:
+ *     None (sorts in-place)
+ * Algorithm:
+ *     if low < high
+ *         partition array around pivot
+ *         recursively sort left and right of pivot
+ */
+void quick_sort(int arr[], int low, int high)
+{
+	if (low < high) {
+		int pi = quick_sort_partition(arr, low, high);
+		quick_sort(arr, low, pi - 1);
+		quick_sort(arr, pi + 1, high);
+	}
+}
+'''
+
+[[functions]]
+name = "gcd"
+module = "algorithms"
+description = "Greatest common divisor of two integers (Euclidean algorithm)"
+signature = "int gcd(int a, int b)"
+tags = ["math", "gcd", "euclidean"]
+requires = []
+header_code = "/* Returns the greatest common divisor of a and b */\nint gcd(int a, int b);"
+impl_code = '''
+/*
+ * Function:
+ *     gcd
+ * Input:
+ *     a - first integer
+ *     b - second integer
+ * Output:
+ *     greatest common divisor of a and b
+ * Algorithm:
+ *     Euclidean: while b != 0, a = b, b = a mod b
+ */
+int gcd(int a, int b)
+{
+	while (b != 0) {
+		int temp = b;
+		b = a % b;
+		a = temp;
+	}
+	return a;
+}
+'''
+
+[[functions]]
+name = "lcm"
+module = "algorithms"
+description = "Least common multiple of two integers"
+signature = "int lcm(int a, int b)"
+tags = ["math", "lcm"]
+requires = ["gcd"]
+header_code = "/* Returns the least common multiple of a and b */\nint lcm(int a, int b);"
+impl_code = '''
+/*
+ * Function:
+ *     lcm
+ * Input:
+ *     a - first integer
+ *     b - second integer
+ * Output:
+ *     least common multiple of a and b
+ * Algorithm:
+ *     lcm(a, b) = |a * b| / gcd(a, b)
+ */
+int lcm(int a, int b)
+{
+	return (a / gcd(a, b)) * b;
+}
+'''
+
+[[functions]]
+name = "is_prime"
+module = "algorithms"
+description = "Returns 1 if n is prime, 0 otherwise — trial division up to sqrt(n)"
+signature = "int is_prime(int n)"
+tags = ["math", "prime", "number-theory"]
+requires = []
+header_code = "/* Returns 1 if n is prime, 0 otherwise */\nint is_prime(int n);"
+impl_code = '''
+/*
+ * Function:
+ *     is_prime
+ * Input:
+ *     n - integer to test
+ * Output:
+ *     1 if n is prime, 0 otherwise
+ * Algorithm:
+ *     handle n < 2 as not prime
+ *     check divisibility by 2, then odd numbers up to sqrt(n)
+ */
+int is_prime(int n)
+{
+	if (n < 2) return 0;
+	if (n == 2) return 1;
+	if (n % 2 == 0) return 0;
+	for (int i = 3; (long)i * i <= (long)n; i += 2) {
+		if (n % i == 0) return 0;
+	}
+	return 1;
+}
+'''
+
+[[functions]]
+name = "factorial"
+module = "algorithms"
+description = "Returns n! (iterative). Returns -1 for n < 0. Use long for large n."
+signature = "long factorial(int n)"
+tags = ["math", "factorial", "combinatorics"]
+requires = []
+header_code = "/* Returns n! iteratively. Returns -1 for negative n. */\nlong factorial(int n);"
+impl_code = '''
+/*
+ * Function:
+ *     factorial
+ * Input:
+ *     n - non-negative integer
+ * Output:
+ *     n! as a long, or -1 if n < 0
+ * Algorithm:
+ *     multiply result by each integer from 1 to n
+ */
+long factorial(int n)
+{
+	if (n < 0) return -1;
+	long result = 1;
+	for (int i = 2; i <= n; i++) {
+		result *= (long)i;
+	}
+	return result;
+}
+'''
+
+[[functions]]
+name = "fibonacci"
+module = "algorithms"
+description = "Returns the nth Fibonacci number (iterative, 0-indexed: fib(0)=0, fib(1)=1)"
+signature = "long fibonacci(int n)"
+tags = ["math", "fibonacci", "sequence"]
+requires = []
+header_code = "/* Returns the nth Fibonacci number (0-indexed, iterative) */\nlong fibonacci(int n);"
+impl_code = '''
+/*
+ * Function:
+ *     fibonacci
+ * Input:
+ *     n - index (0-based)
+ * Output:
+ *     nth Fibonacci number as long
+ * Algorithm:
+ *     iteratively compute F(n) using two variables
+ */
+long fibonacci(int n)
+{
+	if (n <= 0) return 0;
+	if (n == 1) return 1;
+	long a = 0, b = 1;
+	for (int i = 2; i <= n; i++) {
+		long c = a + b;
+		a = b;
+		b = c;
+	}
+	return b;
+}
+'''
+
+[[functions]]
+name = "power_int"
+module = "algorithms"
+description = "Fast integer exponentiation: base^exp in O(log exp). Returns 0 for negative exp."
+signature = "long power_int(long base, int exp)"
+tags = ["math", "power", "exponentiation", "fast-pow"]
+requires = []
+header_code = "/* Returns base^exp using fast exponentiation. Negative exp returns 0. */\nlong power_int(long base, int exp);"
+impl_code = '''
+/*
+ * Function:
+ *     power_int
+ * Input:
+ *     base - the base value
+ *     exp  - the exponent (non-negative integer)
+ * Output:
+ *     base raised to the power exp
+ * Algorithm:
+ *     binary exponentiation: if exp is odd multiply result by base,
+ *     then square base and halve exp
+ */
+long power_int(long base, int exp)
+{
+	if (exp < 0) return 0;
+	long result = 1;
+	while (exp > 0) {
+		if (exp % 2 == 1) result *= base;
+		base *= base;
+		exp /= 2;
+	}
+	return result;
+}
+'''
+
+[[functions]]
+name = "clamp_int"
+module = "algorithms"
+description = "Clamp an integer to [min, max] range"
+signature = "int clamp_int(int value, int min, int max)"
+tags = ["math", "clamp", "utility"]
+requires = []
+header_code = "/* Returns value clamped to [min, max] */\nint clamp_int(int value, int min, int max);"
+impl_code = '''
+/*
+ * Function:
+ *     clamp_int
+ * Input:
+ *     value - the value to clamp
+ *     min   - lower bound
+ *     max   - upper bound
+ * Output:
+ *     value if within range, min if below, max if above
+ */
+int clamp_int(int value, int min, int max)
+{
+	if (value < min) return min;
+	if (value > max) return max;
+	return value;
+}
+'''
+
+[[functions]]
+name = "str_reverse"
+module = "algorithms"
+description = "Reverse a C string in-place"
+signature = "void str_reverse(char *s)"
+tags = ["string", "reverse"]
+requires = []
+header_code = "/* Reverses string s in-place */\nvoid str_reverse(char *s);"
+impl_code = '''
+/*
+ * Function:
+ *     str_reverse
+ * Input:
+ *     s - null-terminated string to reverse
+ * Output:
+ *     None (modifies s in-place)
+ * Algorithm:
+ *     swap characters from both ends toward the middle
+ */
+void str_reverse(char *s)
+{
+	int left = 0;
+	int right = (int)strlen(s) - 1;
+	while (left < right) {
+		char temp = s[left];
+		s[left] = s[right];
+		s[right] = temp;
+		left++;
+		right--;
+	}
+}
+'''
+
+[[functions]]
+name = "str_is_palindrome"
+module = "algorithms"
+description = "Returns 1 if string is a palindrome (case-sensitive), 0 otherwise"
+signature = "int str_is_palindrome(const char *s)"
+tags = ["string", "palindrome"]
+requires = []
+header_code = "/* Returns 1 if s is a palindrome, 0 otherwise */\nint str_is_palindrome(const char *s);"
+impl_code = '''
+/*
+ * Function:
+ *     str_is_palindrome
+ * Input:
+ *     s - null-terminated string
+ * Output:
+ *     1 if palindrome, 0 otherwise
+ * Algorithm:
+ *     compare characters from both ends toward the middle
+ *     if any pair differs, not a palindrome
+ */
+int str_is_palindrome(const char *s)
+{
+	int left = 0;
+	int right = (int)strlen(s) - 1;
+	while (left < right) {
+		if (s[left] != s[right]) return 0;
+		left++;
+		right--;
+	}
+	return 1;
+}
+'''
+
+[[functions]]
+name = "str_count_char"
+module = "algorithms"
+description = "Count occurrences of a character in a string"
+signature = "int str_count_char(const char *s, char c)"
+tags = ["string", "count", "search"]
+requires = []
+header_code = "/* Returns number of times c appears in s */\nint str_count_char(const char *s, char c);"
+impl_code = '''
+/*
+ * Function:
+ *     str_count_char
+ * Input:
+ *     s - null-terminated string to search
+ *     c - character to count
+ * Output:
+ *     number of occurrences of c in s
+ * Algorithm:
+ *     iterate through string, increment count on match
+ */
+int str_count_char(const char *s, char c)
+{
+	int count = 0;
+	while (*s != '\0') {
+		if (*s == c) count++;
+		s++;
+	}
+	return count;
+}
+'''
+
+[[functions]]
+name = "str_to_upper"
+module = "algorithms"
+description = "Convert all lowercase letters in a string to uppercase in-place"
+signature = "void str_to_upper(char *s)"
+tags = ["string", "case", "uppercase"]
+requires = []
+header_code = "/* Converts all lowercase letters in s to uppercase in-place */\nvoid str_to_upper(char *s);"
+impl_code = '''
+/*
+ * Function:
+ *     str_to_upper
+ * Input:
+ *     s - null-terminated string to modify
+ * Output:
+ *     None (modifies s in-place)
+ * Algorithm:
+ *     for each character, if lowercase convert to uppercase
+ */
+void str_to_upper(char *s)
+{
+	while (*s != '\0') {
+		if (*s >= 'a' && *s <= 'z') {
+			*s = (char)(*s - 'a' + 'A');
+		}
+		s++;
+	}
+}
+'''
+
+[[functions]]
+name = "str_to_lower"
+module = "algorithms"
+description = "Convert all uppercase letters in a string to lowercase in-place"
+signature = "void str_to_lower(char *s)"
+tags = ["string", "case", "lowercase"]
+requires = []
+header_code = "/* Converts all uppercase letters in s to lowercase in-place */\nvoid str_to_lower(char *s);"
+impl_code = '''
+/*
+ * Function:
+ *     str_to_lower
+ * Input:
+ *     s - null-terminated string to modify
+ * Output:
+ *     None (modifies s in-place)
+ * Algorithm:
+ *     for each character, if uppercase convert to lowercase
+ */
+void str_to_lower(char *s)
+{
+	while (*s != '\0') {
+		if (*s >= 'A' && *s <= 'Z') {
+			*s = (char)(*s - 'A' + 'a');
+		}
+		s++;
+	}
+}
+'''
+
+[[functions]]
+name = "str_trim_newline"
+module = "algorithms"
+description = "Remove trailing newline (\\n) or carriage return (\\r) from a string"
+signature = "void str_trim_newline(char *s)"
+tags = ["string", "trim", "newline"]
+requires = []
+header_code = "/* Removes trailing \\n or \\r from s in-place */\nvoid str_trim_newline(char *s);"
+impl_code = '''
+/*
+ * Function:
+ *     str_trim_newline
+ * Input:
+ *     s - null-terminated string
+ * Output:
+ *     None (modifies s in-place)
+ * Algorithm:
+ *     find string length
+ *     walk backwards replacing \n and \r with \0
+ */
+void str_trim_newline(char *s)
+{
+	int len = (int)strlen(s);
+	while (len > 0 && (s[len - 1] == '\n' || s[len - 1] == '\r')) {
+		s[--len] = '\0';
+	}
+}
+'''
+
+[[functions]]
+name = "interpolation_search"
+module = "algorithms"
+description = "Interpolation search in uniformly distributed sorted int array. O(log log n) average."
+signature = "int interpolation_search(int arr[], int size, int value)"
+tags = ["search", "int", "interpolation", "sorted"]
+requires = []
+header_code = "/* Interpolation search in sorted arr. Returns index or -1 if not found. */\nint interpolation_search(int arr[], int size, int value);"
+impl_code = '''
+/*
+ * Function:
+ *     interpolation_search
+ * Input:
+ *     arr   - sorted integer array
+ *     size  - number of elements
+ *     value - value to find
+ * Output:
+ *     index of value if found, -1 otherwise
+ * Algorithm:
+ *     estimate position using linear interpolation between low and high
+ *     narrow range based on comparison with estimated position
+ */
+int interpolation_search(int arr[], int size, int value)
+{
+	int low = 0;
+	int high = size - 1;
+	while (low <= high && value >= arr[low] && value <= arr[high]) {
+		if (arr[high] == arr[low]) {
+			return (arr[low] == value) ? low : -1;
+		}
+		int pos = low + (int)(((long)(value - arr[low]) * (high - low))
+		          / (arr[high] - arr[low]));
+		if (arr[pos] == value) return pos;
+		if (arr[pos] < value) low = pos + 1;
+		else high = pos - 1;
+	}
+	return -1;
+}
+'''
+
+[[functions]]
+name = "rand_int_range"
+module = "algorithms"
+description = "Return a random integer in [min, max] inclusive. Call srand(time(NULL)) first."
+signature = "int rand_int_range(int min, int max)"
+tags = ["random", "int", "range"]
+requires = []
+header_code = "/* Returns random int in [min, max]. Seed with srand(time(NULL)) before use. */\nint rand_int_range(int min, int max);"
+impl_code = '''
+/*
+ * Function:
+ *     rand_int_range
+ * Input:
+ *     min - lower bound (inclusive)
+ *     max - upper bound (inclusive)
+ * Output:
+ *     random integer in [min, max]
+ * Algorithm:
+ *     use rand() % range then shift by min
+ */
+int rand_int_range(int min, int max)
+{
+	return min + rand() % (max - min + 1);
+}
+'''
+
+[[functions]]
+name = "array_shuffle"
+module = "algorithms"
+description = "Randomly shuffle an int array in-place (Fisher-Yates). Seed srand first."
+signature = "void array_shuffle(int arr[], int size)"
+tags = ["array", "int", "shuffle", "random"]
+requires = ["rand_int_range"]
+header_code = "/* Shuffles arr in-place using Fisher-Yates algorithm */\nvoid array_shuffle(int arr[], int size);"
+impl_code = '''
+/*
+ * Function:
+ *     array_shuffle
+ * Input:
+ *     arr  - the integer array to shuffle
+ *     size - number of elements
+ * Output:
+ *     None (shuffles in-place)
+ * Algorithm:
+ *     Fisher-Yates: for i from size-1 down to 1
+ *         pick random j in [0, i]
+ *         swap arr[i] with arr[j]
+ */
+void array_shuffle(int arr[], int size)
+{
+	for (int i = size - 1; i > 0; i--) {
+		int j = rand_int_range(0, i);
+		int temp = arr[i];
+		arr[i] = arr[j];
+		arr[j] = temp;
+	}
+}
+'''

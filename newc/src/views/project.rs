@@ -17,6 +17,7 @@ pub enum ProjectAction {
     OpenModuleDetail(String),
     OpenMainBuilder,
     ExportZip,
+    OpenNotes,
 }
 
 pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectAction {
@@ -38,6 +39,9 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
         }
         if ui.button("Stats").clicked() {
             action = ProjectAction::OpenStats;
+        }
+        if ui.button("Notes").on_hover_text("Project notepad").clicked() {
+            action = ProjectAction::OpenNotes;
         }
         if ui.button("Export ZIP").on_hover_text("Bundle src/, include/, Makefile into a ZIP").clicked() {
             action = ProjectAction::ExportZip;
