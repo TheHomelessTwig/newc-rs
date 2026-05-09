@@ -9,6 +9,8 @@ use newc_core::{
     scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
 };
 
+use crate::updater;
+
 #[derive(Parser)]
 #[command(
     name = "newc",
@@ -60,6 +62,12 @@ pub enum Command {
         /// Path to a newc project to open immediately
         path: Option<PathBuf>,
     },
+    /// Check for and install updates from GitHub Releases
+    Update {
+        /// Only check — print if an update is available without installing
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
@@ -74,7 +82,22 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::Stats => cmd_stats(),
         Command::Funcs { module } => cmd_funcs(module.as_deref()),
         Command::Gui { .. } => unreachable!("GUI handled in main"),
+        Command::Update { check } => cmd_update(check),
     }
+}
+
+fn cmd_update(check_only: bool) -> anyhow::Result<()> {
+    if check_only {
+        match updater::check()? {
+            Some(v) => println!(
+                "Update available: v{v}  (run `newc update` to install)"
+            ),
+            None => println!("Up to date (v{}).", updater::current_version()),
+        }
+    } else {
+        updater::update()?;
+    }
+    Ok(())
 }
 
 fn cmd_new(name: &str, git: bool, template: Option<&str>) -> anyhow::Result<()> {

@@ -3,6 +3,7 @@ mod app;
 mod highlight;
 mod state;
 mod build_runner;
+mod updater;
 pub mod views;
 
 use clap::Parser;

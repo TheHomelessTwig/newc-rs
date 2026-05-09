@@ -1,6 +1,6 @@
 [package]
 name = "newc"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2024"
 
 [[bin]]
@@ -19,6 +19,8 @@ rfd = "0.15"
 dirs = "6.0"
 chrono = "0.4"
 toml = "0.8"
+ureq = { version = "2", features = ["json"] }
+serde_json = "1.0"
 
 # Linux: Wayland + X11 window system support
 [target.'cfg(target_os = "linux")'.dependencies]
