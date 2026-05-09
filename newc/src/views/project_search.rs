@@ -1,5 +1,5 @@
 use egui::{Color32, Context, Key, RichText, ScrollArea};
-use newc_core::{grep, project::Project};
+use newc_core::grep;
 
 use crate::state::{AppState, View};
 

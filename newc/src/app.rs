@@ -13,7 +13,6 @@ use newc_core::{
     notes,
     project::Project,
     project_template,
-    report,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
     sync::{self, extract_function_implementations, update_function_in_source},
     user_template::UserTemplate,

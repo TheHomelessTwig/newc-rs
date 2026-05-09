@@ -1,6 +1,5 @@
 use egui::{Color32, Context, RichText, ScrollArea};
 use newc_core::build_history;
-use newc_core::project::Project;
 
 use crate::state::{AppState, View};
 

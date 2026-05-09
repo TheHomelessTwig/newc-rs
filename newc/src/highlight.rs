@@ -68,8 +68,6 @@ fn fmt(color: Color32, font: &FontId) -> TextFormat {
 }
 
 fn tokenize_line(line: &str, pal: &Palette, font: &FontId, job: &mut LayoutJob) {
-    let mut chars = line.char_indices().peekable();
-
     // Check preprocessor directive
     if line.trim_start().starts_with('#') {
         for pp in PREPROC {

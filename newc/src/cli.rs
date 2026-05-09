@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use newc_core::{
-    analysis, main_builder::MainBuilderState, module, project_template,
+    analysis, module, project_template,
     scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
 };
 

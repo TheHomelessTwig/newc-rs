@@ -1,5 +1,5 @@
 use egui::{Color32, Context, RichText, ScrollArea};
-use newc_core::{analysis, build_history, grep, project::Project, sync::extract_function_implementations};
+use newc_core::{analysis, build_history, grep, project::Project};
 
 use crate::state::{AppState, View};
 use crate::views::module_detail::compute_missing_includes_for_health;
