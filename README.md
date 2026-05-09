@@ -2,7 +2,7 @@
 
 A Rust GUI application for scaffolding, building, and managing C projects. Replaces a hand-rolled bash script with a fully-featured desktop tool built on [egui](https://github.com/emilk/egui).
 
-![Version](https://img.shields.io/badge/version-0.2.2-blue)
+![Version](https://img.shields.io/badge/version-0.2.9-blue)
 ![Language](https://img.shields.io/badge/language-Rust-orange)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
