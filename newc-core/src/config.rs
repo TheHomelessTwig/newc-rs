@@ -80,7 +80,13 @@ fn default_theme() -> String {
 }
 
 fn which(bin: &str) -> bool {
-    std::process::Command::new("which")
+    // `which` on Unix/macOS, `where` on Windows
+    #[cfg(target_os = "windows")]
+    let cmd = "where";
+    #[cfg(not(target_os = "windows"))]
+    let cmd = "which";
+
+    std::process::Command::new(cmd)
         .arg(bin)
         .output()
         .map(|o| o.status.success())

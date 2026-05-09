@@ -339,7 +339,12 @@ pub fn show(
 }
 
 fn which_clang_format() -> bool {
-    std::process::Command::new("which")
+    #[cfg(target_os = "windows")]
+    let cmd = "where";
+    #[cfg(not(target_os = "windows"))]
+    let cmd = "which";
+
+    std::process::Command::new(cmd)
         .arg("clang-format")
         .output()
         .map(|o| o.status.success())

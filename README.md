@@ -89,32 +89,38 @@ Format any function directly in the editor using clang-format. Configurable styl
 
 ---
 
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Architecture](docs/architecture.md) | System design, module map, key types, event loop, data flow |
+| [Data Formats](docs/data-formats.md) | All TOML/JSON schemas with annotated examples |
+| [Building](docs/building.md) | Platform-specific build instructions (Linux, macOS, Windows, WSL2) |
+| [Contributing](docs/contributing.md) | Dev setup, adding features, lint rules, templates, commit style |
+
+---
+
 ## Installation
 
 ### Prerequisites
-- Rust (stable, via [rustup](https://rustup.rs/))
-- A C compiler: `gcc` or `clang`
-- `make`
-- Optional: `clang-format` (for code formatting feature)
-- Optional: `git` (for git panel features)
+- Rust stable (via [rustup](https://rustup.rs/))
+- `gcc` or `clang` + `make`
+- Optional: `clang-format`, `git`
 
-### Build from source
+See [docs/building.md](docs/building.md) for detailed platform-specific instructions (Linux, macOS, Windows, WSL2).
+
+### Quick start (Linux)
 
 ```bash
 git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
-```
-
-The binary is at `target/release/newc`. Copy it to your PATH:
-
-```bash
 sudo cp target/release/newc /usr/local/bin/newc
 ```
 
-### WSL2 note
+### WSL2
 
-On WSL2, the GUI auto-detects the Microsoft kernel and forces Mesa software rendering (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). No configuration needed.
+Auto-detected. The GUI forces Mesa software rendering (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`) — no configuration needed.
 
 ---
 
