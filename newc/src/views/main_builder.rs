@@ -24,10 +24,10 @@ pub fn show(
         if ui.button("← Project").clicked() {
             action = BuilderAction::GoBack;
         }
-        ui.heading(format!("Main Builder — {}", project.name));
+        ui.heading(format!("main() Composer — {}", project.name));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add(egui::Button::new("Write to main.c").fill(Color32::from_rgb(40, 120, 60)))
+                .add(egui::Button::new("Write main.c").fill(Color32::from_rgb(40, 120, 60)))
                 .on_hover_text("Overwrite src/main.c with the generated code")
                 .clicked()
             {

@@ -134,23 +134,236 @@ pub struct MainBuilderState {
 
 impl MainBuilderState {
     pub fn from_project(root: &std::path::Path) -> Self {
-        // Auto-detect modules from include/*.h
-        let includes: Vec<String> = std::fs::read_dir(root.join("include"))
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("h"))
-            .filter_map(|e| {
-                e.path()
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-            })
-            .collect();
-
+        let includes = detect_includes(root);
         Self { blocks: Vec::new(), includes }
+    }
+
+    /// Load from existing src/main.c — parses body into blocks.
+    pub fn load_from_main_c(root: &std::path::Path) -> Self {
+        let includes = detect_includes(root);
+        let main_c = root.join("src").join("main.c");
+        let blocks = std::fs::read_to_string(&main_c)
+            .map(|s| parse_main_body(&s))
+            .unwrap_or_default();
+        Self { blocks, includes }
     }
 
     pub fn preview(&self, author: &str, date: &str) -> String {
         generate_main_c(&self.blocks, author, date, &self.includes)
     }
+}
+
+fn detect_includes(root: &std::path::Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(root.join("include"))
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("h"))
+        .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .collect();
+    v.sort();
+    v
+}
+
+/// Best-effort parser: converts main() body lines into MainBlocks.
+fn parse_main_body(source: &str) -> Vec<MainBlock> {
+    // Find main() body — everything between the outer { } of main
+    let lines: Vec<&str> = source.lines().collect();
+    let mut in_main = false;
+    let mut brace_depth: i32 = 0;
+    let mut body_lines: Vec<&str> = Vec::new();
+
+    for line in &lines {
+        let t = line.trim();
+        if !in_main {
+            // Match: "int main(" or "int main(void)"
+            if t.contains("main(") && (t.starts_with("int") || t.ends_with('{')) {
+                in_main = true;
+            }
+            if in_main && t.contains('{') {
+                brace_depth += t.chars().filter(|&c| c == '{').count() as i32;
+                brace_depth -= t.chars().filter(|&c| c == '}').count() as i32;
+            }
+            continue;
+        }
+        brace_depth += t.chars().filter(|&c| c == '{').count() as i32;
+        brace_depth -= t.chars().filter(|&c| c == '}').count() as i32;
+        if brace_depth <= 0 {
+            break; // closing } of main
+        }
+        body_lines.push(line);
+    }
+
+    let mut blocks = Vec::new();
+    let mut i = 0;
+    while i < body_lines.len() {
+        let raw = body_lines[i];
+        let t = raw.trim();
+        i += 1;
+
+        if t.is_empty() {
+            blocks.push(MainBlock::BlankLine);
+            continue;
+        }
+        if t.starts_with("return") {
+            continue; // auto-generated
+        }
+        // Block comment /* ... */
+        if t.starts_with("/*") {
+            let mut comment = t.trim_start_matches("/*").trim_end_matches("*/").trim().to_string();
+            // Multi-line comment
+            if !t.contains("*/") {
+                loop {
+                    if i >= body_lines.len() { break; }
+                    let next = body_lines[i].trim();
+                    i += 1;
+                    if next.contains("*/") {
+                        let part = next.trim_end_matches("*/").trim_start_matches('*').trim();
+                        if !part.is_empty() { comment.push(' '); comment.push_str(part); }
+                        break;
+                    }
+                    let part = next.trim_start_matches('*').trim();
+                    if !part.is_empty() { comment.push(' '); comment.push_str(part); }
+                }
+            }
+            blocks.push(MainBlock::Comment(comment));
+            continue;
+        }
+        // Line comment
+        if t.starts_with("//") {
+            blocks.push(MainBlock::Comment(t.trim_start_matches("//").trim().to_string()));
+            continue;
+        }
+        // Variable declaration: starts with a type keyword + identifier + optional [size] + optional = init + ;
+        if let Some(vd) = try_parse_var_decl(t) {
+            blocks.push(vd);
+            continue;
+        }
+        // Function call: identifier(...);  or  lvalue = identifier(...);
+        if let Some(fc) = try_parse_func_call(t) {
+            blocks.push(fc);
+            continue;
+        }
+        // Fallback
+        blocks.push(MainBlock::RawCode(t.to_string()));
+    }
+
+    blocks
+}
+
+fn try_parse_var_decl(t: &str) -> Option<MainBlock> {
+    if !t.ends_with(';') { return None; }
+    let t = t.trim_end_matches(';').trim();
+
+    // Must start with a known type word and not contain '('  (to exclude calls)
+    static TYPE_WORDS: &[&str] = &[
+        "int", "double", "float", "char", "long", "short", "unsigned", "signed",
+        "size_t", "bool", "void",
+    ];
+    let starts_with_type = TYPE_WORDS.iter().any(|kw| {
+        t.starts_with(kw) && t.len() > kw.len()
+            && !t.chars().nth(kw.len()).map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false)
+    });
+    if !starts_with_type { return None; }
+    if t.contains('(') { return None; } // function pointer or call
+
+    // Split on '=' for init
+    let (decl_part, init) = if let Some(eq) = t.find('=') {
+        (t[..eq].trim(), t[eq + 1..].trim().to_string())
+    } else {
+        (t, String::new())
+    };
+
+    // Parse: type name[size]  or  type *name  or  type name
+    let tokens: Vec<&str> = decl_part.split_whitespace().collect();
+    if tokens.len() < 2 { return None; }
+
+    let type_name = tokens[..tokens.len() - 1].join(" ");
+    let name_part = tokens.last()?;
+
+    let (name, is_array, array_size) = if let Some(bracket) = name_part.find('[') {
+        let name = name_part[..bracket].trim_start_matches('*').to_string();
+        let size = name_part[bracket + 1..].trim_end_matches(']').trim().to_string();
+        (name, true, size)
+    } else {
+        (name_part.trim_start_matches('*').to_string(), false, String::new())
+    };
+
+    if name.is_empty() { return None; }
+
+    Some(MainBlock::VarDecl {
+        type_name: type_name.trim_start_matches('*').to_string(),
+        name,
+        init,
+        is_array,
+        array_size,
+    })
+}
+
+fn try_parse_func_call(t: &str) -> Option<MainBlock> {
+    if !t.ends_with(';') { return None; }
+    let t = t.trim_end_matches(';').trim();
+
+    // Optional: "assign_to = func(...)"
+    let (assign_to, rest) = if let Some(eq) = find_assign_eq(t) {
+        (t[..eq].trim().to_string(), t[eq + 1..].trim())
+    } else {
+        (String::new(), t)
+    };
+
+    // rest must be "funcname(...)"
+    let paren = rest.find('(')?;
+    let func_name = rest[..paren].trim();
+    if func_name.is_empty() || !func_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    if !rest.ends_with(')') { return None; }
+    let args_str = &rest[paren + 1..rest.len() - 1];
+    let args = split_args(args_str);
+
+    Some(MainBlock::FunctionCall {
+        func_name: func_name.to_string(),
+        args,
+        assign_to,
+        comment: String::new(),
+    })
+}
+
+/// Find '=' that is an assignment (not '==', '<=', '>=', '!=').
+fn find_assign_eq(s: &str) -> Option<usize> {
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '=' {
+            let prev = if i > 0 { chars[i - 1] } else { ' ' };
+            let next = chars.get(i + 1).copied().unwrap_or(' ');
+            if prev != '!' && prev != '<' && prev != '>' && prev != '=' && next != '=' {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+fn split_args(s: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut depth: i32 = 0;
+    let mut in_str = false;
+
+    for c in s.chars() {
+        match c {
+            '"' => { in_str = !in_str; current.push(c); }
+            '(' | '[' | '{' if !in_str => { depth += 1; current.push(c); }
+            ')' | ']' | '}' if !in_str => { depth -= 1; current.push(c); }
+            ',' if !in_str && depth == 0 => {
+                let t = current.trim().to_string();
+                if !t.is_empty() { args.push(t); }
+                current.clear();
+            }
+            _ => current.push(c),
+        }
+    }
+    let t = current.trim().to_string();
+    if !t.is_empty() { args.push(t); }
+    args
 }

@@ -39,8 +39,8 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
             action = ProjectAction::OpenStats;
         }
         if ui
-            .add(egui::Button::new("Build main()").fill(Color32::from_rgb(60, 80, 140)))
-            .on_hover_text("Visual main() composer")
+            .add(egui::Button::new("Compose main()").fill(Color32::from_rgb(60, 80, 140)))
+            .on_hover_text("Visual main() composer — loads existing main.c structure")
             .clicked()
         {
             action = ProjectAction::OpenMainBuilder;

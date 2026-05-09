@@ -659,7 +659,7 @@ impl eframe::App for NewcApp {
                             };
                         }
                         views::project::ProjectAction::OpenMainBuilder => {
-                            self.state.main_builder = MainBuilderState::from_project(&project.root);
+                            self.state.main_builder = MainBuilderState::load_from_main_c(&project.root);
                             self.state.view = View::MainBuilder(project.clone());
                         }
                         views::project::ProjectAction::None => {}
