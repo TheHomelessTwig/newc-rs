@@ -205,17 +205,41 @@ The pre-commit hook automatically bumps the patch version in both `Cargo.toml` f
 
 ## Testing
 
-No automated test suite currently exists. Manual testing procedure:
+### Automated tests
 
-1. Build: `cargo build`
-2. Create a test project: `cargo run -- new testproj && cd testproj`
-3. Add a module: `cargo run -- add mymodule`
-4. Check sync: `cargo run -- sync`
-5. Check dead-code: `cargo run -- check`
-6. Open GUI: `cargo run -- gui .`
-7. Verify: template picker, function library import, Composer write, build output, git panel
+Run the full suite:
+```bash
+cargo test --workspace
+```
 
-For platform testing on Linux, use the WSL2 path:
+39 tests across 5 modules (all in `newc-core` or `newc` — no display required):
+
+| Module | Tests | Coverage |
+|---|---|---|
+| `lint.rs` | 18 | All 9 lint rules — trigger and clean case, including bug-fix regressions |
+| `sync.rs` | 4 | `extract_signatures` — single, multiple, empty, text accuracy |
+| `module.rs` | 5 | `add_module`, `remove_module` with tempdir — files, includes, duplicates |
+| `scaffold.rs` | 4 | `create_project` — dirs, module files, duplicate error, main.c includes |
+| `updater.rs` | 5 | `semver_gt` — patch/minor/major bump, same, older |
+
+CI runs `cargo test --workspace` on every push and pull request to `main` via `.github/workflows/ci.yml`.
+
+### Manual GUI testing
+
+For changes affecting the GUI, build and run manually:
+```bash
+cargo build
+cargo run -- new testproj
+cd testproj
+cargo run -- add mymodule
+cargo run -- sync
+cargo run -- check
+cargo run -- gui .
+```
+
+Verify: template picker, function library import, Composer write, build output, git panel.
+
+For WSL2:
 ```bash
 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe cargo run
 ```
@@ -224,11 +248,20 @@ LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe cargo run
 
 ## Release process
 
-1. Bump major/minor version manually in both `Cargo.toml` files before the release commit
-   - The hook bumps **patch** automatically; for minor/major bumps, edit manually first
-2. Tag: `git tag v0.x.y`
-3. Push: `git push origin main --tags`
-4. Build release binary: `cargo build --release`
+1. For patch releases: the pre-commit hook bumps the version automatically on every commit — no manual action needed.
+2. For minor/major releases: edit the version in both `Cargo.toml` files manually before committing, then commit with `--no-verify` to skip the hook's auto-increment.
+3. Tag: `git tag v0.x.y`
+4. Push tag: `git push origin main --tags`
+
+GitHub Actions (`.github/workflows/release.yml`) then automatically:
+- Runs the test suite
+- Builds binaries for Linux x86_64/aarch64, macOS Intel/ARM, and Windows x86_64
+- Creates a GitHub Release with all binaries attached
+
+Once the release is live, users on any platform can install it with:
+```bash
+newc update
+```
 
 ---
 

@@ -2,7 +2,7 @@
 
 A Rust GUI application for scaffolding, building, and managing C projects. Replaces a hand-rolled bash script with a fully-featured desktop tool built on [egui](https://github.com/emilk/egui).
 
-![Version](https://img.shields.io/badge/version-0.2.9-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 ![Language](https://img.shields.io/badge/language-Rust-orange)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
@@ -87,6 +87,13 @@ Searchable reference for ~70 C standard library functions across `stdio.h`, `std
 ### clang-format Integration
 Format any function directly in the editor using clang-format. Configurable style (file, LLVM, Google, Chromium, GNU, Microsoft) via Settings.
 
+### Self-update
+```bash
+newc update           # check for and install the latest release
+newc update --check   # print whether an update is available without installing
+```
+Downloads the correct pre-built binary for your platform from GitHub Releases. Escalates to `sudo` automatically if the install path is system-owned.
+
 ---
 
 ## Documentation
@@ -102,25 +109,45 @@ Format any function directly in the editor using clang-format. Configurable styl
 
 ## Installation
 
-### Prerequisites
-- Rust stable (via [rustup](https://rustup.rs/))
-- `gcc` or `clang` + `make`
-- Optional: `clang-format`, `git`
+### Pre-built binaries (no Rust required)
 
-See [docs/building.md](docs/building.md) for detailed platform-specific instructions (Linux, macOS, Windows, WSL2).
+Download the binary for your platform from [GitHub Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest):
 
-### Quick start (Linux)
+| Platform | File |
+|---|---|
+| Linux x86_64 | `newc-x86_64-linux` |
+| Linux aarch64 | `newc-aarch64-linux` |
+| macOS Intel | `newc-x86_64-macos` |
+| macOS Apple Silicon | `newc-aarch64-macos` |
+| Windows x86_64 | `newc-x86_64-windows.exe` |
 
 ```bash
-git clone https://github.com/your-username/newc-rs.git
+# Linux example
+curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/newc-x86_64-linux \
+    -o /tmp/newc && chmod +x /tmp/newc && sudo mv /tmp/newc /usr/local/bin/newc
+```
+
+Once installed, keep up to date with:
+```bash
+newc update
+```
+
+### Build from source
+
+Requires Rust stable (via [rustup](https://rustup.rs/)), `gcc`/`clang`, and `make`.
+
+```bash
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
 ```
 
+See [docs/building.md](docs/building.md) for detailed platform-specific instructions (Linux, macOS, Windows, WSL2).
+
 ### WSL2
 
-Auto-detected. The GUI forces Mesa software rendering (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`) — no configuration needed.
+Auto-detected. The GUI forces Mesa software rendering (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`) and X11 mode — no configuration needed.
 
 ---
 
@@ -151,6 +178,9 @@ newc tidy                    # remove unreachable functions (with confirmation)
 newc stats                   # print function count and LOC per module
 newc funcs [module]          # list function signatures (optional module filter)
 newc search <query>          # search all .c and .h files for a string
+
+newc update                  # download and install the latest release
+newc update --check          # print whether a newer version is available
 ```
 
 All CLI commands except `new` and `gui` must be run from a project root (directory containing `src/`, `include/`, and `Makefile`).

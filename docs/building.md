@@ -1,6 +1,28 @@
 # Building
 
-## Requirements
+## Pre-built binaries (recommended)
+
+No Rust installation required. Download the binary for your platform from [GitHub Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest):
+
+| Platform | File |
+|---|---|
+| Linux x86_64 | `newc-x86_64-linux` |
+| Linux aarch64 | `newc-aarch64-linux` |
+| macOS Intel | `newc-x86_64-macos` |
+| macOS Apple Silicon | `newc-aarch64-macos` |
+| Windows x86_64 | `newc-x86_64-windows.exe` |
+
+```bash
+# Linux x86_64
+curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/newc-x86_64-linux \
+    -o /tmp/newc && chmod +x /tmp/newc && sudo mv /tmp/newc /usr/local/bin/newc
+```
+
+Update at any time with `newc update`.
+
+---
+
+## Build from source — Requirements
 
 | Tool | Version | Notes |
 |---|---|---|
@@ -25,7 +47,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
 # Build
-git clone https://github.com/your-username/newc-rs.git
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 
@@ -41,7 +63,7 @@ sudo pacman -S base-devel git clang rustup
 rustup toolchain install stable
 rustup default stable
 
-git clone https://github.com/your-username/newc-rs.git
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
@@ -55,7 +77,7 @@ sudo dnf install gcc gcc-c++ make git clang-tools-extra curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
-git clone https://github.com/your-username/newc-rs.git
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
@@ -82,6 +104,8 @@ sudo apt install libgl1-mesa-dri
 sudo pacman -S mesa
 ```
 
+The app also forces X11 mode on WSL2 by unsetting `WAYLAND_DISPLAY` before starting the window — this avoids broken-pipe errors from WSLg's unreliable Wayland socket. No manual configuration is needed.
+
 You may also need an X server or Wayland compositor. With WSLg (Windows 11), this is provided automatically. On Windows 10, install [VcXsrv](https://sourceforge.net/projects/vcxsrv/) and set `DISPLAY=:0`.
 
 Build steps are the same as the distribution-specific instructions above.
@@ -103,7 +127,7 @@ brew install rustup-init
 rustup-init
 source "$HOME/.cargo/env"
 
-git clone https://github.com/your-username/newc-rs.git
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 cp target/release/newc /usr/local/bin/newc
@@ -127,7 +151,7 @@ The "Open in Editor" feature uses AppleScript to open a new Terminal window.
 ### Build
 
 ```powershell
-git clone https://github.com/your-username/newc-rs.git
+git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
 ```
