@@ -16,7 +16,21 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+fn is_wsl2() -> bool {
+    std::fs::read_to_string("/proc/version")
+        .map(|s| s.to_ascii_lowercase().contains("microsoft"))
+        .unwrap_or(false)
+}
+
 fn run_gui() -> anyhow::Result<()> {
+    // WSL2 has no hardware EGL — force Mesa software renderer before any GL init
+    if is_wsl2() {
+        unsafe {
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("GALLIUM_DRIVER", "llvmpipe");
+        }
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("newc")
