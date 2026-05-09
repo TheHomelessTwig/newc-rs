@@ -248,3 +248,45 @@ fn extract_preserved(hdr: &Path) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn allman(sig: &str, body: &str) -> String {
+        format!("{sig}\n{{\n{body}\n}}\n")
+    }
+
+    #[test]
+    fn extract_single_signature() {
+        let code = allman("int add(int a, int b)", "    return a + b;");
+        let sigs = extract_signatures(&code);
+        assert_eq!(sigs.len(), 1);
+        assert!(sigs[0].contains("add"));
+    }
+
+    #[test]
+    fn extract_multiple_signatures() {
+        let code = format!(
+            "{}\n\n{}",
+            allman("int foo(void)", "    return 0;"),
+            allman("void bar(int x)", "    (void)x;")
+        );
+        let sigs = extract_signatures(&code);
+        assert_eq!(sigs.len(), 2);
+    }
+
+    #[test]
+    fn extract_empty_source() {
+        assert!(extract_signatures("").is_empty());
+    }
+
+    #[test]
+    fn extract_preserves_signature_text() {
+        let code = allman("char *to_upper(char *s)", "    return s;");
+        let sigs = extract_signatures(&code);
+        assert_eq!(sigs.len(), 1);
+        assert!(sigs[0].contains("to_upper"));
+        assert!(sigs[0].contains("char"));
+    }
+}

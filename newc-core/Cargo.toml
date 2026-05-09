@@ -1,6 +1,6 @@
 [package]
 name = "newc-core"
-version = "0.2.9"
+version = "0.2.10"
 edition = "2024"
 
 [dependencies]
@@ -13,3 +13,6 @@ dirs = "6.0"
 chrono = "0.4"
 zip = "2.0"
 serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3"

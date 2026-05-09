@@ -148,6 +148,71 @@ fn remove_include_line(path: &Path, module_name: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn make_project(tmp: &tempfile::TempDir) -> std::path::PathBuf {
+        let root = tmp.path().to_path_buf();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("include")).unwrap();
+        fs::write(
+            root.join("src/main.c"),
+            "#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n",
+        ).unwrap();
+        root
+    }
+
+    #[test]
+    fn add_creates_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        add_module(&root, "parser").unwrap();
+        assert!(root.join("include/parser.h").exists());
+        assert!(root.join("src/parser.c").exists());
+    }
+
+    #[test]
+    fn add_injects_include_into_main() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        add_module(&root, "parser").unwrap();
+        let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
+        assert!(main_c.contains("#include \"parser.h\""));
+    }
+
+    #[test]
+    fn add_duplicate_returns_error_and_no_double_include() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        add_module(&root, "parser").unwrap();
+        assert!(add_module(&root, "parser").is_err());
+        let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
+        assert_eq!(main_c.matches("#include \"parser.h\"").count(), 1);
+    }
+
+    #[test]
+    fn remove_deletes_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        add_module(&root, "parser").unwrap();
+        remove_module(&root, "parser").unwrap();
+        assert!(!root.join("include/parser.h").exists());
+        assert!(!root.join("src/parser.c").exists());
+    }
+
+    #[test]
+    fn remove_strips_include_from_main() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        add_module(&root, "parser").unwrap();
+        remove_module(&root, "parser").unwrap();
+        let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
+        assert!(!main_c.contains("#include \"parser.h\""));
+    }
+}
+
 fn count_functions_in_source(source: &Path) -> usize {
     if !source.exists() {
         return 0;

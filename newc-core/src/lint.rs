@@ -54,10 +54,14 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         }
 
         // L004: printf with non-literal first arg (possible format string bug)
-        // Matches: printf(variable) or printf(ptr)
+        // Matches: printf(variable) or printf(ptr); allows string literals and ALL_CAPS macros
         if let Some(pos) = t.find("printf(") {
             let after = t[pos + 7..].trim_start();
-            if !after.starts_with('"') && !after.starts_with(')') {
+            let first_char = after.chars().next().unwrap_or('"');
+            let is_safe = first_char == '"'
+                || first_char == ')'
+                || first_char.is_uppercase();
+            if !is_safe {
                 warnings.push(LintWarning {
                     line_no: lno, severity: LintSeverity::Warning, code: "L004",
                     message: "printf() called with non-literal format string — possible format attack".into(),
@@ -92,7 +96,9 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
             let next_lines: Vec<&str> = lines.iter().skip(i + 1).take(4).cloned().collect();
             let has_null_check = next_lines.iter().any(|l| {
                 let lt = l.trim();
-                lt.contains("NULL") || lt.contains("!= NULL") || lt.contains("== NULL")
+                if lt.starts_with("//") || lt.starts_with('*') { return false; }
+                lt.contains("== NULL") || lt.contains("!= NULL")
+                    || (lt.starts_with("if") && lt.contains("NULL"))
             });
             if !has_null_check {
                 warnings.push(LintWarning {
@@ -153,7 +159,7 @@ fn has_assignment_in_condition(s: &str) -> bool {
     false
 }
 
-fn has_magic_number(line: &str) -> bool {
+pub fn has_magic_number(line: &str) -> bool {
     // Look for integer literals > 9 that aren't inside array sizes or #define
     // Simple heuristic: digit sequence of 2+ digits not part of identifier
     let mut chars = line.chars().peekable();
@@ -174,4 +180,125 @@ fn has_magic_number(line: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has(warnings: &[LintWarning], code: &str) -> bool {
+        warnings.iter().any(|w| w.code == code)
+    }
+
+    // L001 — gets()
+    #[test]
+    fn l001_gets_triggers() {
+        assert!(has(&lint_file("gets(buf);"), "L001"));
+    }
+    #[test]
+    fn l001_in_comment_skipped() {
+        assert!(!has(&lint_file("// gets(buf);"), "L001"));
+    }
+
+    // L002 — strcpy
+    #[test]
+    fn l002_strcpy_triggers() {
+        assert!(has(&lint_file("strcpy(dst, src);"), "L002"));
+    }
+    #[test]
+    fn l002_strncpy_clean() {
+        assert!(!has(&lint_file("strncpy(dst, src, 128);"), "L002"));
+    }
+
+    // L003 — scanf %s
+    #[test]
+    fn l003_scanf_unbounded_triggers() {
+        assert!(has(&lint_file(r#"scanf("%s", buf);"#), "L003"));
+    }
+    #[test]
+    fn l003_scanf_bounded_clean() {
+        assert!(!has(&lint_file(r#"scanf("%127s", buf);"#), "L003"));
+    }
+
+    // L004 — printf format string
+    #[test]
+    fn l004_printf_var_triggers() {
+        assert!(has(&lint_file("printf(user_input);"), "L004"));
+    }
+    #[test]
+    fn l004_printf_literal_clean() {
+        assert!(!has(&lint_file(r#"printf("hello %s\n", name);"#), "L004"));
+    }
+    #[test]
+    fn l004_printf_uppercase_macro_clean() {
+        assert!(!has(&lint_file("printf(MSG_FORMAT, val);"), "L004"));
+    }
+
+    // L005 — assignment in condition
+    #[test]
+    fn l005_assignment_in_if_triggers() {
+        assert!(has(&lint_file("if (x = 5) { }"), "L005"));
+    }
+    #[test]
+    fn l005_comparison_clean() {
+        assert!(!has(&lint_file("if (x == 5) { }"), "L005"));
+    }
+
+    // L006 — sprintf
+    #[test]
+    fn l006_sprintf_triggers() {
+        assert!(has(&lint_file("sprintf(buf, fmt, val);"), "L006"));
+    }
+    #[test]
+    fn l006_snprintf_clean() {
+        assert!(!has(&lint_file("snprintf(buf, 128, fmt, val);"), "L006"));
+    }
+
+    // L007 — malloc null check
+    #[test]
+    fn l007_malloc_no_check_triggers() {
+        let code = "int *p = malloc(sizeof(int) * n);\n// no check here";
+        assert!(has(&lint_file(code), "L007"));
+    }
+    #[test]
+    fn l007_malloc_with_null_check_clean() {
+        let code = "int *p = malloc(sizeof(int) * n);\nif (p == NULL) return;";
+        assert!(!has(&lint_file(code), "L007"));
+    }
+    #[test]
+    fn l007_comment_null_does_not_suppress() {
+        // Bug fix: "// NULL is fine" must not be counted as a null check
+        let code = "int *p = malloc(n);\n// NULL is documented elsewhere";
+        assert!(has(&lint_file(code), "L007"));
+    }
+
+    // L008 — magic numbers
+    #[test]
+    fn l008_magic_number_triggers() {
+        assert!(has(&lint_file("int x = 42;"), "L008"));
+    }
+    #[test]
+    fn l008_common_number_clean() {
+        assert!(!has(&lint_file("int x = 0;"), "L008"));
+    }
+
+    // L009 — fopen without fclose
+    #[test]
+    fn l009_fopen_no_close_triggers() {
+        assert!(has(&lint_file(r#"FILE *f = fopen("test.txt", "r");"#), "L009"));
+    }
+    #[test]
+    fn l009_fopen_with_close_clean() {
+        let code = "FILE *f = fopen(\"test.txt\", \"r\");\nfclose(f);";
+        assert!(!has(&lint_file(code), "L009"));
+    }
+
+    // Line number accuracy
+    #[test]
+    fn line_numbers_accurate() {
+        let code = "int x = 1;\ngets(buf);\nint y = 2;";
+        let warnings = lint_file(code);
+        let w = warnings.iter().find(|w| w.code == "L001").unwrap();
+        assert_eq!(w.line_no, 2);
+    }
 }

@@ -104,6 +104,62 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn opts(name: &str, modules: Vec<DefaultModule>) -> ScaffoldOptions {
+        ScaffoldOptions {
+            name: name.to_string(),
+            git_init: false,
+            author: "Test".to_string(),
+            modules,
+        }
+    }
+
+    #[test]
+    fn creates_standard_dirs_and_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_project(&opts("proj", vec![]), tmp.path()).unwrap();
+        let root = tmp.path().join("proj");
+        assert!(root.join("src").is_dir());
+        assert!(root.join("include").is_dir());
+        assert!(root.join("build").is_dir());
+        assert!(root.join("Makefile").exists());
+        assert!(root.join("src/main.c").exists());
+    }
+
+    #[test]
+    fn creates_all_default_module_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_project(&opts("proj", DefaultModule::all()), tmp.path()).unwrap();
+        let root = tmp.path().join("proj");
+        for name in ["input", "math", "display", "array"] {
+            assert!(root.join(format!("src/{name}.c")).exists(), "{name}.c missing");
+            assert!(root.join(format!("include/{name}.h")).exists(), "{name}.h missing");
+        }
+    }
+
+    #[test]
+    fn duplicate_project_returns_error() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_project(&opts("proj", vec![]), tmp.path()).unwrap();
+        assert!(create_project(&opts("proj", vec![]), tmp.path()).is_err());
+    }
+
+    #[test]
+    fn main_c_contains_module_includes() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_project(&opts("proj", DefaultModule::all()), tmp.path()).unwrap();
+        let main_c = fs::read_to_string(tmp.path().join("proj/src/main.c")).unwrap();
+        assert!(main_c.contains("#include \"input.h\""));
+        assert!(main_c.contains("#include \"math.h\""));
+        assert!(main_c.contains("#include \"display.h\""));
+        assert!(main_c.contains("#include \"array.h\""));
+    }
+}
+
 pub fn detect_author() -> String {
     Command::new("git")
         .args(["config", "user.name"])

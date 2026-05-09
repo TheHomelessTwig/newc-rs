@@ -38,11 +38,12 @@ fn is_wsl2() -> bool {
 }
 
 fn run_gui(initial_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
-    // WSL2 has no hardware EGL — force Mesa software renderer before any GL init
+    // WSL2: force software renderer + X11 (WSLg Wayland socket is unreliable)
     if is_wsl2() {
         unsafe {
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
             std::env::set_var("GALLIUM_DRIVER", "llvmpipe");
+            std::env::remove_var("WAYLAND_DISPLAY"); // force X11 fallback
         }
     }
 

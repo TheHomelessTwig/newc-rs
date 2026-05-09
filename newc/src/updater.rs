@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::io::Write;
+use std::time::Duration;
 
 const REPO: &str = "TheHomelessTwig/newc-rs";
 
@@ -18,16 +19,23 @@ fn platform_asset() -> Option<&'static str> {
     }
 }
 
-fn semver_gt(a: &str, b: &str) -> bool {
+pub(crate) fn semver_gt(a: &str, b: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> {
         v.split('.').filter_map(|p| p.parse().ok()).collect()
     };
     parse(a) > parse(b)
 }
 
+fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(15))
+        .build()
+}
+
 fn fetch_latest_tag() -> Result<String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let body: serde_json::Value = ureq::get(&url)
+    let body: serde_json::Value = agent()
+        .get(&url)
         .set("User-Agent", &format!("newc/{}", current_version()))
         .set("Accept", "application/vnd.github.v3+json")
         .call()?
@@ -80,7 +88,8 @@ pub fn update() -> Result<()> {
     print!("Downloading {asset}... ");
     std::io::stdout().flush()?;
 
-    let response = ureq::get(&download_url)
+    let response = agent()
+        .get(&download_url)
         .set("User-Agent", &format!("newc/{current}"))
         .call()?;
 
@@ -110,7 +119,9 @@ pub fn update() -> Result<()> {
             // System install — escalate with sudo
             println!("(needs sudo)");
             let ok = std::process::Command::new("sudo")
-                .args(["cp", tmp.to_str().unwrap(), current_exe.to_str().unwrap()])
+                .arg("cp")
+                .arg(&tmp)
+                .arg(&current_exe)
                 .status()
                 .map(|s| s.success())
                 .unwrap_or(false);
@@ -128,4 +139,20 @@ pub fn update() -> Result<()> {
     let _ = std::fs::remove_file(&tmp);
     println!("newc updated to v{latest}.");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::semver_gt;
+
+    #[test]
+    fn newer_patch() { assert!(semver_gt("0.2.9", "0.2.8")); }
+    #[test]
+    fn newer_minor() { assert!(semver_gt("0.3.0", "0.2.9")); }
+    #[test]
+    fn newer_major() { assert!(semver_gt("1.0.0", "0.9.9")); }
+    #[test]
+    fn same_version_not_newer() { assert!(!semver_gt("0.2.9", "0.2.9")); }
+    #[test]
+    fn older_version_not_newer() { assert!(!semver_gt("0.2.8", "0.2.9")); }
 }
