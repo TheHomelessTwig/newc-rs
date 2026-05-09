@@ -1,0 +1,378 @@
+module = "input"
+
+[[functions]]
+name = "user_Yy_Nn_choice"
+module = "input"
+description = "Prompt user for Y/N, returns 1 (yes) or 0 (no)"
+signature = "int user_Yy_Nn_choice(const char *question)"
+tags = ["input", "bool", "interactive"]
+requires = ["clear_input_buffer"]
+header_code = "/* Prompts user with a Y/N question, returns 1 for yes, 0 for no */\nint user_Yy_Nn_choice(const char *question);"
+impl_code = """
+/*
+ * Function:
+ *     user_Yy_Nn_choice
+ * Input:
+ *     question - a string which is the question to ask the user
+ * Output:
+ *     1 if user inputs yes, 0 if user inputs no
+ * Algorithm:
+ *     while true
+ *         clear input buffer
+ *         print question and (Y/N)
+ *         read char from user
+ *         if char is Y/y/N/n break loop
+ *         else print invalid input
+ *     if char is Y/y return 1
+ *     else return 0
+ */
+int user_Yy_Nn_choice(const char *question)
+{
+	char response;
+	while (1) {
+		clear_input_buffer();
+		printf("%s (Y/N): ", question);
+		int scan_result = scanf("%c", &response);
+		if (scan_result == 1 && (response == 'N' || response == 'Y' ||
+		    response == 'n' || response == 'y')) {
+			break;
+		} else {
+			puts("Invalid input.");
+		}
+	}
+	printf("\\n");
+	int result = response == 'Y' || response == 'y' ? 1 : 0;
+	return result;
+}
+"""
+
+[[functions]]
+name = "prompt_for_int"
+module = "input"
+description = "Prompt user for a valid integer"
+signature = "int prompt_for_int(const char *question)"
+tags = ["input", "int", "validation"]
+requires = ["clear_input_buffer"]
+header_code = "/* Prompts user and returns a valid integer */\nint prompt_for_int(const char *question);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_int
+ * Input:
+ *     question - a string which is the question to ask the user
+ * Output:
+ *     i - the integer value input by the user
+ * Algorithm:
+ *     while true
+ *         print question
+ *         read integer from user and store in i
+ *         if read was successful return i
+ *         else clear input buffer and print invalid input
+ */
+int prompt_for_int(const char *question)
+{
+	int i;
+	while (1) {
+		printf("%s", question);
+		int scan_result = scanf("%i", &i);
+		if (scan_result == 1) {
+			return i;
+		} else {
+			clear_input_buffer();
+			puts("Invalid input, please enter an integer.");
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_int_in_range"
+module = "input"
+description = "Prompt user for integer within [min, max]"
+signature = "int prompt_for_int_in_range(const char *question, int min, int max)"
+tags = ["input", "int", "range", "validation"]
+requires = ["prompt_for_int", "clear_input_buffer"]
+header_code = "/* Prompts user and returns an integer within [min, max] */\nint prompt_for_int_in_range(const char *question, int min, int max);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_int_in_range
+ * Input:
+ *     question - a string which is the question to ask the user
+ *     min - the minimum value of the range
+ *     max - the maximum value of the range
+ * Output:
+ *     i - the integer value input by the user which is between min and max
+ * Algorithm:
+ *     while true
+ *         call prompt_for_int to get an integer from user
+ *         if i is between min and max return i
+ *         else print invalid input message
+ */
+int prompt_for_int_in_range(const char *question, int min, int max)
+{
+	while (1) {
+		int i = prompt_for_int(question);
+		if (is_int_in_range(i, min, max) == 1) {
+			return i;
+		} else {
+			printf("Invalid input, please input an integer between "
+			       "%i and %i.\\n",
+			       min, max);
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_positive_int"
+module = "input"
+description = "Prompt user for a positive integer (> 0)"
+signature = "int prompt_for_positive_int(const char *question)"
+tags = ["input", "int", "positive", "validation"]
+requires = ["prompt_for_int"]
+header_code = "/* Prompts user and returns a positive integer (> 0) */\nint prompt_for_positive_int(const char *question);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_positive_int
+ * Input:
+ *     question - a string which is the question to ask the user
+ * Output:
+ *     i - a positive integer (> 0) input by the user
+ * Algorithm:
+ *     while true
+ *         call prompt_for_int to get an integer from user
+ *         if i is greater than 0 return i
+ *         else print invalid input message
+ */
+int prompt_for_positive_int(const char *question)
+{
+	while (1) {
+		int i = prompt_for_int(question);
+		if (i > 0) {
+			return i;
+		} else {
+			puts("Invalid input, please enter a positive integer.");
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_double"
+module = "input"
+description = "Prompt user for a valid double"
+signature = "double prompt_for_double(const char *question)"
+tags = ["input", "double", "validation"]
+requires = ["clear_input_buffer"]
+header_code = "/* Prompts user and returns a valid double */\ndouble prompt_for_double(const char *question);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_double
+ * Input:
+ *     question - a string which is the question to ask the user
+ * Output:
+ *     d - the double value input by the user
+ * Algorithm:
+ *     while true
+ *         print question
+ *         read double from user and store in d
+ *         if read was successful return d
+ *         else clear input buffer and print invalid input
+ */
+double prompt_for_double(const char *question)
+{
+	double d;
+	while (1) {
+		printf("%s", question);
+		int scan_result = scanf("%lf", &d);
+		if (scan_result == 1) {
+			clear_input_buffer();
+			return d;
+		} else {
+			clear_input_buffer();
+			puts("Invalid input, please enter a number.");
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_double_in_range"
+module = "input"
+description = "Prompt user for double within [min, max]"
+signature = "double prompt_for_double_in_range(const char *question, double min, double max)"
+tags = ["input", "double", "range", "validation"]
+requires = ["prompt_for_double"]
+header_code = "/* Prompts user and returns a double within [min, max] */\ndouble prompt_for_double_in_range(const char *question, double min, double max);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_double_in_range
+ * Input:
+ *     question - a string which is the question to ask the user
+ *     min - the minimum value of the range
+ *     max - the maximum value of the range
+ * Output:
+ *     d - the double value input by the user which is between min and max
+ * Algorithm:
+ *     while true
+ *         call prompt_for_double to get a double from user
+ *         if d is between min and max return d
+ *         else print invalid input message
+ */
+double prompt_for_double_in_range(const char *question, double min, double max)
+{
+	while (1) {
+		double d = prompt_for_double(question);
+		if (is_double_in_range(d, min, max) == 1) {
+			return d;
+		} else {
+			printf("Invalid input, please input a number between "
+			       "%.2f and %.2f.\\n",
+			       min, max);
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_char"
+module = "input"
+description = "Prompt user for a single non-whitespace character"
+signature = "char prompt_for_char(const char *question)"
+tags = ["input", "char", "validation"]
+requires = ["clear_input_buffer"]
+header_code = "/* Prompts user and returns a single non-whitespace character */\nchar prompt_for_char(const char *question);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_char
+ * Input:
+ *     question - a string which is the question to ask the user
+ * Output:
+ *     c - the character input by the user
+ * Algorithm:
+ *     while true
+ *         print question
+ *         read a non-whitespace character from user
+ *         if read was successful clear buffer and return c
+ *         else clear input buffer and print invalid input
+ */
+char prompt_for_char(const char *question)
+{
+	char c;
+	while (1) {
+		printf("%s", question);
+		if (scanf(" %c", &c) == 1) {
+			clear_input_buffer();
+			return c;
+		} else {
+			clear_input_buffer();
+			puts("Invalid input.");
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "prompt_for_string"
+module = "input"
+description = "Prompt user for a non-empty string (stored in buffer)"
+signature = "void prompt_for_string(const char *question, char *buffer, int max_len)"
+tags = ["input", "string", "validation"]
+requires = []
+header_code = "/* Prompts user and stores a non-empty string into buffer (max_len includes null terminator) */\nvoid prompt_for_string(const char *question, char *buffer, int max_len);"
+impl_code = """
+/*
+ * Function:
+ *     prompt_for_string
+ * Input:
+ *     question - a string which is the question to ask the user
+ *     buffer - char array to store the result in
+ *     max_len - maximum length including null terminator
+ * Output:
+ *     void - result stored in buffer
+ * Algorithm:
+ *     while true
+ *         print question
+ *         read line into buffer with fgets
+ *         strip trailing newline if present
+ *         if buffer is non-empty return
+ *         else print invalid input message
+ */
+void prompt_for_string(const char *question, char *buffer, int max_len)
+{
+	while (1) {
+		printf("%s", question);
+		if (fgets(buffer, max_len, stdin) != NULL) {
+			int len = (int)strlen(buffer);
+			if (len > 0 && buffer[len - 1] == '\\n') {
+				buffer[len - 1] = '\\0';
+			}
+			if (buffer[0] != '\\0') {
+				return;
+			}
+		}
+		puts("Invalid input, please enter a non-empty string.");
+	}
+}
+"""
+
+[[functions]]
+name = "press_enter_to_exit"
+module = "input"
+description = "Wait for Enter key then exit"
+signature = "void press_enter_to_exit(void)"
+tags = ["input", "interactive", "exit"]
+requires = ["clear_input_buffer"]
+header_code = "/* Waits for the user to press enter then exits */\nvoid press_enter_to_exit(void);"
+impl_code = """
+/*
+ * Function:
+ *     press_enter_to_exit
+ * Input:
+ *     None
+ * Output:
+ *     None
+ * Algorithm:
+ *     clear input buffer
+ *     print message asking user to press enter
+ *     wait for user to press enter
+ */
+void press_enter_to_exit(void)
+{
+	clear_input_buffer();
+	printf("Press enter to exit the program.");
+	getchar();
+}
+"""
+
+[[functions]]
+name = "clear_input_buffer"
+module = "input"
+description = "Discard remaining chars in stdin"
+signature = "void clear_input_buffer(void)"
+tags = ["input", "utility"]
+requires = []
+header_code = "/* Discards remaining characters in the input buffer */\nvoid clear_input_buffer(void);"
+impl_code = """
+/*
+ * Function:
+ *     clear_input_buffer
+ * Input:
+ *     None
+ * Output:
+ *     None
+ * Algorithm:
+ *     read and discard characters until newline or EOF is encountered
+ */
+void clear_input_buffer(void)
+{
+	int c;
+	while ((c = getchar()) != '\\n' && c != EOF)
+		;
+}
+"""

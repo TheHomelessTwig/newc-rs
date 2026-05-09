@@ -1,0 +1,815 @@
+module = "array"
+
+[[functions]]
+name = "array_fill_int"
+module = "array"
+description = "Fill an int array with a given value"
+signature = "void array_fill_int(int arr[], int size, int value)"
+tags = ["array", "int", "fill"]
+requires = []
+header_code = "/* Fills an int array with the given value */\nvoid array_fill_int(int arr[], int size, int value);"
+impl_code = """
+/*
+ * Function:
+ *     array_fill_int
+ * Input:
+ *     arr - the int array to fill
+ *     size - the number of elements in arr
+ *     value - the value to assign to each element
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element set it to value
+ */
+void array_fill_int(int arr[], int size, int value)
+{
+	for (int i = 0; i < size; i++) {
+		arr[i] = value;
+	}
+}
+"""
+
+[[functions]]
+name = "array_fill_double"
+module = "array"
+description = "Fill a double array with a given value"
+signature = "void array_fill_double(double arr[], int size, double value)"
+tags = ["array", "double", "fill"]
+requires = []
+header_code = "/* Fills a double array with the given value */\nvoid array_fill_double(double arr[], int size, double value);"
+impl_code = """
+/*
+ * Function:
+ *     array_fill_double
+ * Input:
+ *     arr - the double array to fill
+ *     size - the number of elements in arr
+ *     value - the value to assign to each element
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element set it to value
+ */
+void array_fill_double(double arr[], int size, double value)
+{
+	for (int i = 0; i < size; i++) {
+		arr[i] = value;
+	}
+}
+"""
+
+[[functions]]
+name = "array_fill_char"
+module = "array"
+description = "Fill a char array with a given value"
+signature = "void array_fill_char(char arr[], int size, char value)"
+tags = ["array", "char", "fill"]
+requires = []
+header_code = "/* Fills a char array with the given value */\nvoid array_fill_char(char arr[], int size, char value);"
+impl_code = """
+/*
+ * Function:
+ *     array_fill_char
+ * Input:
+ *     arr - the char array to fill
+ *     size - the number of elements in arr
+ *     value - the value to assign to each element
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element set it to value
+ */
+void array_fill_char(char arr[], int size, char value)
+{
+	for (int i = 0; i < size; i++) {
+		arr[i] = value;
+	}
+}
+"""
+
+[[functions]]
+name = "array_sum"
+module = "array"
+description = "Sum all elements in an int array"
+signature = "int array_sum(int arr[], int size)"
+tags = ["array", "int", "aggregate", "sum"]
+requires = []
+header_code = "/* Returns the sum of all elements in arr */\nint array_sum(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sum
+ * Input:
+ *     arr - the array of integers
+ *     size - the number of elements in arr
+ * Output:
+ *     sum of all elements
+ * Algorithm:
+ *     initialise sum to 0
+ *     for each element add it to sum
+ *     return sum
+ */
+int array_sum(int arr[], int size)
+{
+	int sum = 0;
+	for (int i = 0; i < size; i++) {
+		sum += arr[i];
+	}
+	return sum;
+}
+"""
+
+[[functions]]
+name = "array_average"
+module = "array"
+description = "Average of all elements in an int array"
+signature = "double array_average(int arr[], int size)"
+tags = ["array", "int", "aggregate", "average"]
+requires = ["array_sum"]
+header_code = "/* Returns the average of all elements in arr */\ndouble array_average(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_average
+ * Input:
+ *     arr - the array of integers
+ *     size - the number of elements in arr
+ * Output:
+ *     average of all elements as a double
+ * Algorithm:
+ *     return sum of arr divided by size cast to double
+ */
+double array_average(int arr[], int size)
+{
+	return (double)array_sum(arr, size) / size;
+}
+"""
+
+[[functions]]
+name = "array_max"
+module = "array"
+description = "Find the largest element in an int array"
+signature = "int array_max(int arr[], int size)"
+tags = ["array", "int", "aggregate", "max"]
+requires = []
+header_code = "/* Returns the largest element in arr */\nint array_max(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_max
+ * Input:
+ *     arr - the array of integers
+ *     size - the number of elements in arr
+ * Output:
+ *     the largest element in arr
+ * Algorithm:
+ *     set max to first element
+ *     for each remaining element if greater than max update max
+ *     return max
+ */
+int array_max(int arr[], int size)
+{
+	int max = arr[0];
+	for (int i = 1; i < size; i++) {
+		if (arr[i] > max) {
+			max = arr[i];
+		}
+	}
+	return max;
+}
+"""
+
+[[functions]]
+name = "array_min"
+module = "array"
+description = "Find the smallest element in an int array"
+signature = "int array_min(int arr[], int size)"
+tags = ["array", "int", "aggregate", "min"]
+requires = []
+header_code = "/* Returns the smallest element in arr */\nint array_min(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_min
+ * Input:
+ *     arr - the array of integers
+ *     size - the number of elements in arr
+ * Output:
+ *     the smallest element in arr
+ * Algorithm:
+ *     set min to first element
+ *     for each remaining element if less than min update min
+ *     return min
+ */
+int array_min(int arr[], int size)
+{
+	int min = arr[0];
+	for (int i = 1; i < size; i++) {
+		if (arr[i] < min) {
+			min = arr[i];
+		}
+	}
+	return min;
+}
+"""
+
+[[functions]]
+name = "array_print"
+module = "array"
+description = "Print int array as [a, b, c, ...]"
+signature = "void array_print(int arr[], int size)"
+tags = ["array", "int", "output", "print"]
+requires = []
+header_code = "/* Prints all elements in arr as [a, b, c, ...] */\nvoid array_print(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_print
+ * Input:
+ *     arr - the array of integers
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     print opening bracket
+ *     for each element print value and comma separator if not last
+ *     print closing bracket and newline
+ */
+void array_print(int arr[], int size)
+{
+	printf("[");
+	for (int i = 0; i < size; i++) {
+		printf("%d", arr[i]);
+		if (i < size - 1) {
+			printf(", ");
+		}
+	}
+	printf("]\\n");
+}
+"""
+
+[[functions]]
+name = "array_input_int"
+module = "array"
+description = "Prompt user to fill each element of an int array"
+signature = "void array_input_int(int arr[], int size, const char *question, int show_count)"
+tags = ["array", "int", "input", "interactive"]
+requires = ["prompt_for_int"]
+header_code = "/* Prompts user to fill each element of an int array individually */\nvoid array_input_int(int arr[], int size, const char *question, int show_count);"
+impl_code = """
+/*
+ * Function:
+ *     array_input_int
+ * Input:
+ *     arr - the int array to fill
+ *     size - the number of elements in arr
+ *     question - prompt to display before each input
+ *     show_count - 1 to append the element number to the prompt, 0 otherwise
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element build prompt with count if show_count is 1
+ *     call prompt_for_int and store the result
+ */
+void array_input_int(int arr[], int size, const char *question, int show_count)
+{
+	char prompt[256];
+	for (int i = 0; i < size; i++) {
+		if (show_count) {
+			snprintf(prompt, sizeof(prompt), "%s %d: ", question, i + 1);
+			arr[i] = prompt_for_int(prompt);
+		} else {
+			arr[i] = prompt_for_int(question);
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_input_double"
+module = "array"
+description = "Prompt user to fill each element of a double array"
+signature = "void array_input_double(double arr[], int size, const char *question, int show_count)"
+tags = ["array", "double", "input", "interactive"]
+requires = ["prompt_for_double"]
+header_code = "/* Prompts user to fill each element of a double array individually */\nvoid array_input_double(double arr[], int size, const char *question, int show_count);"
+impl_code = """
+/*
+ * Function:
+ *     array_input_double
+ * Input:
+ *     arr - the double array to fill
+ *     size - the number of elements in arr
+ *     question - prompt to display before each input
+ *     show_count - 1 to append the element number to the prompt, 0 otherwise
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element build prompt with count if show_count is 1
+ *     call prompt_for_double and store the result
+ */
+void array_input_double(double arr[], int size, const char *question, int show_count)
+{
+	char prompt[256];
+	for (int i = 0; i < size; i++) {
+		if (show_count) {
+			snprintf(prompt, sizeof(prompt), "%s %d: ", question, i + 1);
+			arr[i] = prompt_for_double(prompt);
+		} else {
+			arr[i] = prompt_for_double(question);
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_input_char"
+module = "array"
+description = "Prompt user to fill each element of a char array"
+signature = "void array_input_char(char arr[], int size, const char *question, int show_count)"
+tags = ["array", "char", "input", "interactive"]
+requires = ["prompt_for_char"]
+header_code = "/* Prompts user to fill each element of a char array individually */\nvoid array_input_char(char arr[], int size, const char *question, int show_count);"
+impl_code = """
+/*
+ * Function:
+ *     array_input_char
+ * Input:
+ *     arr - the char array to fill
+ *     size - the number of elements in arr
+ *     question - prompt to display before each input
+ *     show_count - 1 to append the element number to the prompt, 0 otherwise
+ * Output:
+ *     None
+ * Algorithm:
+ *     for each element build prompt with count if show_count is 1
+ *     call prompt_for_char and store the result
+ */
+void array_input_char(char arr[], int size, const char *question, int show_count)
+{
+	char prompt[256];
+	for (int i = 0; i < size; i++) {
+		if (show_count) {
+			snprintf(prompt, sizeof(prompt), "%s %d: ", question, i + 1);
+			arr[i] = prompt_for_char(prompt);
+		} else {
+			arr[i] = prompt_for_char(question);
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_sort_asc"
+module = "array"
+description = "Sort int array ascending (bubble sort)"
+signature = "void array_sort_asc(int arr[], int size)"
+tags = ["array", "int", "sort", "ascending"]
+requires = []
+header_code = "/* Sorts arr in ascending order */\nvoid array_sort_asc(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sort_asc
+ * Input:
+ *     arr - the array to sort
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     bubble sort: repeatedly step through arr comparing adjacent elements
+ *     swap them if they are in the wrong order until no swaps are needed
+ */
+void array_sort_asc(int arr[], int size)
+{
+	for (int i = 0; i < size - 1; i++) {
+		for (int j = 0; j < size - i - 1; j++) {
+			if (arr[j] > arr[j + 1]) {
+				int temp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = temp;
+			}
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_sort_desc"
+module = "array"
+description = "Sort int array descending (bubble sort)"
+signature = "void array_sort_desc(int arr[], int size)"
+tags = ["array", "int", "sort", "descending"]
+requires = []
+header_code = "/* Sorts arr in descending order */\nvoid array_sort_desc(int arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sort_desc
+ * Input:
+ *     arr - the array to sort
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     bubble sort: repeatedly step through arr comparing adjacent elements
+ *     swap them if they are in the wrong order until no swaps are needed
+ */
+void array_sort_desc(int arr[], int size)
+{
+	for (int i = 0; i < size - 1; i++) {
+		for (int j = 0; j < size - i - 1; j++) {
+			if (arr[j] < arr[j + 1]) {
+				int temp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = temp;
+			}
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_find"
+module = "array"
+description = "Linear search in int array; returns index or -1"
+signature = "int array_find(int arr[], int size, int value)"
+tags = ["array", "int", "search", "linear"]
+requires = []
+header_code = "/* Linear search — returns index of value in arr, or -1 if not found */\nint array_find(int arr[], int size, int value);"
+impl_code = """
+/*
+ * Function:
+ *     array_find
+ * Input:
+ *     arr - the array to search
+ *     size - the number of elements in arr
+ *     value - the value to search for
+ * Output:
+ *     index of value if found, -1 otherwise
+ * Algorithm:
+ *     for each element if it equals value return its index
+ *     if loop completes without finding value return -1
+ */
+int array_find(int arr[], int size, int value)
+{
+	for (int i = 0; i < size; i++) {
+		if (arr[i] == value) {
+			return i;
+		}
+	}
+	return -1;
+}
+"""
+
+[[functions]]
+name = "array_find_sorted"
+module = "array"
+description = "Binary search in sorted int array; returns index or -1"
+signature = "int array_find_sorted(int arr[], int size, int value)"
+tags = ["array", "int", "search", "binary-search"]
+requires = []
+header_code = "/* Binary search — returns index of value in sorted arr, or -1 if not found */\nint array_find_sorted(int arr[], int size, int value);"
+impl_code = """
+/*
+ * Function:
+ *     array_find_sorted
+ * Input:
+ *     arr - a sorted array to search
+ *     size - the number of elements in arr
+ *     value - the value to search for
+ * Output:
+ *     index of value if found, -1 otherwise
+ * Algorithm:
+ *     binary search: set low and high bounds
+ *     while low <= high calculate mid
+ *         if arr[mid] equals value return mid
+ *         if arr[mid] < value search upper half
+ *         else search lower half
+ *     return -1 if not found
+ */
+int array_find_sorted(int arr[], int size, int value)
+{
+	int low = 0;
+	int high = size - 1;
+	while (low <= high) {
+		int mid = low + (high - low) / 2;
+		if (arr[mid] == value) {
+			return mid;
+		} else if (arr[mid] < value) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+	return -1;
+}
+"""
+
+[[functions]]
+name = "array_sum_double"
+module = "array"
+description = "Sum all elements in a double array"
+signature = "double array_sum_double(double arr[], int size)"
+tags = ["array", "double", "aggregate", "sum"]
+requires = []
+header_code = "/* Returns the sum of all elements in a double arr */\ndouble array_sum_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sum_double
+ * Input:
+ *     arr - the array of doubles
+ *     size - the number of elements in arr
+ * Output:
+ *     sum of all elements
+ * Algorithm:
+ *     initialise sum to 0
+ *     for each element add it to sum
+ *     return sum
+ */
+double array_sum_double(double arr[], int size)
+{
+	double sum = 0.0;
+	for (int i = 0; i < size; i++) {
+		sum += arr[i];
+	}
+	return sum;
+}
+"""
+
+[[functions]]
+name = "array_average_double"
+module = "array"
+description = "Average of all elements in a double array"
+signature = "double array_average_double(double arr[], int size)"
+tags = ["array", "double", "aggregate", "average"]
+requires = ["array_sum_double"]
+header_code = "/* Returns the average of all elements in a double arr */\ndouble array_average_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_average_double
+ * Input:
+ *     arr - the array of doubles
+ *     size - the number of elements in arr
+ * Output:
+ *     average of all elements as a double
+ * Algorithm:
+ *     return sum of arr divided by size
+ */
+double array_average_double(double arr[], int size)
+{
+	return array_sum_double(arr, size) / size;
+}
+"""
+
+[[functions]]
+name = "array_max_double"
+module = "array"
+description = "Find the largest element in a double array"
+signature = "double array_max_double(double arr[], int size)"
+tags = ["array", "double", "aggregate", "max"]
+requires = []
+header_code = "/* Returns the largest element in a double arr */\ndouble array_max_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_max_double
+ * Input:
+ *     arr - the array of doubles
+ *     size - the number of elements in arr
+ * Output:
+ *     the largest element in arr
+ * Algorithm:
+ *     set max to first element
+ *     for each remaining element if greater than max update max
+ *     return max
+ */
+double array_max_double(double arr[], int size)
+{
+	double max = arr[0];
+	for (int i = 1; i < size; i++) {
+		if (arr[i] > max) {
+			max = arr[i];
+		}
+	}
+	return max;
+}
+"""
+
+[[functions]]
+name = "array_min_double"
+module = "array"
+description = "Find the smallest element in a double array"
+signature = "double array_min_double(double arr[], int size)"
+tags = ["array", "double", "aggregate", "min"]
+requires = []
+header_code = "/* Returns the smallest element in a double arr */\ndouble array_min_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_min_double
+ * Input:
+ *     arr - the array of doubles
+ *     size - the number of elements in arr
+ * Output:
+ *     the smallest element in arr
+ * Algorithm:
+ *     set min to first element
+ *     for each remaining element if less than min update min
+ *     return min
+ */
+double array_min_double(double arr[], int size)
+{
+	double min = arr[0];
+	for (int i = 1; i < size; i++) {
+		if (arr[i] < min) {
+			min = arr[i];
+		}
+	}
+	return min;
+}
+"""
+
+[[functions]]
+name = "array_print_double"
+module = "array"
+description = "Print double array as [a, b, c, ...]"
+signature = "void array_print_double(double arr[], int size)"
+tags = ["array", "double", "output", "print"]
+requires = []
+header_code = "/* Prints all elements in a double arr as [a, b, c, ...] */\nvoid array_print_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_print_double
+ * Input:
+ *     arr - the array of doubles
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     print opening bracket
+ *     for each element print value and comma separator if not last
+ *     print closing bracket and newline
+ */
+void array_print_double(double arr[], int size)
+{
+	printf("[");
+	for (int i = 0; i < size; i++) {
+		printf("%g", arr[i]);
+		if (i < size - 1) {
+			printf(", ");
+		}
+	}
+	printf("]\\n");
+}
+"""
+
+[[functions]]
+name = "array_sort_asc_double"
+module = "array"
+description = "Sort double array ascending (bubble sort)"
+signature = "void array_sort_asc_double(double arr[], int size)"
+tags = ["array", "double", "sort", "ascending"]
+requires = []
+header_code = "/* Sorts a double arr in ascending order */\nvoid array_sort_asc_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sort_asc_double
+ * Input:
+ *     arr - the double array to sort
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     bubble sort: repeatedly step through arr comparing adjacent elements
+ *     swap them if they are in the wrong order until no swaps are needed
+ */
+void array_sort_asc_double(double arr[], int size)
+{
+	for (int i = 0; i < size - 1; i++) {
+		for (int j = 0; j < size - i - 1; j++) {
+			if (arr[j] > arr[j + 1]) {
+				double temp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = temp;
+			}
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_sort_desc_double"
+module = "array"
+description = "Sort double array descending (bubble sort)"
+signature = "void array_sort_desc_double(double arr[], int size)"
+tags = ["array", "double", "sort", "descending"]
+requires = []
+header_code = "/* Sorts a double arr in descending order */\nvoid array_sort_desc_double(double arr[], int size);"
+impl_code = """
+/*
+ * Function:
+ *     array_sort_desc_double
+ * Input:
+ *     arr - the double array to sort
+ *     size - the number of elements in arr
+ * Output:
+ *     None
+ * Algorithm:
+ *     bubble sort: repeatedly step through arr comparing adjacent elements
+ *     swap them if they are in the wrong order until no swaps are needed
+ */
+void array_sort_desc_double(double arr[], int size)
+{
+	for (int i = 0; i < size - 1; i++) {
+		for (int j = 0; j < size - i - 1; j++) {
+			if (arr[j] < arr[j + 1]) {
+				double temp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = temp;
+			}
+		}
+	}
+}
+"""
+
+[[functions]]
+name = "array_find_double"
+module = "array"
+description = "Linear search in double array; returns index or -1"
+signature = "int array_find_double(double arr[], int size, double value)"
+tags = ["array", "double", "search", "linear"]
+requires = []
+header_code = "/* Linear search — returns index of value in double arr, or -1 if not found */\nint array_find_double(double arr[], int size, double value);"
+impl_code = """
+/*
+ * Function:
+ *     array_find_double
+ * Input:
+ *     arr - the double array to search
+ *     size - the number of elements in arr
+ *     value - the value to search for
+ * Output:
+ *     index of value if found, -1 otherwise
+ * Algorithm:
+ *     for each element if it equals value return its index
+ *     if loop completes without finding value return -1
+ */
+int array_find_double(double arr[], int size, double value)
+{
+	for (int i = 0; i < size; i++) {
+		if (arr[i] == value) {
+			return i;
+		}
+	}
+	return -1;
+}
+"""
+
+[[functions]]
+name = "array_find_sorted_double"
+module = "array"
+description = "Binary search in sorted double array; returns index or -1"
+signature = "int array_find_sorted_double(double arr[], int size, double value)"
+tags = ["array", "double", "search", "binary-search"]
+requires = []
+header_code = "/* Binary search — returns index of value in sorted double arr, or -1 if not found */\nint array_find_sorted_double(double arr[], int size, double value);"
+impl_code = """
+/*
+ * Function:
+ *     array_find_sorted_double
+ * Input:
+ *     arr - a sorted double array to search
+ *     size - the number of elements in arr
+ *     value - the value to search for
+ * Output:
+ *     index of value if found, -1 otherwise
+ * Algorithm:
+ *     binary search: set low and high bounds
+ *     while low <= high calculate mid
+ *         if arr[mid] equals value return mid
+ *         if arr[mid] < value search upper half
+ *         else search lower half
+ *     return -1 if not found
+ */
+int array_find_sorted_double(double arr[], int size, double value)
+{
+	int low = 0;
+	int high = size - 1;
+	while (low <= high) {
+		int mid = low + (high - low) / 2;
+		if (arr[mid] == value) {
+			return mid;
+		} else if (arr[mid] < value) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+	return -1;
+}
+"""

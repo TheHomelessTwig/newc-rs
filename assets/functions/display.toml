@@ -1,0 +1,53 @@
+module = "display"
+
+[[functions]]
+name = "print_divider"
+module = "display"
+description = "Print a horizontal divider line (===...)"
+signature = "void print_divider(void)"
+tags = ["display", "formatting", "output"]
+requires = []
+header_code = "/* Prints a horizontal divider line */\nvoid print_divider(void);"
+impl_code = """
+/*
+ * Function:
+ *     print_divider
+ * Input:
+ *     None
+ * Output:
+ *     None
+ * Algorithm:
+ *     print a line of = characters to stdout
+ */
+void print_divider(void)
+{
+	printf("========================================\\n");
+}
+"""
+
+[[functions]]
+name = "print_header"
+module = "display"
+description = "Print title between two dividers"
+signature = "void print_header(const char *title)"
+tags = ["display", "formatting", "output", "header"]
+requires = ["print_divider"]
+header_code = "/* Prints a title between two dividers */\nvoid print_header(const char *title);"
+impl_code = """
+/*
+ * Function:
+ *     print_header
+ * Input:
+ *     title - a string to display as the header title
+ * Output:
+ *     None
+ * Algorithm:
+ *     print a divider, then the title, then another divider
+ */
+void print_header(const char *title)
+{
+	print_divider();
+	printf(" %s\\n", title);
+	print_divider();
+}
+"""

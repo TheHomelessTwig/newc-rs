@@ -1,0 +1,118 @@
+module = "math"
+
+[[functions]]
+name = "is_int_in_range"
+module = "math"
+description = "Returns 1 if input is within [min, max]"
+signature = "int is_int_in_range(int input, int min, int max)"
+tags = ["math", "int", "range", "validation"]
+requires = []
+header_code = "/* Returns 1 if input is within [min, max], 0 otherwise */\nint is_int_in_range(int input, int min, int max);"
+impl_code = """
+/*
+ * Function:
+ *     is_int_in_range
+ * Input:
+ *     input - the integer to check
+ *     min - the minimum value of the range
+ *     max - the maximum value of the range
+ * Output:
+ *     1 if input is within range, 0 otherwise
+ * Algorithm:
+ *     if input is greater than or equal to min and less than or equal to max
+ *     return 1 else return 0
+ */
+int is_int_in_range(int input, int min, int max)
+{
+	int result = input >= min && input <= max ? 1 : 0;
+	return result;
+}
+"""
+
+[[functions]]
+name = "is_multiple_of"
+module = "math"
+description = "Returns 1 if input is a multiple of check"
+signature = "int is_multiple_of(int input, int check)"
+tags = ["math", "int", "modulo"]
+requires = []
+header_code = "/* Returns 1 if input is a multiple of check, 0 otherwise */\nint is_multiple_of(int input, int check);"
+impl_code = """
+/*
+ * Function:
+ *     is_multiple_of
+ * Input:
+ *     input - the integer to check
+ *     check - the divisor to check against
+ * Output:
+ *     1 if input is a multiple of check, 0 otherwise
+ * Algorithm:
+ *     if input modulo check equals 0 return 1
+ *     else return 0
+ */
+int is_multiple_of(int input, int check)
+{
+	int result = input % check == 0 ? 1 : 0;
+	return result;
+}
+"""
+
+[[functions]]
+name = "divide_with_remainder"
+module = "math"
+description = "Integer division + remainder via pointers"
+signature = "void divide_with_remainder(int above, int below, int *div, int *rem)"
+tags = ["math", "int", "division"]
+requires = []
+header_code = "/* Calculates integer division and remainder, storing results via pointers */\nvoid divide_with_remainder(int above, int below, int *div, int *rem);"
+impl_code = """
+/*
+ * Function:
+ *     divide_with_remainder
+ * Input:
+ *     above - the dividend (number to be divided)
+ *     below - the divisor (number to divide by)
+ *     div - pointer to store the quotient (result of division)
+ *     rem - pointer to store the remainder (leftover after division)
+ * Output:
+ *     void - modifies div and rem through pointers
+ * Algorithm:
+ *     calculate quotient using integer division (above / below)
+ *     calculate remainder using modulo operator (above % below)
+ *     store results in the provided pointers
+ */
+void divide_with_remainder(int above, int below, int *div, int *rem)
+{
+	*div = above / below;
+	*rem = above % below;
+}
+"""
+
+[[functions]]
+name = "is_double_in_range"
+module = "math"
+description = "Returns 1 if double is within [min, max]"
+signature = "int is_double_in_range(double input, double min, double max)"
+tags = ["math", "double", "range", "validation"]
+requires = []
+header_code = "/* Returns 1 if input is within [min, max], 0 otherwise (double version) */\nint is_double_in_range(double input, double min, double max);"
+impl_code = """
+/*
+ * Function:
+ *     is_double_in_range
+ * Input:
+ *     input - the double to check
+ *     min - the minimum value of the range
+ *     max - the maximum value of the range
+ * Output:
+ *     1 if input is within range, 0 otherwise
+ * Algorithm:
+ *     if input is greater than or equal to min and less than or equal to max
+ *     return 1 else return 0
+ */
+int is_double_in_range(double input, double min, double max)
+{
+	int result = input >= min && input <= max ? 1 : 0;
+	return result;
+}
+"""
