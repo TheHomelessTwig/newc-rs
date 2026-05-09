@@ -98,10 +98,82 @@ impl MainBlock {
     }
 }
 
-/// Generate a complete main.c body from a list of blocks.
-/// `includes` = module names to #include (e.g. ["input", "array"]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct GlobalVar {
+    pub type_name: String,
+    pub name: String,
+    pub init: String,
+    pub is_array: bool,
+    pub array_size: String,
+    pub is_static: bool,
+}
+
+impl GlobalVar {
+    pub fn to_c(&self) -> String {
+        let prefix = if self.is_static { "static " } else { "" };
+        if self.is_array {
+            if self.init.is_empty() {
+                format!("{prefix}{} {}[{}];", self.type_name, self.name, self.array_size)
+            } else {
+                format!("{prefix}{} {}[{}] = {};", self.type_name, self.name, self.array_size, self.init)
+            }
+        } else if self.init.is_empty() {
+            format!("{prefix}{} {};", self.type_name, self.name)
+        } else {
+            format!("{prefix}{} {} = {};", self.type_name, self.name, self.init)
+        }
+    }
+}
+
+/// A parsed function parameter (type + name).
+#[derive(Debug, Clone)]
+pub struct FuncParam {
+    pub type_name: String,
+    pub name: String,
+}
+
+/// Parse parameter list from a C function signature string.
+pub fn parse_params(signature: &str) -> Vec<FuncParam> {
+    let start = match signature.find('(') { Some(i) => i, None => return Vec::new() };
+    let end   = match signature.rfind(')') { Some(i) => i, None => return Vec::new() };
+    let inner = &signature[start + 1..end];
+    split_args(inner)
+        .into_iter()
+        .filter_map(|p| parse_single_param(&p))
+        .collect()
+}
+
+fn parse_single_param(p: &str) -> Option<FuncParam> {
+    let p = p.trim();
+    if p.is_empty() || p == "void" { return None; }
+
+    // Handle trailing [] for array params: "int arr[]" or "int arr[10]"
+    let (p_no_bracket, bracket_suffix) = if let Some(b) = p.find('[') {
+        let suffix = &p[b..]; // e.g. "[]" or "[10]"
+        (&p[..b], suffix)
+    } else {
+        (p, "")
+    };
+
+    // Last whitespace-or-star-bounded token is the name
+    let trimmed = p_no_bracket.trim_end();
+    let last_sep = trimmed.rfind(|c: char| c == ' ' || c == '*')?;
+    let raw_name = trimmed[last_sep + 1..].trim();
+    let type_part = trimmed[..last_sep + 1].trim();
+
+    let name = format!("{}{}", raw_name, bracket_suffix);
+    if raw_name.is_empty() { return None; }
+
+    Some(FuncParam {
+        type_name: type_part.to_string(),
+        name,
+    })
+}
+
+/// Generate a complete main.c from blocks, globals, and includes.
 pub fn generate_main_c(
     blocks: &[MainBlock],
+    globals: &[GlobalVar],
     author: &str,
     date: &str,
     includes: &[String],
@@ -114,6 +186,13 @@ pub fn generate_main_c(
         lines.join("\n")
     };
 
+    let global_section = if globals.is_empty() {
+        String::new()
+    } else {
+        let g = globals.iter().map(|g| g.to_c()).collect::<Vec<_>>().join("\n");
+        format!("\n/* Global variables */\n{g}\n")
+    };
+
     let body = blocks
         .iter()
         .map(|b| b.to_c())
@@ -121,36 +200,60 @@ pub fn generate_main_c(
         .join("\n");
 
     format!(
-        "/*\n * Author: {author}\n * Purpose: ...\n *\n * Date: {date}\n */\n\n/* Header files */\n{include_lines}\n\nint main(void)\n{{\n{body}\n\treturn 0;\n}}\n"
+        "/*\n * Author: {author}\n * Purpose: ...\n *\n * Date: {date}\n */\n\n/* Header files */\n{include_lines}\n{global_section}\nint main(void)\n{{\n{body}\n\treturn 0;\n}}\n"
     )
 }
 
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct MainBuilderState {
     pub blocks: Vec<MainBlock>,
+    pub globals: Vec<GlobalVar>,
     pub includes: Vec<String>,
 }
 
 impl MainBuilderState {
     pub fn from_project(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
-        Self { blocks: Vec::new(), includes }
+        Self { blocks: Vec::new(), globals: Vec::new(), includes }
     }
 
-    /// Load from existing src/main.c — parses body into blocks.
+    /// Load from existing src/main.c — parses globals and body into state.
     pub fn load_from_main_c(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
         let main_c = root.join("src").join("main.c");
-        let blocks = std::fs::read_to_string(&main_c)
-            .map(|s| parse_main_body(&s))
+        let (blocks, globals) = std::fs::read_to_string(&main_c)
+            .map(|s| (parse_main_body(&s), parse_globals(&s)))
             .unwrap_or_default();
-        Self { blocks, includes }
+        Self { blocks, globals, includes }
     }
 
     pub fn preview(&self, author: &str, date: &str) -> String {
-        generate_main_c(&self.blocks, author, date, &self.includes)
+        generate_main_c(&self.blocks, &self.globals, author, date, &self.includes)
     }
+}
+
+/// Parse global variable declarations from a main.c — lines between includes and main().
+fn parse_globals(source: &str) -> Vec<GlobalVar> {
+    let mut globals = Vec::new();
+    for line in source.lines() {
+        let t = line.trim();
+        // Stop at main() definition
+        if t.contains("main(") { break; }
+        // Skip includes, comments, blank lines, preprocessor
+        if t.is_empty() || t.starts_with('#') || t.starts_with("/*")
+            || t.starts_with("*") || t.starts_with("//") { continue; }
+
+        let is_static = t.starts_with("static ");
+        let t_no_static = if is_static { t.trim_start_matches("static").trim() } else { t };
+
+        if let Some(vd) = try_parse_var_decl(t_no_static) {
+            // Convert VarDecl block to GlobalVar
+            if let MainBlock::VarDecl { type_name, name, init, is_array, array_size } = vd {
+                globals.push(GlobalVar { type_name, name, init, is_array, array_size, is_static });
+            }
+        }
+    }
+    globals
 }
 
 fn detect_includes(root: &std::path::Path) -> Vec<String> {

@@ -16,6 +16,7 @@ pub enum ProjectAction {
     OpenStats,
     OpenModuleDetail(String),
     OpenMainBuilder,
+    ExportZip,
 }
 
 pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectAction {
@@ -37,6 +38,9 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool) -> ProjectActio
         }
         if ui.button("Stats").clicked() {
             action = ProjectAction::OpenStats;
+        }
+        if ui.button("Export ZIP").on_hover_text("Bundle src/, include/, Makefile into a ZIP").clicked() {
+            action = ProjectAction::ExportZip;
         }
         if ui
             .add(egui::Button::new("Compose main()").fill(Color32::from_rgb(60, 80, 140)))

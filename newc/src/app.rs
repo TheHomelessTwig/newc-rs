@@ -3,10 +3,12 @@ use std::path::PathBuf;
 use egui::{CentralPanel, Color32, Context, RichText, SidePanel, TopBottomPanel};
 use newc_core::{
     analysis,
+    export,
     header,
     main_builder::MainBuilderState,
     module,
     project::Project,
+    project_template,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
     sync::{self, extract_function_implementations, update_function_in_source},
 };
@@ -502,6 +504,7 @@ impl eframe::App for NewcApp {
                         &mut self.state.func_selected,
                         &self.state.function_lib,
                         &mut false,
+                        &mut self.state.selected_template,
                     );
                     match action {
                         views::create::CreateAction::Create {
@@ -515,6 +518,9 @@ impl eframe::App for NewcApp {
                             if include_display { modules.push(DefaultModule::Display); }
                             if include_array { modules.push(DefaultModule::Array); }
 
+                            // Remember selected template to seed composer after project created
+                            let template_idx = self.state.selected_template;
+
                             let opts = ScaffoldOptions {
                                 name: name.clone(),
                                 git_init: git,
@@ -524,9 +530,19 @@ impl eframe::App for NewcApp {
                             match create_project(&opts, &location) {
                                 Ok(()) => {
                                     let root = location.join(&name);
+                                    // Seed composer from template if one was selected
+                                    if let Some(idx) = template_idx {
+                                        let templates = project_template::all_templates();
+                                        if let Some(t) = templates.get(idx) {
+                                            self.state.main_builder = (t.builder)();
+                                            self.state.composer_undo.clear();
+                                            self.state.composer_redo.clear();
+                                        }
+                                    }
                                     self.open_project(root);
                                     self.state.set_status(format!("Project '{name}' created."));
                                     self.state.create_name.clear();
+                                    self.state.selected_template = None;
                                 }
                                 Err(e) => self.state.set_error(e.to_string()),
                             }
@@ -660,7 +676,23 @@ impl eframe::App for NewcApp {
                         }
                         views::project::ProjectAction::OpenMainBuilder => {
                             self.state.main_builder = MainBuilderState::load_from_main_c(&project.root);
+                            self.state.composer_undo.clear();
+                            self.state.composer_redo.clear();
                             self.state.view = View::MainBuilder(project.clone());
+                        }
+                        views::project::ProjectAction::ExportZip => {
+                            let parent = project.root.parent()
+                                .map(|p| p.to_path_buf())
+                                .unwrap_or_else(|| std::path::PathBuf::from("."));
+                            let dest = if let Some(d) = rfd::FileDialog::new()
+                                .set_file_name(&format!("{}.zip", project.name))
+                                .set_directory(&parent)
+                                .save_file()
+                            { d.parent().map(|p| p.to_path_buf()).unwrap_or(parent) } else { return };
+                            match export::export_zip(&project.root, &project.name, &dest) {
+                                Ok(path) => self.state.set_status(format!("Exported to {}", path.display())),
+                                Err(e) => self.state.set_error(e.to_string()),
+                            }
                         }
                         views::project::ProjectAction::None => {}
                     }
@@ -745,6 +777,8 @@ impl eframe::App for NewcApp {
                         &project,
                         &mut self.state.main_builder,
                         &author,
+                        &mut self.state.composer_undo,
+                        &mut self.state.composer_redo,
                     );
                     match action {
                         views::main_builder::BuilderAction::GoBack => {
@@ -759,7 +793,8 @@ impl eframe::App for NewcApp {
                                 Err(e) => self.state.set_error(e.to_string()),
                             }
                         }
-                        views::main_builder::BuilderAction::None => {}
+                        views::main_builder::BuilderAction::None
+                        | views::main_builder::BuilderAction::Snapshot => {}
                     }
                 }
 

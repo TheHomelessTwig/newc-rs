@@ -1,7 +1,7 @@
-use egui::Ui;
+use egui::{Color32, RichText, Ui};
 use std::path::PathBuf;
 
-use newc_core::function_lib::FunctionLibrary;
+use newc_core::{function_lib::FunctionLibrary, project_template};
 
 pub enum CreateAction {
     None,
@@ -31,8 +31,36 @@ pub fn show(
     func_selected: &mut Vec<String>,
     lib: &FunctionLibrary,
     _show_func_picker: &mut bool,
+    selected_template: &mut Option<usize>,
 ) -> CreateAction {
     ui.heading("New Project");
+    ui.separator();
+
+    // ── Template picker ───────────────────────────────────────────────────────
+    let templates = project_template::all_templates();
+    ui.label(RichText::new("Start from template (optional):").strong());
+    ui.horizontal_wrapped(|ui| {
+        let none_sel = selected_template.is_none();
+        if ui.selectable_label(none_sel, "Blank").clicked() {
+            *selected_template = None;
+        }
+        for (i, t) in templates.iter().enumerate() {
+            let sel = *selected_template == Some(i);
+            if ui.selectable_label(sel, t.name).on_hover_text(t.description).clicked() {
+                *selected_template = Some(i);
+                // Pre-check modules matching template
+                let mods = t.modules;
+                *include_input   = mods.contains(&"input");
+                *include_math    = mods.contains(&"math");
+                *include_display = mods.contains(&"display");
+                *include_array   = mods.contains(&"array");
+            }
+        }
+    });
+    if let Some(idx) = selected_template {
+        let t = &templates[*idx];
+        ui.label(RichText::new(format!("→ {}", t.description)).small().color(Color32::GRAY));
+    }
     ui.separator();
 
     egui::Grid::new("create_grid").num_columns(2).show(ui, |ui| {

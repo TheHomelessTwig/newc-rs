@@ -51,8 +51,12 @@ pub struct AppState {
     // Module detail / header editor
     pub module_detail_state: ModuleDetailState,
     pub header_editor_state: HeaderEditorState,
-    // Main builder
+    // Main builder + undo/redo (not persisted — session only)
     pub main_builder: MainBuilderState,
+    pub composer_undo: Vec<MainBuilderState>,
+    pub composer_redo: Vec<MainBuilderState>,
+    // Selected template index in Create view
+    pub selected_template: Option<usize>,
     // Import from .c
     pub import_state: ImportState,
     pub show_import: bool,
@@ -106,6 +110,9 @@ impl AppState {
             module_detail_state: ModuleDetailState::default(),
             header_editor_state: HeaderEditorState::default(),
             main_builder: MainBuilderState::default(),
+            composer_undo: Vec::new(),
+            composer_redo: Vec::new(),
+            selected_template: None,
             import_state: ImportState::default(),
             show_import: false,
             new_group_name: String::new(),

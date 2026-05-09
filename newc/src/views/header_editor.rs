@@ -2,12 +2,39 @@ use egui::{Color32, RichText, ScrollArea, Ui};
 use newc_core::header;
 use std::path::PathBuf;
 
+#[derive(Default, Clone)]
+pub struct StructField {
+    pub type_name: String,
+    pub field_name: String,
+    pub comment: String,
+}
+
+#[derive(Default, Clone)]
+pub struct StructBuilder {
+    pub name: String,
+    pub typedef_name: String,
+    pub fields: Vec<StructField>,
+    pub open: bool,
+}
+
+impl StructBuilder {
+    pub fn to_c(&self) -> String {
+        let typedef = if self.typedef_name.is_empty() { &self.name } else { &self.typedef_name };
+        let fields: String = self.fields.iter().map(|f| {
+            let comment = if f.comment.is_empty() { String::new() } else { format!(" /* {} */", f.comment) };
+            format!("\t{} {};{}", f.type_name, f.field_name, comment)
+        }).collect::<Vec<_>>().join("\n");
+        format!("typedef struct {{\n{fields}\n}} {typedef};\n")
+    }
+}
+
 pub struct HeaderEditorState {
     pub content: String,
     pub loaded: bool,
     pub insert_name: String,
     pub insert_value: String,
     pub insert_type: String,
+    pub struct_builder: StructBuilder,
 }
 
 impl Default for HeaderEditorState {
@@ -18,6 +45,7 @@ impl Default for HeaderEditorState {
             insert_name: String::new(),
             insert_value: String::new(),
             insert_type: String::new(),
+            struct_builder: StructBuilder::default(),
         }
     }
 }
@@ -104,6 +132,48 @@ pub fn show(
                 .desired_rows(20)
                 .desired_width(f32::INFINITY),
         );
+    });
+
+    // ── Struct builder ────────────────────────────────────────────────────────
+    ui.separator();
+    let sb = &mut state.struct_builder;
+    ui.collapsing("Struct Builder", |ui| {
+        egui::Grid::new("struct_grid").num_columns(2).show(ui, |ui| {
+            ui.label("Struct name:");
+            ui.text_edit_singleline(&mut sb.name);
+            ui.end_row();
+            ui.label("Typedef name:");
+            ui.text_edit_singleline(&mut sb.typedef_name);
+            ui.end_row();
+        });
+        ui.label(RichText::new("Fields:").strong());
+        let mut to_remove: Option<usize> = None;
+        for (i, field) in sb.fields.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                ui.add(egui::TextEdit::singleline(&mut field.type_name).desired_width(80.0).hint_text("type"));
+                ui.add(egui::TextEdit::singleline(&mut field.field_name).desired_width(90.0).hint_text("name"));
+                ui.add(egui::TextEdit::singleline(&mut field.comment).desired_width(120.0).hint_text("comment"));
+            });
+        }
+        if let Some(i) = to_remove { sb.fields.remove(i); }
+        ui.horizontal(|ui| {
+            if ui.small_button("+ Field").clicked() {
+                sb.fields.push(StructField::default());
+            }
+            let can_insert = !sb.name.is_empty() && !sb.fields.is_empty();
+            if ui.add_enabled(can_insert, egui::Button::new("Insert into header")).clicked() {
+                let code = sb.to_c();
+                state.content.push_str(&format!("\n{code}"));
+            }
+        });
+        if !sb.name.is_empty() {
+            ui.separator();
+            ui.label(RichText::new("Preview:").small().strong());
+            egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+                ui.label(RichText::new(sb.to_c()).monospace().small());
+            });
+        }
     });
 
     ui.separator();

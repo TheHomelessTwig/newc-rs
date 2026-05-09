@@ -121,7 +121,10 @@ pub fn show(
         ui.separator();
 
         if state.edit_mode {
-            ui.label(RichText::new("Editing implementation:").strong());
+            // Ctrl+S to save
+            let ctrl_s = ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl);
+
+            ui.label(RichText::new("Editing implementation: (Ctrl+S to save)").strong());
             ScrollArea::vertical().id_salt("mod_edit_scroll").show(ui, |ui| {
                 ui.add(
                     egui::TextEdit::multiline(&mut state.edit_buf)
@@ -131,8 +134,9 @@ pub fn show(
                 );
             });
             ui.separator();
+            let save = ctrl_s;
             ui.horizontal(|ui| {
-                if ui.button("Save").clicked() {
+                if ui.button("Save (Ctrl+S)").clicked() || save {
                     action = ModuleDetailAction::SaveFunction {
                         name: func.name.clone(),
                         new_impl: state.edit_buf.clone(),
