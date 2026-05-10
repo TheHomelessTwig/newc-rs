@@ -59,7 +59,8 @@ pub fn show(
         if ui.button("← Project").clicked() {
             action = ModuleDetailAction::GoBack;
         }
-        ui.heading(format!("Module: {module_name}"));
+        ui.label(RichText::new("◆").color(Color32::from_rgb(169, 220, 118)));
+        ui.heading(RichText::new(module_name).color(Color32::from_rgb(252, 252, 250)));
         if let Some(line) = state.highlight_line {
             ui.label(
                 RichText::new(format!("▶ line {line}"))
@@ -73,10 +74,10 @@ pub fn show(
                 .color(Color32::GRAY),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Edit Header (.h)").clicked() {
+            if ui.add(egui::Button::new("✎ Edit Header (.h)").fill(Color32::from_rgb(50, 60, 90))).clicked() {
                 action = ModuleDetailAction::OpenHeaderEditor;
             }
-            if ui.button("Add from Library").clicked() {
+            if ui.add(egui::Button::new("+ From Library").fill(Color32::from_rgb(40, 80, 50))).clicked() {
                 action = ModuleDetailAction::AddFromLibrary;
             }
         });
@@ -141,8 +142,8 @@ pub fn show(
         .max_width(260.0)
         .show_inside(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Functions").strong());
-                let btn_text = if state.check_ran { "Re-check" } else { "Dead-code" };
+                ui.label(RichText::new("◈ Functions").strong().color(Color32::from_rgb(120, 220, 232)));
+                let btn_text = if state.check_ran { "Re-check" } else { "✓ Check" };
                 if ui.small_button(btn_text).on_hover_text("Run BFS reachability check").clicked() {
                     if let Ok(unreachable) = newc_core::analysis::check(project_root) {
                         state.unreachable_funcs = unreachable.iter().map(|f| f.name.clone()).collect();
@@ -157,9 +158,13 @@ pub fn show(
                     let is_unreachable = state.unreachable_funcs.contains(&func.name);
                     let label = if is_unreachable {
                         RichText::new(format!("⚠ {}", func.name))
-                            .color(Color32::from_rgb(255, 140, 0))
+                            .color(Color32::from_rgb(255, 97, 136))
+                    } else if sel {
+                        RichText::new(format!("▶ {}", func.name))
+                            .color(Color32::from_rgb(169, 220, 118))
                     } else {
-                        RichText::new(&func.name)
+                        RichText::new(format!("◆ {}", func.name))
+                            .color(Color32::from_rgb(252, 252, 250))
                     };
                     if ui.selectable_label(sel, label).clicked() && !sel {
                         state.selected_func = Some(func.name.clone());
@@ -190,15 +195,16 @@ pub fn show(
         };
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new(&func.name).strong().monospace());
+            ui.label(RichText::new("◆").color(Color32::from_rgb(169, 220, 118)));
+            ui.label(RichText::new(&func.name).strong().monospace().color(Color32::from_rgb(255, 203, 107)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if !state.edit_mode {
-                    if ui.button("Edit").clicked() {
+                    if ui.add(egui::Button::new("✎ Edit").fill(Color32::from_rgb(50, 60, 90))).clicked() {
                         state.edit_buf = format!("{}\n{}", func.signature, func.body);
                         state.edit_mode = true;
                         state.show_call_tree = false;
                     }
-                    if ui.button("Delete").on_hover_text("Remove this function").clicked() {
+                    if ui.add(egui::Button::new("✗ Delete").fill(Color32::from_rgb(80, 30, 30))).on_hover_text("Remove this function").clicked() {
                         action = ModuleDetailAction::DeleteFunction(func.name.clone());
                         state.selected_func = None;
                     }
@@ -282,7 +288,7 @@ pub fn show(
             }
         } else {
             // Syntax-highlighted signature
-            ui.label(RichText::new("Signature:").strong());
+            ui.label(RichText::new("◈ Signature").strong().color(Color32::from_rgb(120, 220, 232)));
             egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
                 let is_dark = ui.visuals().dark_mode;
                 let job = crate::highlight::highlight_c(&func.signature, is_dark, 12.0);
@@ -292,7 +298,7 @@ pub fn show(
 
             // Call tree panel
             if state.show_call_tree && !state.call_tree_lines.is_empty() {
-                ui.label(RichText::new("Call Tree:").strong());
+                ui.label(RichText::new("◈ Call Tree").strong().color(Color32::from_rgb(120, 220, 232)));
                 egui::Frame::dark_canvas(ui.style())
                     .show(ui, |ui| {
                         ScrollArea::vertical()
@@ -307,7 +313,7 @@ pub fn show(
                 ui.add_space(4.0);
             }
 
-            ui.label(RichText::new("Body:").strong());
+            ui.label(RichText::new("◈ Body").strong().color(Color32::from_rgb(120, 220, 232)));
             ScrollArea::vertical().id_salt("mod_body_scroll").max_height(320.0).show(ui, |ui| {
                 egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
                     let is_dark = ui.visuals().dark_mode;

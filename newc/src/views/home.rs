@@ -33,7 +33,10 @@ pub fn show(
         new_workspace: None,
     };
 
-    ui.heading("Projects");
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("⌂").color(Color32::from_rgb(255, 216, 102)).heading());
+        ui.heading(RichText::new("Projects").color(Color32::from_rgb(252, 252, 250)));
+    });
     ui.separator();
 
     // First-run onboarding
@@ -105,7 +108,7 @@ pub fn show(
 
     // Toolbar
     ui.horizontal(|ui| {
-        if ui.button("New Project").clicked() {
+        if ui.add(egui::Button::new("+ New Project").fill(Color32::from_rgb(40, 90, 50))).clicked() {
             action.go_create = true;
         }
         if ui.button("Open Folder...").clicked() {
@@ -167,9 +170,18 @@ pub fn show(
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.display().to_string());
                 let exists = path.exists();
-                let label = if exists { name } else { format!("{name} (missing)") };
+                let (icon, name_color) = if exists {
+                    ("⌂", Color32::from_rgb(169, 220, 118))
+                } else {
+                    ("⚠", Color32::from_rgb(255, 97, 136))
+                };
+                let label = if exists {
+                    RichText::new(format!("{icon} {name}")).color(name_color).strong()
+                } else {
+                    RichText::new(format!("{icon} {name} (missing)")).color(name_color)
+                };
 
-                if ui.selectable_label(false, &label).clicked() && exists {
+                if ui.selectable_label(false, label).clicked() && exists {
                     action.open_project = Some((*path).clone());
                 }
                 ui.label(

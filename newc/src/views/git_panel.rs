@@ -16,7 +16,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                 state.view = View::ProjectDetail(project.clone());
                 return;
             }
-            ui.heading(format!("Git — {}", project.name));
+            ui.heading(RichText::new(format!("◆ Git — {}", project.name)).color(Color32::from_rgb(169, 220, 118)));
 
             // Branch management
             ui.separator();

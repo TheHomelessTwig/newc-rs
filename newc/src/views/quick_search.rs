@@ -127,7 +127,7 @@ pub fn show(
                             QuickSearchResult::Project { name, path } => {
                                 ui.horizontal(|ui| {
                                     ui.label(
-                                        RichText::new("📁 ").color(Color32::from_rgb(200, 160, 80)),
+                                        RichText::new("⌂ ").color(Color32::from_rgb(255, 216, 102)),
                                     );
                                     ui.label(RichText::new(name).strong());
                                     ui.label(

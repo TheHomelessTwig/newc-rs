@@ -218,13 +218,17 @@ fn tokenize_rest(
             continue;
         }
 
-        // Operators
+        // Operators / fallback — advance by full UTF-8 character, not one byte
         let color = match bytes[i] {
             b'+' | b'-' | b'*' | b'/' | b'%' | b'=' | b'<' | b'>'
             | b'&' | b'|' | b'^' | b'~' | b'!' | b'?' | b':' => pal.operator,
             _ => pal.default,
         };
-        job.append(&s[i..i + 1], 0.0, fmt(color, font));
-        i += 1;
+        let mut char_end = i + 1;
+        while char_end < n && bytes[char_end] & 0xC0 == 0x80 {
+            char_end += 1; // skip UTF-8 continuation bytes
+        }
+        job.append(&s[i..char_end], 0.0, fmt(color, font));
+        i = char_end;
     }
 }

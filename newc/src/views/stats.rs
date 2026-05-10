@@ -2,34 +2,37 @@ use egui::{Color32, RichText, Ui};
 use newc_core::{project::Project, stats::ProjectStats};
 
 pub fn show(ui: &mut Ui, project: &Project, stats: &ProjectStats) {
-    ui.heading(format!("Stats — {}", project.name));
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("◈").color(Color32::from_rgb(171, 157, 242)).heading());
+        ui.heading(RichText::new(format!("Stats — {}", project.name)).color(Color32::from_rgb(252, 252, 250)));
+    });
     ui.separator();
 
     // Summary row
     egui::Grid::new("stats_summary").num_columns(2).show(ui, |ui| {
-        ui.label(RichText::new("Modules").strong());
-        ui.label(stats.module_stats.len().to_string());
+        ui.label(RichText::new("◆ Modules").strong().color(Color32::from_rgb(120, 220, 232)));
+        ui.label(RichText::new(stats.module_stats.len().to_string()).color(Color32::from_rgb(171, 157, 242)));
         ui.end_row();
 
-        ui.label(RichText::new("Total functions").strong());
-        ui.label(stats.total_functions.to_string());
+        ui.label(RichText::new("◆ Total functions").strong().color(Color32::from_rgb(120, 220, 232)));
+        ui.label(RichText::new(stats.total_functions.to_string()).color(Color32::from_rgb(171, 157, 242)));
         ui.end_row();
 
-        ui.label(RichText::new("Lines of code (LOC)").strong());
-        ui.label(stats.total_loc.to_string());
+        ui.label(RichText::new("◆ Lines of code (LOC)").strong().color(Color32::from_rgb(120, 220, 232)));
+        ui.label(RichText::new(stats.total_loc.to_string()).color(Color32::from_rgb(171, 157, 242)));
         ui.end_row();
 
-        ui.label(RichText::new("Total source lines").strong());
-        ui.label(stats.total_source_lines.to_string());
+        ui.label(RichText::new("◆ Total source lines").strong().color(Color32::from_rgb(120, 220, 232)));
+        ui.label(RichText::new(stats.total_source_lines.to_string()).color(Color32::from_rgb(171, 157, 242)));
         ui.end_row();
     });
 
     ui.add_space(12.0);
-    ui.label(RichText::new("Per-module breakdown").strong());
+    ui.label(RichText::new("◈ Per-module breakdown").strong().color(Color32::from_rgb(120, 220, 232)));
     ui.separator();
 
     if stats.module_stats.is_empty() {
-        ui.label("No modules found.");
+        ui.label(RichText::new("No modules found.").color(Color32::GRAY));
         return;
     }
 
@@ -40,16 +43,16 @@ pub fn show(ui: &mut Ui, project: &Project, stats: &ProjectStats) {
         .num_columns(4)
         .striped(true)
         .show(ui, |ui| {
-            ui.label(RichText::new("Module").strong());
-            ui.label(RichText::new("Functions").strong());
-            ui.label(RichText::new("LOC").strong());
+            ui.label(RichText::new("Module").strong().color(Color32::from_rgb(171, 157, 242)));
+            ui.label(RichText::new("fns").strong().color(Color32::from_rgb(171, 157, 242)));
+            ui.label(RichText::new("LOC").strong().color(Color32::from_rgb(171, 157, 242)));
             ui.label(RichText::new("").strong());
             ui.end_row();
 
             for m in &stats.module_stats {
-                ui.label(&m.name);
-                ui.label(m.functions.to_string());
-                ui.label(m.loc.to_string());
+                ui.label(RichText::new(format!("◆ {}", m.name)).color(Color32::from_rgb(169, 220, 118)));
+                ui.label(RichText::new(m.functions.to_string()).color(Color32::from_rgb(255, 216, 102)));
+                ui.label(RichText::new(m.loc.to_string()).color(Color32::from_rgb(255, 216, 102)));
 
                 // Bar proportional to LOC
                 let bar_width = (m.loc as f32 / max_loc as f32) * 150.0;

@@ -21,7 +21,7 @@ pub fn show(
         if ui.button("← Back").clicked() {
             return AddModuleAction::Cancel;
         }
-        ui.heading(format!("Add Module — {}", project.name));
+        ui.heading(RichText::new(format!("+ Add Module — {}", project.name)).color(Color32::from_rgb(169, 220, 118)));
         AddModuleAction::None
     });
 

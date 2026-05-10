@@ -18,7 +18,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
                 state.view = View::ProjectDetail(project.clone());
                 return;
             }
-            ui.heading(format!("Function Usage — {}", project.name));
+            ui.heading(RichText::new(format!("◈ Usage — {}", project.name)).color(Color32::from_rgb(171, 157, 242)));
         });
         ui.separator();
 

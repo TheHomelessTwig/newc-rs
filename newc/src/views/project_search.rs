@@ -15,7 +15,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                 state.view = View::ProjectDetail(project.clone());
                 return;
             }
-            ui.heading(format!("Search — {}", project.name));
+            ui.heading(RichText::new(format!("⌕ Search — {}", project.name)).color(Color32::from_rgb(255, 216, 102)));
         });
         ui.separator();
 

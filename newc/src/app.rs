@@ -52,6 +52,8 @@ pub struct NewcApp {
 
 impl NewcApp {
     pub fn new(cc: &eframe::CreationContext<'_>, initial_path: Option<PathBuf>) -> Self {
+        setup_fonts(&cc.egui_ctx);
+
         let mut state = AppState::new();
 
         // Merge discovered projects (don't replace loaded known_projects)
@@ -1673,4 +1675,64 @@ fn run_clang_format(code: &str, style: &str) -> anyhow::Result<String> {
     } else {
         Err(anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr)))
     }
+}
+
+fn setup_fonts(ctx: &egui::Context) {
+    // Candidate paths for a Unicode-capable sans font (proportional)
+    let sans_paths: &[&str] = &[
+        // Linux (Debian/Ubuntu/WSL2)
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        // Arch Linux
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        // Noto fallbacks
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        // macOS
+        "/System/Library/Fonts/Helvetica.ttc",
+        // Windows
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+    ];
+    // Candidate paths for a Unicode-capable monospace font
+    let mono_paths: &[&str] = &[
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
+        "C:\\Windows\\Fonts\\consola.ttf",
+        "C:\\Windows\\Fonts\\cour.ttf",
+    ];
+
+    let mut fonts = egui::FontDefinitions::default();
+
+    let try_load = |fonts: &mut egui::FontDefinitions, name: &str, paths: &[&str], families: &[egui::FontFamily]| {
+        for path in paths {
+            if let Ok(data) = std::fs::read(path) {
+                fonts.font_data.insert(name.to_owned(), std::sync::Arc::new(egui::FontData::from_owned(data)));
+                for family in families {
+                    if let Some(list) = fonts.families.get_mut(family) {
+                        list.push(name.to_owned());
+                    }
+                }
+                return;
+            }
+        }
+    };
+
+    try_load(
+        &mut fonts,
+        "DejaVuSans",
+        sans_paths,
+        &[egui::FontFamily::Proportional],
+    );
+    try_load(
+        &mut fonts,
+        "DejaVuSansMono",
+        mono_paths,
+        &[egui::FontFamily::Monospace],
+    );
+
+    ctx.set_fonts(fonts);
 }

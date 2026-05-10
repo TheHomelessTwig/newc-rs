@@ -92,10 +92,11 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         };
 
         ui.horizontal(|ui| {
-            ui.heading(func.name);
+            ui.label(RichText::new("◆").color(Color32::from_rgb(255, 203, 107)));
+            ui.heading(RichText::new(func.name).color(Color32::from_rgb(255, 203, 107)));
             ui.label(
                 RichText::new(format!("<{}>", func.header))
-                    .color(Color32::from_rgb(100, 180, 255)),
+                    .color(Color32::from_rgb(120, 220, 232)),
             );
             if ui.small_button("Copy #include").clicked() {
                 ui.ctx().copy_text(format!("#include <{}>", func.header));
@@ -103,7 +104,7 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         });
         ui.separator();
 
-        ui.label(RichText::new("Signature:").strong());
+        ui.label(RichText::new("◈ Signature").strong().color(Color32::from_rgb(120, 220, 232)));
         egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let is_dark = ui.visuals().dark_mode;
@@ -116,15 +117,15 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         });
 
         ui.add_space(8.0);
-        ui.label(RichText::new("Description:").strong());
+        ui.label(RichText::new("◈ Description").strong().color(Color32::from_rgb(120, 220, 232)));
         ui.label(func.description);
 
         ui.add_space(8.0);
-        ui.label(RichText::new("Returns:").strong());
+        ui.label(RichText::new("◈ Returns").strong().color(Color32::from_rgb(120, 220, 232)));
         ui.label(func.returns);
 
         ui.add_space(8.0);
-        ui.label(RichText::new("Example:").strong());
+        ui.label(RichText::new("◈ Example").strong().color(Color32::from_rgb(120, 220, 232)));
         egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let is_dark = ui.visuals().dark_mode;

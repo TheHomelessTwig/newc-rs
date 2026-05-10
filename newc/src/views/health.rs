@@ -39,7 +39,8 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
                 state.view = View::ProjectDetail(project.clone());
                 return;
             }
-            ui.heading(format!("Health Dashboard — {}", project.name));
+            ui.label(RichText::new("♥").color(Color32::from_rgb(255, 97, 136)).heading());
+            ui.heading(RichText::new(format!("Health — {}", project.name)).color(Color32::from_rgb(252, 252, 250)));
             if ui.button("Refresh").clicked() {
                 state.health_computed = false;
             }
@@ -75,7 +76,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 
             // TODO list
             if !snap.todos.is_empty() {
-                ui.label(RichText::new("TODOs & FIXMEs").strong());
+                ui.label(RichText::new("◈ TODOs & FIXMEs").strong().color(Color32::from_rgb(255, 216, 102)));
                 ui.separator();
                 for (file, line_no, text) in &snap.todos {
                     ui.horizontal(|ui| {
@@ -88,7 +89,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 
             // Dead code list
             if !snap.dead_code_funcs.is_empty() {
-                ui.label(RichText::new("Unreachable Functions").strong());
+                ui.label(RichText::new("⚠ Unreachable Functions").strong().color(Color32::from_rgb(255, 97, 136)));
                 ui.separator();
                 for fname in &snap.dead_code_funcs {
                     ui.label(RichText::new(format!("  {fname}")).monospace().small().color(Color32::from_rgb(255, 140, 0)));
@@ -98,7 +99,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 
             // Lint details
             if !snap.lint_warnings.is_empty() {
-                ui.label(RichText::new("Lint Warnings").strong());
+                ui.label(RichText::new("⚠ Lint Warnings").strong().color(Color32::from_rgb(255, 216, 102)));
                 ui.separator();
                 for (file, code, msg) in &snap.lint_warnings {
                     ui.horizontal(|ui| {
@@ -111,7 +112,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 
             // Header guard violations (L010)
             if !snap.header_guard_files.is_empty() {
-                ui.label(RichText::new("Missing Header Guards [L010]").strong());
+                ui.label(RichText::new("⚠ Missing Header Guards [L010]").strong().color(Color32::from_rgb(255, 216, 102)));
                 ui.separator();
                 for file in &snap.header_guard_files {
                     ui.label(RichText::new(format!("  {file}: add #ifndef guard or #pragma once")).small().color(Color32::from_rgb(255, 180, 80)));
@@ -121,7 +122,7 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 
             // Prototype mismatches
             if !snap.proto_mismatches.is_empty() {
-                ui.label(RichText::new("Prototype Mismatches").strong());
+                ui.label(RichText::new("⚠ Prototype Mismatches").strong().color(Color32::from_rgb(255, 97, 136)));
                 ui.separator();
                 for (module, desc) in &snap.proto_mismatches {
                     ui.horizontal(|ui| {
@@ -135,15 +136,20 @@ pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
 }
 
 fn health_card(ui: &mut egui::Ui, title: &str, text: &str, ok: bool) {
-    let color = if ok { Color32::from_rgb(40, 100, 40) } else { Color32::from_rgb(100, 40, 40) };
-    let text_color = if ok { Color32::from_rgb(100, 220, 100) } else { Color32::from_rgb(255, 100, 100) };
+    let bg    = if ok { Color32::from_rgb(30, 70, 30) }  else { Color32::from_rgb(70, 25, 25) };
+    let icon  = if ok { "✓" }                             else { "⚠" };
+    let icon_color = if ok { Color32::from_rgb(169, 220, 118) } else { Color32::from_rgb(255, 97, 136) };
+    let text_color = if ok { Color32::from_rgb(169, 220, 118) } else { Color32::from_rgb(255, 97, 136) };
     egui::Frame::new()
-        .fill(color)
+        .fill(bg)
         .inner_margin(egui::Margin::same(10))
         .corner_radius(egui::CornerRadius::same(6))
         .show(ui, |ui| {
             ui.set_min_width(120.0);
-            ui.label(RichText::new(title).strong().small());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(icon).color(icon_color).strong());
+                ui.label(RichText::new(title).strong().small().color(Color32::from_rgb(252, 252, 250)));
+            });
             ui.label(RichText::new(text).heading().color(text_color));
         });
 }

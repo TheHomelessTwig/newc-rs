@@ -38,7 +38,8 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
         if ui.button("← Home").clicked() {
             action = ProjectAction::GoHome;
         }
-        ui.heading(&project.name);
+        ui.label(RichText::new("◆").color(Color32::from_rgb(169, 220, 118)));
+        ui.heading(RichText::new(&project.name).color(Color32::from_rgb(252, 252, 250)));
         ui.label(
             RichText::new(project.root.display().to_string())
                 .small()
@@ -136,10 +137,15 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
 
     // Build targets
     ui.horizontal(|ui| {
-        ui.label("Make:");
+        ui.label(RichText::new("▶ Build:").color(Color32::from_rgb(169, 220, 118)).strong());
         for target in ["all", "run", "debug", "release", "strict", "clean"] {
+            let color = match target {
+                "all" | "run"   => Color32::from_rgb(40, 110, 60),
+                "clean"         => Color32::from_rgb(100, 40, 40),
+                _               => Color32::from_rgb(50, 70, 110),
+            };
             if ui
-                .add_enabled(!build_running, egui::Button::new(target))
+                .add_enabled(!build_running, egui::Button::new(target).fill(color))
                 .clicked()
             {
                 action = ProjectAction::RunMake(target.to_string());
@@ -153,16 +159,20 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
 
     // Analysis tools
     ui.horizontal(|ui| {
-        if ui.button("Check").on_hover_text("BFS reachability from main()").clicked() {
+        ui.label(RichText::new("⚙ Tools:").color(Color32::from_rgb(171, 157, 242)).strong());
+        if ui.add(egui::Button::new("✓ Check").fill(Color32::from_rgb(30, 80, 50)))
+            .on_hover_text("BFS reachability from main()").clicked() {
             action = ProjectAction::Check;
         }
-        if ui.button("Tidy").on_hover_text("Remove unreachable functions").clicked() {
+        if ui.add(egui::Button::new("✂ Tidy").fill(Color32::from_rgb(80, 50, 30)))
+            .on_hover_text("Remove unreachable functions").clicked() {
             action = ProjectAction::Tidy;
         }
-        if ui.button("Sync All").on_hover_text("Regenerate all .h from .c").clicked() {
+        if ui.add(egui::Button::new("⟳ Sync All").fill(Color32::from_rgb(30, 60, 80)))
+            .on_hover_text("Regenerate all .h from .c").clicked() {
             action = ProjectAction::SyncAll;
         }
-        if ui.button("Refresh").clicked() {
+        if ui.button("↺ Refresh").clicked() {
             action = ProjectAction::RefreshModules;
         }
     });
@@ -170,36 +180,42 @@ pub fn show(ui: &mut Ui, project: &Project, build_running: bool, meta: &ProjectM
 
     // Module list
     ui.horizontal(|ui| {
-        ui.heading("Modules");
-        if ui.button("+ Add Module").clicked() {
+        ui.label(RichText::new("◈ Modules").strong().color(Color32::from_rgb(120, 220, 232)));
+        if ui.add(egui::Button::new("+ Add Module").fill(Color32::from_rgb(40, 90, 50))).clicked() {
             action = ProjectAction::AddModule;
         }
     });
 
     if project.modules.is_empty() {
-        ui.label("No modules found.");
+        ui.label(RichText::new("No modules found.").color(Color32::GRAY));
     } else {
         egui::Grid::new("modules_grid")
             .num_columns(5)
             .striped(true)
             .show(ui, |ui| {
-                ui.label(RichText::new("Name").strong());
-                ui.label(RichText::new("Functions").strong());
+                ui.label(RichText::new("Module").strong().color(Color32::from_rgb(171, 157, 242)));
+                ui.label(RichText::new("fns").strong().color(Color32::from_rgb(171, 157, 242)));
                 ui.label(RichText::new("").strong());
                 ui.label(RichText::new("").strong());
                 ui.label(RichText::new("").strong());
                 ui.end_row();
 
                 for module in &project.modules {
-                    ui.label(&module.name);
-                    ui.label(module.function_count.to_string());
+                    ui.label(RichText::new(format!("◆ {}", module.name))
+                        .color(Color32::from_rgb(169, 220, 118)));
+                    let fn_color = match module.function_count {
+                        0 => Color32::from_rgb(114, 112, 114),
+                        1..=3 => Color32::from_rgb(255, 216, 102),
+                        _ => Color32::from_rgb(169, 220, 118),
+                    };
+                    ui.label(RichText::new(module.function_count.to_string()).color(fn_color));
                     if ui.small_button("Edit").on_hover_text("Browse/edit functions in this module").clicked() {
                         action = ProjectAction::OpenModuleDetail(module.name.clone());
                     }
                     if ui.small_button("Sync").clicked() {
                         action = ProjectAction::SyncModule(module.name.clone());
                     }
-                    if ui.small_button("Remove").on_hover_text("Delete this module").clicked() {
+                    if ui.small_button("✗ Remove").on_hover_text("Delete this module").clicked() {
                         action = ProjectAction::ConfirmRemoveModule(module.name.clone());
                     }
                     ui.end_row();
