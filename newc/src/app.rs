@@ -1356,10 +1356,13 @@ impl eframe::App for NewcApp {
                         views::module_detail::ModuleDetailAction::SaveFunction { name, new_impl } => {
                             match update_function_in_source(&src_path, &name, &new_impl) {
                                 Ok(()) => {
-                                    self.state.set_status(format!("Saved {name}."));
-                                    // Check for prototype mismatch
-                                    self.state.module_detail_state.proto_mismatch =
-                                        views::module_detail::check_proto_mismatch(&src_path, &module_name);
+                                    // Auto-sync header after every save
+                                    let sync_msg = match sync::sync_module(&project.root, &module_name) {
+                                        Ok(()) => format!("Saved {name} — header synced."),
+                                        Err(_)  => format!("Saved {name} (sync skipped)."),
+                                    };
+                                    self.state.set_status(sync_msg);
+                                    self.state.module_detail_state.proto_mismatch = None;
                                 }
                                 Err(e) => self.state.set_error(e.to_string()),
                             }

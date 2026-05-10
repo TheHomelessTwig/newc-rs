@@ -171,13 +171,13 @@ fn is_called_in(content: &str, fname: &str) -> bool {
 }
 
 fn is_definition_line(line: &str, fname: &str) -> bool {
-    // A definition line starts with the return type (no leading whitespace after trim)
-    // and the function name follows directly with no assignment or call context
-    line.starts_with(fname) || {
-        // e.g. "int fname(" or "void fname("
-        let pat = format!(" {fname}(");
-        line.contains(&pat) && !line.contains('=') && !line.contains("return")
+    // Calls always end with ';'; definitions never do (body follows on next line)
+    if line.ends_with(';') {
+        return false;
     }
+    // e.g. "int fname(" or "void fname(" — return type precedes the name
+    let pat = format!(" {fname}(");
+    line.contains(&pat) && !line.contains('=') && !line.contains("return")
 }
 
 fn extract_function_body(content: &str, fname: &str) -> String {

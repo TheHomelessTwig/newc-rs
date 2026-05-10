@@ -106,7 +106,9 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         ui.label(RichText::new("Signature:").strong());
         egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(func.signature).monospace());
+                let is_dark = ui.visuals().dark_mode;
+                let job = crate::highlight::highlight_c(func.signature, is_dark, 13.0);
+                ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
                 if ui.small_button("Copy").clicked() {
                     ui.ctx().copy_text(func.signature.to_string());
                 }
@@ -125,10 +127,9 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         ui.label(RichText::new("Example:").strong());
         egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.add(
-                    egui::Label::new(RichText::new(func.example).monospace().size(12.0))
-                        .wrap_mode(egui::TextWrapMode::Wrap),
-                );
+                let is_dark = ui.visuals().dark_mode;
+                let job = crate::highlight::highlight_c(func.example, is_dark, 12.0);
+                ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                 if ui.small_button("Copy").clicked() {
                     ui.ctx().copy_text(func.example.to_string());
                 }

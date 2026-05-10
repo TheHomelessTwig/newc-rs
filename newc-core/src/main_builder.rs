@@ -222,9 +222,13 @@ pub fn generate_main_c(
     author: &str,
     date: &str,
     includes: &[String],
+    argc_argv: bool,
 ) -> String {
     let include_lines: String = {
         let mut lines = vec!["#include <stdio.h>".to_string()];
+        if argc_argv {
+            lines.push("#include <stdlib.h>".to_string());
+        }
         for m in includes {
             lines.push(format!("#include \"{m}.h\""));
         }
@@ -244,8 +248,14 @@ pub fn generate_main_c(
         .collect::<Vec<_>>()
         .join("\n");
 
+    let (sig, ret) = if argc_argv {
+        ("int main(int argc, char *argv[])", "\treturn EXIT_SUCCESS;")
+    } else {
+        ("int main(void)", "\treturn 0;")
+    };
+
     format!(
-        "/*\n * Author: {author}\n * Purpose: ...\n *\n * Date: {date}\n */\n\n/* Header files */\n{include_lines}\n{global_section}\nint main(void)\n{{\n{body}\n\treturn 0;\n}}\n"
+        "/*\n * Author: {author}\n * Purpose: ...\n *\n * Date: {date}\n */\n\n/* Header files */\n{include_lines}\n{global_section}\n{sig}\n{{\n{body}\n{ret}\n}}\n"
     )
 }
 
@@ -254,26 +264,30 @@ pub struct MainBuilderState {
     pub blocks: Vec<MainBlock>,
     pub globals: Vec<GlobalVar>,
     pub includes: Vec<String>,
+    pub argc_argv: bool,
 }
 
 impl MainBuilderState {
     pub fn from_project(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
-        Self { blocks: Vec::new(), globals: Vec::new(), includes }
+        Self { blocks: Vec::new(), globals: Vec::new(), includes, argc_argv: false }
     }
 
     /// Load from existing src/main.c — parses globals and body into state.
     pub fn load_from_main_c(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
         let main_c = root.join("src").join("main.c");
-        let (blocks, globals) = std::fs::read_to_string(&main_c)
-            .map(|s| (parse_main_body(&s), parse_globals(&s)))
-            .unwrap_or_default();
-        Self { blocks, globals, includes }
+        let Ok(source) = std::fs::read_to_string(&main_c) else {
+            return Self { blocks: Vec::new(), globals: Vec::new(), includes, argc_argv: false };
+        };
+        let blocks = parse_main_body(&source);
+        let globals = parse_globals(&source);
+        let argc_argv = detect_argc_argv(&source);
+        Self { blocks, globals, includes, argc_argv }
     }
 
     pub fn preview(&self, author: &str, date: &str) -> String {
-        generate_main_c(&self.blocks, &self.globals, author, date, &self.includes)
+        generate_main_c(&self.blocks, &self.globals, author, date, &self.includes, self.argc_argv)
     }
 }
 
@@ -313,6 +327,13 @@ fn detect_includes(root: &std::path::Path) -> Vec<String> {
     v
 }
 
+fn detect_argc_argv(source: &str) -> bool {
+    source.lines().any(|l| {
+        let t = l.trim();
+        t.contains("main(") && t.contains("argc")
+    })
+}
+
 /// Best-effort parser: converts main() body lines into MainBlocks.
 fn parse_main_body(source: &str) -> Vec<MainBlock> {
     // Find main() body — everything between the outer { } of main
@@ -324,7 +345,6 @@ fn parse_main_body(source: &str) -> Vec<MainBlock> {
     for line in &lines {
         let t = line.trim();
         if !in_main {
-            // Match: "int main(" or "int main(void)"
             if t.contains("main(") && (t.starts_with("int") || t.ends_with('{')) {
                 in_main = true;
             }
@@ -334,28 +354,41 @@ fn parse_main_body(source: &str) -> Vec<MainBlock> {
             }
             continue;
         }
+        let prev_depth = brace_depth;
         brace_depth += t.chars().filter(|&c| c == '{').count() as i32;
         brace_depth -= t.chars().filter(|&c| c == '}').count() as i32;
         if brace_depth <= 0 {
             break; // closing } of main
+        }
+        // Skip the Allman opening brace (first line after signature where depth goes 0→1)
+        if prev_depth == 0 {
+            continue;
         }
         body_lines.push(line);
     }
 
     let mut blocks = Vec::new();
     let mut i = 0;
+    let mut body_depth: i32 = 0; // nesting within body (0 = top level of main)
     while i < body_lines.len() {
         let raw = body_lines[i];
         let t = raw.trim();
         i += 1;
 
+        let opens = t.chars().filter(|&c| c == '{').count() as i32;
+        let closes = t.chars().filter(|&c| c == '}').count() as i32;
+
         if t.is_empty() {
+            body_depth += opens - closes;
             blocks.push(MainBlock::BlankLine);
             continue;
         }
-        if t.starts_with("return") {
-            continue; // auto-generated
+        // Only skip the auto-generated top-level return
+        if t.starts_with("return") && body_depth == 0 {
+            body_depth += opens - closes;
+            continue;
         }
+        body_depth += opens - closes;
         // Block comment /* ... */
         if t.starts_with("/*") {
             let mut comment = t.trim_start_matches("/*").trim_end_matches("*/").trim().to_string();

@@ -137,7 +137,7 @@ fn calculator_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "math".into(), "display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "math".into(), "display".into()], argc_argv: false }
 }
 
 fn array_processor_builder() -> MainBuilderState {
@@ -191,7 +191,7 @@ fn array_processor_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "array".into(), "display".into()] }
+    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "array".into(), "display".into()], argc_argv: false }
 }
 
 fn grade_manager_builder() -> MainBuilderState {
@@ -240,7 +240,7 @@ fn grade_manager_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "display".into()] }
+    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "display".into()], argc_argv: false }
 }
 
 fn menu_driven_builder() -> MainBuilderState {
@@ -283,7 +283,7 @@ fn menu_driven_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "display".into()], argc_argv: false }
 }
 
 fn file_parser_builder() -> MainBuilderState {
@@ -335,7 +335,7 @@ fn file_parser_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
 }
 
 fn linked_list_builder() -> MainBuilderState {
@@ -394,7 +394,7 @@ fn linked_list_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
 }
 
 fn student_records_builder() -> MainBuilderState {
@@ -451,7 +451,7 @@ fn student_records_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()] }
+    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()], argc_argv: false }
 }
 
 fn recursion_builder() -> MainBuilderState {
@@ -487,7 +487,7 @@ fn recursion_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
 }
 
 fn cli_args_builder() -> MainBuilderState {
@@ -530,7 +530,7 @@ fn cli_args_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: true }
 }
 
 fn state_machine_builder() -> MainBuilderState {
@@ -593,7 +593,7 @@ fn state_machine_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()] }
+    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()], argc_argv: false }
 }
 
 fn binary_file_builder() -> MainBuilderState {
@@ -662,7 +662,7 @@ fn binary_file_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()] }
+    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
 }
 
 fn unit_test_runner_builder() -> MainBuilderState {
@@ -695,5 +695,6 @@ fn unit_test_runner_builder() -> MainBuilderState {
         blocks,
         globals: Vec::new(),
         includes: vec!["test_utils".into()],
+        argc_argv: false,
     }
 }

@@ -20,6 +20,7 @@ impl UserTemplate {
             blocks: self.blocks.clone(),
             globals: self.globals.clone(),
             includes: self.modules.clone(),
+            argc_argv: false,
         }
     }
 }

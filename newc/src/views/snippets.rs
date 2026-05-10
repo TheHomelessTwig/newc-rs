@@ -304,12 +304,9 @@ pub fn show_contents(ui: &mut egui::Ui, state: &mut SnippetsState) {
                             .inner_margin(egui::Margin::same(8))
                             .corner_radius(egui::CornerRadius::same(4))
                             .show(ui, |ui| {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(snippet.code).monospace().size(12.0),
-                                    )
-                                    .wrap_mode(egui::TextWrapMode::Extend),
-                                );
+                                let is_dark = ui.visuals().dark_mode;
+                                let job = crate::highlight::highlight_c(snippet.code, is_dark, 12.0);
+                                ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
                             });
                         ui.add_space(8.0);
                         if ui.button("Copy to clipboard").clicked() {

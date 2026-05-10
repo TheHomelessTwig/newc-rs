@@ -102,10 +102,9 @@ pub fn show(
         ui.separator();
         ScrollArea::vertical().id_salt("builder_preview").show(ui, |ui| {
             egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(RichText::new(&preview).monospace().size(12.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
+                let is_dark = ui.visuals().dark_mode;
+                let job = crate::highlight::highlight_c(&preview, is_dark, 12.0);
+                ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
             });
         });
     });
@@ -120,6 +119,12 @@ fn show_left_panel(
     func_sigs: &HashMap<String, Vec<FuncParam>>,
 ) {
     ScrollArea::vertical().id_salt("builder_left_scroll").show(ui, |ui| {
+        // ── Signature ─────────────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut builder.argc_argv, "int main(int argc, char *argv[])");
+        });
+        ui.add_space(4.0);
+
         // ── Includes ──────────────────────────────────────────────────────────
         ui.collapsing("Includes", |ui| {
             let include_dir = project.root.join("include");

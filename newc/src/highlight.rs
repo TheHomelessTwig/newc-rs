@@ -1,14 +1,17 @@
-/// Minimal C syntax highlighter that returns an egui LayoutJob.
-/// Works without any external highlighting crates.
+use egui::{text::LayoutJob, Color32, FontFamily, FontId, TextFormat};
 
-use egui::{text::LayoutJob, Color32, FontId, TextFormat, FontFamily};
+// Type/storage keywords → cyan
+const TYPE_KEYWORDS: &[&str] = &[
+    "auto", "bool", "char", "const", "double", "enum", "extern", "float",
+    "inline", "int", "long", "register", "restrict", "short", "signed",
+    "static", "struct", "typedef", "union", "unsigned", "void", "volatile",
+    "size_t", "FILE", "NULL", "true", "false",
+];
 
-const KEYWORDS: &[&str] = &[
-    "auto", "break", "case", "char", "const", "continue", "default", "do",
-    "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline",
-    "int", "long", "register", "restrict", "return", "short", "signed", "sizeof",
-    "static", "struct", "switch", "typedef", "union", "unsigned", "void",
-    "volatile", "while", "NULL", "true", "false", "bool",
+// Control-flow keywords → purple
+const FLOW_KEYWORDS: &[&str] = &[
+    "break", "case", "continue", "default", "do", "else", "for",
+    "goto", "if", "return", "sizeof", "switch", "while",
 ];
 
 const PREPROC: &[&str] = &[
@@ -17,91 +20,144 @@ const PREPROC: &[&str] = &[
 ];
 
 struct Palette {
-    keyword:   Color32,
-    preproc:   Color32,
-    string:    Color32,
-    number:    Color32,
-    comment:   Color32,
-    operator:  Color32,
-    default:   Color32,
+    type_kw:  Color32, // int, char, void …
+    flow_kw:  Color32, // if, return, while …
+    func:     Color32, // identifiers before (
+    preproc:  Color32, // #include #define
+    string:   Color32, // "…" '…'
+    number:   Color32, // 42 3.14
+    comment:  Color32, // // and /* */
+    operator: Color32, // + - * = < > …
+    default:  Color32, // everything else
 }
 
+// Monokai Pro dark palette
 fn dark_palette() -> Palette {
     Palette {
-        keyword:  Color32::from_rgb(86, 156, 214),
-        preproc:  Color32::from_rgb(155, 155, 100),
-        string:   Color32::from_rgb(206, 145, 120),
-        number:   Color32::from_rgb(181, 206, 168),
-        comment:  Color32::from_rgb(106, 153, 85),
-        operator: Color32::from_rgb(180, 180, 180),
-        default:  Color32::from_rgb(212, 212, 212),
+        type_kw:  Color32::from_rgb(120, 220, 232),  // #78DCE8 cyan
+        flow_kw:  Color32::from_rgb(255,  97, 136),  // #FF6188 coral
+        func:     Color32::from_rgb(169, 220, 118),  // #A9DC76 green
+        preproc:  Color32::from_rgb(255,  97, 136),  // #FF6188 coral
+        string:   Color32::from_rgb(255, 216, 102),  // #FFD866 yellow
+        number:   Color32::from_rgb(171, 157, 242),  // #AB9DF2 lavender
+        comment:  Color32::from_rgb(114, 112, 114),  // #727072 muted gray
+        operator: Color32::from_rgb(255,  97, 136),  // #FF6188 coral
+        default:  Color32::from_rgb(252, 252, 250),  // #FCFCFA near-white
     }
 }
 
 fn light_palette() -> Palette {
     Palette {
-        keyword:  Color32::from_rgb(0, 0, 200),
-        preproc:  Color32::from_rgb(100, 100, 0),
-        string:   Color32::from_rgb(160, 40, 0),
-        number:   Color32::from_rgb(0, 120, 0),
-        comment:  Color32::from_rgb(0, 128, 0),
-        operator: Color32::from_rgb(60, 60, 60),
-        default:  Color32::from_rgb(30, 30, 30),
+        type_kw:  Color32::from_rgb(0,   130, 150),
+        flow_kw:  Color32::from_rgb(200,  20,  80),
+        func:     Color32::from_rgb(60,  150,  20),
+        preproc:  Color32::from_rgb(200,  20,  80),
+        string:   Color32::from_rgb(160, 120,   0),
+        number:   Color32::from_rgb(100,  60, 200),
+        comment:  Color32::from_rgb(110, 108, 110),
+        operator: Color32::from_rgb(200,  20,  80),
+        default:  Color32::from_rgb(30,   30,  30),
     }
-}
-
-pub fn highlight_c(code: &str, is_dark: bool, font_size: f32) -> LayoutJob {
-    let pal = if is_dark { dark_palette() } else { light_palette() };
-    let font = FontId::new(font_size, FontFamily::Monospace);
-    let mut job = LayoutJob::default();
-
-    for line in code.lines() {
-        tokenize_line(line, &pal, &font, &mut job);
-        job.append("\n", 0.0, TextFormat { font_id: font.clone(), color: pal.default, ..Default::default() });
-    }
-
-    job
 }
 
 fn fmt(color: Color32, font: &FontId) -> TextFormat {
     TextFormat { font_id: font.clone(), color, ..Default::default() }
 }
 
-fn tokenize_line(line: &str, pal: &Palette, font: &FontId, job: &mut LayoutJob) {
-    // Check preprocessor directive
-    if line.trim_start().starts_with('#') {
+pub fn highlight_c(code: &str, is_dark: bool, font_size: f32) -> LayoutJob {
+    let pal = if is_dark { dark_palette() } else { light_palette() };
+    let font = FontId::new(font_size, FontFamily::Monospace);
+    let mut job = LayoutJob::default();
+    let mut in_block_comment = false;
+
+    for line in code.lines() {
+        tokenize_line(line, &pal, &font, &mut job, &mut in_block_comment);
+        job.append("\n", 0.0, fmt(pal.default, &font));
+    }
+
+    job
+}
+
+fn tokenize_line(
+    line: &str,
+    pal: &Palette,
+    font: &FontId,
+    job: &mut LayoutJob,
+    in_block_comment: &mut bool,
+) {
+    // Inside a multi-line block comment
+    if *in_block_comment {
+        if let Some(end) = line.find("*/") {
+            job.append(&line[..end + 2], 0.0, fmt(pal.comment, font));
+            *in_block_comment = false;
+            let rest = &line[end + 2..];
+            if !rest.is_empty() {
+                tokenize_rest(rest, pal, font, job, in_block_comment);
+            }
+        } else {
+            job.append(line, 0.0, fmt(pal.comment, font));
+        }
+        return;
+    }
+
+    // Preprocessor directive
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('#') {
         for pp in PREPROC {
-            if line.trim_start().starts_with(pp) {
-                let leading_spaces = line.len() - line.trim_start().len();
-                if leading_spaces > 0 {
-                    job.append(&line[..leading_spaces], 0.0, fmt(pal.default, font));
+            if trimmed.starts_with(pp) {
+                let leading = line.len() - trimmed.len();
+                if leading > 0 {
+                    job.append(&line[..leading], 0.0, fmt(pal.default, font));
                 }
                 job.append(pp, 0.0, fmt(pal.preproc, font));
-                let rest = &line[leading_spaces + pp.len()..];
-                // Colour the rest as preproc/string
-                tokenize_rest(rest, pal, font, job, true);
+                tokenize_rest(&line[leading + pp.len()..], pal, font, job, in_block_comment);
                 return;
             }
         }
     }
 
-    // Line comment
-    if let Some(pos) = line.find("//") {
-        tokenize_rest(&line[..pos], pal, font, job, false);
-        job.append(&line[pos..], 0.0, fmt(pal.comment, font));
-        return;
-    }
-
-    tokenize_rest(line, pal, font, job, false);
+    tokenize_rest(line, pal, font, job, in_block_comment);
 }
 
-fn tokenize_rest(s: &str, pal: &Palette, font: &FontId, job: &mut LayoutJob, _is_preproc: bool) {
+fn tokenize_rest(
+    s: &str,
+    pal: &Palette,
+    font: &FontId,
+    job: &mut LayoutJob,
+    in_block_comment: &mut bool,
+) {
     let mut i = 0;
     let bytes = s.as_bytes();
     let n = s.len();
 
     while i < n {
-        // String literal
+        // Block comment /*
+        if i + 1 < n && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            let start = i;
+            i += 2;
+            loop {
+                if i + 1 < n && bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    i += 2;
+                    job.append(&s[start..i], 0.0, fmt(pal.comment, font));
+                    break;
+                }
+                if i >= n {
+                    job.append(&s[start..], 0.0, fmt(pal.comment, font));
+                    *in_block_comment = true;
+                    return;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        // Line comment //
+        if i + 1 < n && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            job.append(&s[i..], 0.0, fmt(pal.comment, font));
+            return;
+        }
+
+        // String / char literal
         if bytes[i] == b'"' || bytes[i] == b'\'' {
             let delim = bytes[i];
             let start = i;
@@ -115,22 +171,23 @@ fn tokenize_rest(s: &str, pal: &Palette, font: &FontId, job: &mut LayoutJob, _is
             continue;
         }
 
-        // Number
-        if bytes[i].is_ascii_digit() || (bytes[i] == b'-' && i + 1 < n && bytes[i + 1].is_ascii_digit()) {
+        // Number (not preceded by identifier char)
+        if bytes[i].is_ascii_digit() {
+            let prev_alpha = i > 0
+                && (bytes[i - 1].is_ascii_alphabetic() || bytes[i - 1] == b'_');
             let start = i;
-            if bytes[i] == b'-' { i += 1; }
-            while i < n && (bytes[i].is_ascii_digit() || bytes[i] == b'.' || bytes[i] == b'x' || bytes[i] == b'X' || (i > 0 && bytes[i-1] == b'x' && bytes[i].is_ascii_hexdigit())) {
+            while i < n
+                && (bytes[i].is_ascii_alphanumeric()
+                    || bytes[i] == b'.'
+                    || bytes[i] == b'x'
+                    || bytes[i] == b'X'
+                    || bytes[i] == b'_')
+            {
                 i += 1;
             }
-            // Only colour if standalone number (not part of identifier)
-            let prev_alpha = start > 0 && (bytes[start - 1].is_ascii_alphabetic() || bytes[start - 1] == b'_');
-            if !prev_alpha {
-                job.append(&s[start..i], 0.0, fmt(pal.number, font));
-                continue;
-            } else {
-                job.append(&s[start..i], 0.0, fmt(pal.default, font));
-                continue;
-            }
+            let color = if prev_alpha { pal.default } else { pal.number };
+            job.append(&s[start..i], 0.0, fmt(color, font));
+            continue;
         }
 
         // Identifier or keyword
@@ -140,18 +197,34 @@ fn tokenize_rest(s: &str, pal: &Palette, font: &FontId, job: &mut LayoutJob, _is
                 i += 1;
             }
             let word = &s[start..i];
-            let color = if KEYWORDS.contains(&word) { pal.keyword } else { pal.default };
+
+            // Peek past whitespace: function name if followed by '('
+            let is_func = {
+                let mut j = i;
+                while j < n && bytes[j] == b' ' { j += 1; }
+                j < n && bytes[j] == b'('
+            };
+
+            let color = if TYPE_KEYWORDS.contains(&word) {
+                pal.type_kw
+            } else if FLOW_KEYWORDS.contains(&word) {
+                pal.flow_kw
+            } else if is_func {
+                pal.func
+            } else {
+                pal.default
+            };
             job.append(word, 0.0, fmt(color, font));
             continue;
         }
 
-        // Operators and punctuation
+        // Operators
         let color = match bytes[i] {
-            b'{' | b'}' | b'(' | b')' | b'[' | b']' => pal.default,
-            b'+' | b'-' | b'*' | b'/' | b'%' | b'=' | b'<' | b'>' | b'&' | b'|' | b'^' | b'~' | b'!' => pal.operator,
+            b'+' | b'-' | b'*' | b'/' | b'%' | b'=' | b'<' | b'>'
+            | b'&' | b'|' | b'^' | b'~' | b'!' | b'?' | b':' => pal.operator,
             _ => pal.default,
         };
-        job.append(&s[i..i+1], 0.0, fmt(color, font));
+        job.append(&s[i..i + 1], 0.0, fmt(color, font));
         i += 1;
     }
 }

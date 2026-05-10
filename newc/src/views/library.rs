@@ -686,10 +686,9 @@ fn show_edit_form(
 fn code_block(ui: &mut Ui, code: &str) {
     egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
         ScrollArea::horizontal().id_salt(code.len()).show(ui, |ui| {
-            ui.add(
-                egui::Label::new(RichText::new(code).monospace().size(12.0))
-                    .wrap_mode(egui::TextWrapMode::Extend),
-            );
+            let is_dark = ui.visuals().dark_mode;
+            let job = crate::highlight::highlight_c(code, is_dark, 12.0);
+            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
         });
     });
 }
