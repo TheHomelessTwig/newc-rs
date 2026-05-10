@@ -322,29 +322,20 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                         });
                     }
                 } else {
-                    // ── Grouped list (when a group filter is active) ──────────
-                    let mut modules: Vec<String> =
-                        candidates.iter().map(|f| f.module.clone()).collect();
-                    modules.sort();
-                    modules.dedup();
-
-                    for module in &modules {
-                        ui.collapsing(module.as_str(), |ui| {
-                            for func in candidates.iter().filter(|f| &f.module == module) {
-                                let selected = state.selected.as_deref() == Some(&func.name);
-                                ui.horizontal(|ui| {
-                                    let star = if func.starred { "★" } else { "☆" };
-                                    if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
-                                        action = LibraryAction::ToggleStar(func.name.clone());
-                                    }
-                                    if ui.selectable_label(selected, &func.name).clicked() {
-                                        if state.selected.as_deref() != Some(&func.name) {
-                                            state.selected = Some(func.name.clone());
-                                            state.edit_mode = false;
-                                            state.draft = None;
-                                        }
-                                    }
-                                });
+                    // ── Flat list for selected group ──────────────────────────
+                    for func in &candidates {
+                        let selected = state.selected.as_deref() == Some(&func.name);
+                        ui.horizontal(|ui| {
+                            let star = if func.starred { "★" } else { "☆" };
+                            if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
+                                action = LibraryAction::ToggleStar(func.name.clone());
+                            }
+                            if ui.selectable_label(selected, &func.name).clicked() {
+                                if state.selected.as_deref() != Some(&func.name) {
+                                    state.selected = Some(func.name.clone());
+                                    state.edit_mode = false;
+                                    state.draft = None;
+                                }
                             }
                         });
                     }
