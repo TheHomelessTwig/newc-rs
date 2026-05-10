@@ -14,7 +14,7 @@ pub fn show(ui: &mut Ui, state: &mut CRefState) {
         ui.separator();
         ui.text_edit_singleline(&mut state.search)
             .labelled_by(ui.label("Search:").id);
-        if !state.search.is_empty() && ui.small_button("✕").clicked() {
+        if !state.search.is_empty() && ui.small_button("X").clicked() {
             state.search.clear();
         }
     });

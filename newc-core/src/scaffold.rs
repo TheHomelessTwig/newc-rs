@@ -5,6 +5,7 @@ use std::process::Command;
 use chrono::Local;
 
 use crate::error::{NewcError, Result};
+use crate::module::is_valid_c_ident;
 use crate::templates;
 
 #[derive(Debug, Clone)]
@@ -21,6 +22,10 @@ pub enum DefaultModule {
     Math,
     Display,
     Array,
+    Strings,
+    LinkedList,
+    Files,
+    TestUtils,
 }
 
 impl DefaultModule {
@@ -34,11 +39,19 @@ impl DefaultModule {
             Self::Math => "math",
             Self::Display => "display",
             Self::Array => "array",
+            Self::Strings => "strings",
+            Self::LinkedList => "linked_list",
+            Self::Files => "files",
+            Self::TestUtils => "test_utils",
         }
     }
 }
 
 pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
+    if !is_valid_c_ident(&opts.name) {
+        return Err(NewcError::InvalidName(opts.name.clone()));
+    }
+
     let root = parent.join(&opts.name);
 
     if root.exists() {
@@ -61,8 +74,13 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
         templates::main_c(author, &date, &include_names),
     )?;
 
-    // Makefile
-    fs::write(root.join("Makefile"), templates::MAKEFILE)?;
+    // Makefile — use test variant if test_utils module is included
+    let makefile = if opts.modules.contains(&DefaultModule::TestUtils) {
+        templates::MAKEFILE_WITH_TEST
+    } else {
+        templates::MAKEFILE
+    };
+    fs::write(root.join("Makefile"), makefile)?;
 
     // Default module files
     for module in &opts.modules {
@@ -88,6 +106,22 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
             DefaultModule::Array => {
                 fs::write(root.join("include").join("array.h"), templates::array_h(author, &date))?;
                 fs::write(root.join("src").join("array.c"), templates::array_c(author, &date))?;
+            }
+            DefaultModule::Strings => {
+                fs::write(root.join("include").join("strings.h"), templates::strings_h(author, &date))?;
+                fs::write(root.join("src").join("strings.c"), templates::strings_c(author, &date))?;
+            }
+            DefaultModule::LinkedList => {
+                fs::write(root.join("include").join("linked_list.h"), templates::linked_list_h(author, &date))?;
+                fs::write(root.join("src").join("linked_list.c"), templates::linked_list_c(author, &date))?;
+            }
+            DefaultModule::Files => {
+                fs::write(root.join("include").join("files.h"), templates::files_h(author, &date))?;
+                fs::write(root.join("src").join("files.c"), templates::files_c(author, &date))?;
+            }
+            DefaultModule::TestUtils => {
+                fs::write(root.join("include").join("test_utils.h"), templates::test_utils_h(author, &date))?;
+                fs::write(root.join("src").join("test_utils.c"), templates::test_utils_c(author, &date))?;
             }
         }
     }

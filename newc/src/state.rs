@@ -2,14 +2,12 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use newc_core::{
-    config::AppConfig, diag::Diagnostic, function_lib::FunctionLibrary,
+    config::AppConfig, diag::Diagnostic,
     grep::SearchResult, main_builder::MainBuilderState,
     meta::ProjectMeta, project::Project, stats::ProjectStats,
 };
-use crate::views::cref::CRefState;
 use crate::views::header_editor::HeaderEditorState;
 use crate::views::import_c::ImportState;
-use crate::views::library::LibraryState;
 use crate::views::module_detail::ModuleDetailState;
 use crate::views::quick_search::QuickSearchState;
 use crate::build_runner::BuildLine;
@@ -20,6 +18,7 @@ pub enum View {
     CreateProject,
     FunctionLibrary,
     CReference,
+    Snippets,
     ProjectDetail(Project),
     ProjectStats(Project),
     ProjectNotes(Project),
@@ -46,7 +45,6 @@ pub enum BuildState {
 pub struct AppState {
     pub view: View,
     pub known_projects: Vec<PathBuf>,
-    pub function_lib: FunctionLibrary,
     pub config: AppConfig,
     pub build_lines: Vec<BuildLine>,
     pub build_state: BuildState,
@@ -59,8 +57,11 @@ pub struct AppState {
     pub create_include_math: bool,
     pub create_include_display: bool,
     pub create_include_array: bool,
-    // Library view
-    pub library_state: LibraryState,
+    pub create_include_strings: bool,
+    pub create_include_linked_list: bool,
+    pub create_include_files: bool,
+    pub create_include_test_utils: bool,
+    pub create_location: String,
     // Module detail / header editor
     pub module_detail_state: ModuleDetailState,
     pub header_editor_state: HeaderEditorState,
@@ -97,8 +98,6 @@ pub struct AppState {
     pub cached_stats: Option<(PathBuf, ProjectStats)>,
     // Settings draft (edited copy before save)
     pub config_draft: AppConfig,
-    // C reference
-    pub cref_state: CRefState,
     // Project notes (content loaded per-project)
     pub notes_content: String,
     pub notes_dirty: bool,
@@ -130,8 +129,6 @@ pub struct AppState {
     pub makefile_dirty: bool,
     // Usage tracker search
     pub usage_search: String,
-    // Code snippets panel
-    pub show_snippets: bool,
     // Git panel extras
     pub git_new_branch: String,
     pub git_show_diff: bool,
@@ -163,7 +160,6 @@ impl AppState {
         Self {
             view: View::Home,
             known_projects,
-            function_lib: FunctionLibrary::load(),
             config,
             build_lines: Vec::new(),
             build_state: BuildState::Idle,
@@ -175,7 +171,13 @@ impl AppState {
             create_include_math: true,
             create_include_display: true,
             create_include_array: true,
-            library_state: LibraryState::default(),
+            create_include_strings: false,
+            create_include_linked_list: false,
+            create_include_files: false,
+            create_include_test_utils: false,
+            create_location: dirs::home_dir()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             module_detail_state: ModuleDetailState::default(),
             header_editor_state: HeaderEditorState::default(),
             main_builder: MainBuilderState::default(),
@@ -199,7 +201,6 @@ impl AppState {
             error_msg: None,
             cached_stats: None,
             config_draft,
-            cref_state: CRefState::default(),
             notes_content: String::new(),
             notes_dirty: false,
             show_shortcuts: false,
@@ -220,7 +221,6 @@ impl AppState {
             makefile_content: String::new(),
             makefile_dirty: false,
             usage_search: String::new(),
-            show_snippets: false,
             git_new_branch: String::new(),
             git_show_diff: false,
             git_diff_staged: false,

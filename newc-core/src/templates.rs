@@ -1316,3 +1316,890 @@ int array_find_sorted_double(double arr[], int size, double value)
 "#
     )
 }
+
+// ── strings module ────────────────────────────────────────────────────────────
+
+pub fn strings_h(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Declarations for string utility functions — length, copy, case, reverse
+ *
+ * Date: {date}
+ */
+
+#ifndef STRINGS_H
+#define STRINGS_H
+
+/* Returns the length of str (not counting null terminator) */
+int str_length(const char *str);
+/* Copies src into dst safely; dst_size is total buffer size including null terminator */
+void str_copy_safe(char *dst, const char *src, int dst_size);
+/* Converts all characters in str to uppercase in-place */
+void str_to_upper(char *str);
+/* Converts all characters in str to lowercase in-place */
+void str_to_lower(char *str);
+/* Reverses str in-place */
+void str_reverse(char *str);
+/* Returns 0 if a == b, negative if a < b, positive if a > b */
+int str_compare(const char *a, const char *b);
+/* Returns 1 if str contains the character c, 0 otherwise */
+int str_contains_char(const char *str, char c);
+/* Returns 1 if str starts with prefix, 0 otherwise */
+int str_starts_with(const char *str, const char *prefix);
+/* Strips leading and trailing whitespace from str in-place */
+void str_trim(char *str);
+
+#endif
+"#
+    )
+}
+
+pub fn strings_c(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: String utility functions — length, copy, case conversion, reverse
+ *
+ * Date: {date}
+ */
+
+/* Standard I/O for printf */
+#include <stdio.h>
+/* ctype for toupper, tolower, isspace */
+#include <ctype.h>
+/* Function declarations for this module */
+#include "strings.h"
+
+/*
+ * Function:
+ *     str_length
+ * Input:
+ *     str - the string to measure
+ * Output:
+ *     number of characters before the null terminator
+ * Algorithm:
+ *     walk pointer until null terminator, count steps
+ */
+int str_length(const char *str)
+{{
+	int len = 0;
+	while (str[len] != '\0') {{
+		len++;
+	}}
+	return len;
+}}
+
+/*
+ * Function:
+ *     str_copy_safe
+ * Input:
+ *     dst      - destination buffer
+ *     src      - source string
+ *     dst_size - total size of dst including null terminator
+ * Output:
+ *     None — result written into dst, always null-terminated
+ * Algorithm:
+ *     copy at most dst_size - 1 characters, then append null terminator
+ */
+void str_copy_safe(char *dst, const char *src, int dst_size)
+{{
+	int i;
+	for (i = 0; i < dst_size - 1 && src[i] != '\0'; i++) {{
+		dst[i] = src[i];
+	}}
+	dst[i] = '\0';
+}}
+
+/*
+ * Function:
+ *     str_to_upper
+ * Input:
+ *     str - string to convert in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     for each character apply toupper
+ */
+void str_to_upper(char *str)
+{{
+	for (int i = 0; str[i] != '\0'; i++) {{
+		str[i] = (char)toupper((unsigned char)str[i]);
+	}}
+}}
+
+/*
+ * Function:
+ *     str_to_lower
+ * Input:
+ *     str - string to convert in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     for each character apply tolower
+ */
+void str_to_lower(char *str)
+{{
+	for (int i = 0; str[i] != '\0'; i++) {{
+		str[i] = (char)tolower((unsigned char)str[i]);
+	}}
+}}
+
+/*
+ * Function:
+ *     str_reverse
+ * Input:
+ *     str - string to reverse in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     swap characters from both ends walking inward
+ */
+void str_reverse(char *str)
+{{
+	int left = 0;
+	int right = str_length(str) - 1;
+	while (left < right) {{
+		char tmp = str[left];
+		str[left]  = str[right];
+		str[right] = tmp;
+		left++;
+		right--;
+	}}
+}}
+
+/*
+ * Function:
+ *     str_compare
+ * Input:
+ *     a, b - strings to compare
+ * Output:
+ *     0 if equal, negative if a < b, positive if a > b
+ * Algorithm:
+ *     compare characters until difference or null terminator
+ */
+int str_compare(const char *a, const char *b)
+{{
+	while (*a != '\0' && *a == *b) {{
+		a++;
+		b++;
+	}}
+	return (unsigned char)*a - (unsigned char)*b;
+}}
+
+/*
+ * Function:
+ *     str_contains_char
+ * Input:
+ *     str - the string to search
+ *     c   - the character to look for
+ * Output:
+ *     1 if c is found in str, 0 otherwise
+ * Algorithm:
+ *     scan each character; return 1 on match
+ */
+int str_contains_char(const char *str, char c)
+{{
+	for (int i = 0; str[i] != '\0'; i++) {{
+		if (str[i] == c) {{
+			return 1;
+		}}
+	}}
+	return 0;
+}}
+
+/*
+ * Function:
+ *     str_starts_with
+ * Input:
+ *     str    - the string to test
+ *     prefix - the prefix to look for
+ * Output:
+ *     1 if str begins with prefix, 0 otherwise
+ * Algorithm:
+ *     compare prefix characters against str; fail on first mismatch
+ */
+int str_starts_with(const char *str, const char *prefix)
+{{
+	for (int i = 0; prefix[i] != '\0'; i++) {{
+		if (str[i] != prefix[i]) {{
+			return 0;
+		}}
+	}}
+	return 1;
+}}
+
+/*
+ * Function:
+ *     str_trim
+ * Input:
+ *     str - string to trim in-place
+ * Output:
+ *     None — leading and trailing whitespace removed
+ * Algorithm:
+ *     find first and last non-whitespace; shift and null-terminate
+ */
+void str_trim(char *str)
+{{
+	int start = 0;
+	while (str[start] != '\0' && isspace((unsigned char)str[start])) {{
+		start++;
+	}}
+	int end = str_length(str) - 1;
+	while (end >= start && isspace((unsigned char)str[end])) {{
+		end--;
+	}}
+	int len = end - start + 1;
+	for (int i = 0; i < len; i++) {{
+		str[i] = str[start + i];
+	}}
+	str[len] = '\0';
+}}
+"#
+    )
+}
+
+// ── linked_list module ────────────────────────────────────────────────────────
+
+pub fn linked_list_h(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Declarations for singly linked list with integer data
+ *
+ * Date: {date}
+ */
+
+#ifndef LINKED_LIST_H
+#define LINKED_LIST_H
+
+/* Node of the linked list */
+typedef struct Node {{
+	int data;
+	struct Node *next;
+}} Node;
+
+/* Inserts a new node with data at the front of the list; updates *head */
+void list_insert(Node **head, int data);
+/* Removes the first node with matching data; returns 1 if removed, 0 if not found */
+int list_delete_value(Node **head, int data);
+/* Prints all elements as [a -> b -> c -> NULL] */
+void list_print(Node *head);
+/* Frees all nodes in the list and sets *head to NULL */
+void list_free(Node **head);
+/* Returns pointer to first node with data, or NULL if not found */
+Node *list_find(Node *head, int data);
+/* Returns the number of nodes in the list */
+int list_length(Node *head);
+
+#endif
+"#
+    )
+}
+
+pub fn linked_list_c(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Singly linked list — insert, delete, find, print, free
+ *
+ * Date: {date}
+ */
+
+/* Standard I/O for printf */
+#include <stdio.h>
+/* malloc, free */
+#include <stdlib.h>
+/* Function declarations for this module */
+#include "linked_list.h"
+
+/*
+ * Function:
+ *     list_insert
+ * Input:
+ *     head - pointer to the head pointer of the list
+ *     data - integer to store in the new node
+ * Output:
+ *     None — new node prepended to the list
+ * Algorithm:
+ *     allocate new node, set data and next, update *head
+ */
+void list_insert(Node **head, int data)
+{{
+	Node *node = malloc(sizeof(Node));
+	if (node == NULL) {{
+		fprintf(stderr, "list_insert: malloc failed\n");
+		return;
+	}}
+	node->data = data;
+	node->next = *head;
+	*head = node;
+}}
+
+/*
+ * Function:
+ *     list_delete_value
+ * Input:
+ *     head - pointer to the head pointer of the list
+ *     data - value to remove
+ * Output:
+ *     1 if node was found and removed, 0 otherwise
+ * Algorithm:
+ *     traverse with prev/curr pointers; unlink matching node
+ */
+int list_delete_value(Node **head, int data)
+{{
+	Node *prev = NULL;
+	Node *curr = *head;
+	while (curr != NULL) {{
+		if (curr->data == data) {{
+			if (prev == NULL) {{
+				*head = curr->next;
+			}} else {{
+				prev->next = curr->next;
+			}}
+			free(curr);
+			curr = NULL;
+			return 1;
+		}}
+		prev = curr;
+		curr = curr->next;
+	}}
+	return 0;
+}}
+
+/*
+ * Function:
+ *     list_print
+ * Input:
+ *     head - first node of the list (may be NULL)
+ * Output:
+ *     None — prints list in format [a -> b -> c -> NULL]
+ * Algorithm:
+ *     traverse nodes printing each data value
+ */
+void list_print(Node *head)
+{{
+	printf("[");
+	Node *curr = head;
+	while (curr != NULL) {{
+		printf("%d", curr->data);
+		if (curr->next != NULL) {{
+			printf(" -> ");
+		}}
+		curr = curr->next;
+	}}
+	printf(" -> NULL]\n");
+}}
+
+/*
+ * Function:
+ *     list_free
+ * Input:
+ *     head - pointer to the head pointer of the list
+ * Output:
+ *     None — all nodes freed, *head set to NULL
+ * Algorithm:
+ *     traverse freeing each node; advance before freeing
+ */
+void list_free(Node **head)
+{{
+	Node *curr = *head;
+	while (curr != NULL) {{
+		Node *next = curr->next;
+		free(curr);
+		curr = next;
+	}}
+	*head = NULL;
+}}
+
+/*
+ * Function:
+ *     list_find
+ * Input:
+ *     head - first node of the list
+ *     data - value to search for
+ * Output:
+ *     pointer to first matching node, or NULL if not found
+ * Algorithm:
+ *     linear scan comparing each node's data
+ */
+Node *list_find(Node *head, int data)
+{{
+	Node *curr = head;
+	while (curr != NULL) {{
+		if (curr->data == data) {{
+			return curr;
+		}}
+		curr = curr->next;
+	}}
+	return NULL;
+}}
+
+/*
+ * Function:
+ *     list_length
+ * Input:
+ *     head - first node of the list (may be NULL)
+ * Output:
+ *     number of nodes in the list
+ * Algorithm:
+ *     count each node traversed
+ */
+int list_length(Node *head)
+{{
+	int count = 0;
+	Node *curr = head;
+	while (curr != NULL) {{
+		count++;
+		curr = curr->next;
+	}}
+	return count;
+}}
+"#
+    )
+}
+
+// ── files module ──────────────────────────────────────────────────────────────
+
+pub fn files_h(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Declarations for safe file I/O helper functions
+ *
+ * Date: {date}
+ */
+
+#ifndef FILES_H
+#define FILES_H
+
+/* Opens a file safely; prints error and returns NULL on failure */
+FILE *file_open_safe(const char *path, const char *mode);
+/* Counts the number of newline-terminated lines in an open file; rewinds when done */
+int file_count_lines(FILE *fp);
+/* Reads the next line from fp into buf (max_len includes null terminator); strips newline */
+int file_read_line_into(FILE *fp, char *buf, int max_len);
+/* Writes a line to fp followed by a newline; returns 1 on success, 0 on error */
+int file_write_line(FILE *fp, const char *line);
+
+#endif
+"#
+    )
+}
+
+pub fn files_c(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Safe file I/O helpers — open, line count, read line, write line
+ *
+ * Date: {date}
+ */
+
+/* Standard I/O for FILE, fopen, fgets, fprintf, rewind, etc. */
+#include <stdio.h>
+/* String functions for strlen */
+#include <string.h>
+/* Function declarations for this module */
+#include "files.h"
+
+/*
+ * Function:
+ *     file_open_safe
+ * Input:
+ *     path - path to the file
+ *     mode - open mode string (e.g. "r", "w", "a")
+ * Output:
+ *     FILE pointer on success, NULL on failure (error printed to stderr)
+ * Algorithm:
+ *     call fopen; if NULL print error and return NULL
+ */
+FILE *file_open_safe(const char *path, const char *mode)
+{{
+	FILE *fp = fopen(path, mode);
+	if (fp == NULL) {{
+		fprintf(stderr, "Error: cannot open '%s' in mode '%s'\n", path, mode);
+	}}
+	return fp;
+}}
+
+/*
+ * Function:
+ *     file_count_lines
+ * Input:
+ *     fp - open file pointer (must not be NULL)
+ * Output:
+ *     number of newline-terminated lines; file position rewound to start
+ * Algorithm:
+ *     read characters counting newlines, then rewind
+ */
+int file_count_lines(FILE *fp)
+{{
+	int count = 0;
+	int c;
+	while ((c = fgetc(fp)) != EOF) {{
+		if (c == '\n') {{
+			count++;
+		}}
+	}}
+	rewind(fp);
+	return count;
+}}
+
+/*
+ * Function:
+ *     file_read_line_into
+ * Input:
+ *     fp      - open file pointer
+ *     buf     - destination buffer
+ *     max_len - buffer size including null terminator
+ * Output:
+ *     1 if a line was read, 0 on EOF or error
+ *     Trailing newline stripped from buf
+ * Algorithm:
+ *     use fgets; strip trailing newline if present
+ */
+int file_read_line_into(FILE *fp, char *buf, int max_len)
+{{
+	if (fgets(buf, max_len, fp) == NULL) {{
+		return 0;
+	}}
+	int len = (int)strlen(buf);
+	if (len > 0 && buf[len - 1] == '\n') {{
+		buf[len - 1] = '\0';
+	}}
+	return 1;
+}}
+
+/*
+ * Function:
+ *     file_write_line
+ * Input:
+ *     fp   - open file pointer (write mode)
+ *     line - string to write
+ * Output:
+ *     1 on success, 0 on write error
+ * Algorithm:
+ *     fprintf with newline; check return value
+ */
+int file_write_line(FILE *fp, const char *line)
+{{
+	return fprintf(fp, "%s\n", line) > 0 ? 1 : 0;
+}}
+"#
+    )
+}
+
+// ── test_utils module ─────────────────────────────────────────────────────────
+
+pub fn test_utils_h(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Minimal unit test harness — assert macros, test runner, summary
+ *
+ * Date: {date}
+ */
+
+#ifndef TEST_UTILS_H
+#define TEST_UTILS_H
+
+/* Assert that two integers are equal; prints PASS/FAIL with values */
+void assert_int_eq(int expected, int actual, const char *label);
+/* Assert that two strings are equal; prints PASS/FAIL */
+void assert_str_eq(const char *expected, const char *actual, const char *label);
+/* Assert that pointer is NULL */
+void assert_null(const void *ptr, const char *label);
+/* Assert that pointer is not NULL */
+void assert_not_null(const void *ptr, const char *label);
+/* Assert that two doubles are equal within tolerance */
+void assert_double_near(double expected, double actual, double tolerance, const char *label);
+/* Run a named test function; updates pass/fail counters */
+void test_run(const char *name, void (*test_fn)(void));
+/* Print final summary: passed/total */
+void print_test_summary(void);
+
+#endif
+"#
+    )
+}
+
+pub fn test_utils_c(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Minimal unit test harness implementation
+ *
+ * Date: {date}
+ */
+
+/* printf, fprintf */
+#include <stdio.h>
+/* strcmp */
+#include <string.h>
+/* fabs */
+#include <math.h>
+/* Function declarations for this module */
+#include "test_utils.h"
+
+static int g_passed = 0;
+static int g_failed = 0;
+
+/*
+ * Function:
+ *     assert_int_eq
+ * Input:
+ *     expected - the expected integer value
+ *     actual   - the actual integer value
+ *     label    - description of the assertion
+ * Output:
+ *     None — prints PASS or FAIL to stdout; updates counters
+ * Algorithm:
+ *     compare expected and actual; print result
+ */
+void assert_int_eq(int expected, int actual, const char *label)
+{{
+	if (expected == actual) {{
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s — expected %d, got %d\n", label, expected, actual);
+		g_failed++;
+	}}
+}}
+
+/*
+ * Function:
+ *     assert_str_eq
+ * Input:
+ *     expected - expected string
+ *     actual   - actual string
+ *     label    - description of the assertion
+ * Output:
+ *     None — prints PASS or FAIL
+ * Algorithm:
+ *     strcmp; print match or mismatch
+ */
+void assert_str_eq(const char *expected, const char *actual, const char *label)
+{{
+	if (strcmp(expected, actual) == 0) {{
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s — expected \"%s\", got \"%s\"\n", label, expected, actual);
+		g_failed++;
+	}}
+}}
+
+/*
+ * Function:
+ *     assert_null
+ * Input:
+ *     ptr   - pointer to check
+ *     label - description
+ * Output:
+ *     None — prints PASS if ptr is NULL
+ */
+void assert_null(const void *ptr, const char *label)
+{{
+	if (ptr == NULL) {{
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s — expected NULL, got non-NULL\n", label);
+		g_failed++;
+	}}
+}}
+
+/*
+ * Function:
+ *     assert_not_null
+ * Input:
+ *     ptr   - pointer to check
+ *     label - description
+ * Output:
+ *     None — prints PASS if ptr is non-NULL
+ */
+void assert_not_null(const void *ptr, const char *label)
+{{
+	if (ptr != NULL) {{
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s — expected non-NULL, got NULL\n", label);
+		g_failed++;
+	}}
+}}
+
+/*
+ * Function:
+ *     assert_double_near
+ * Input:
+ *     expected  - expected double value
+ *     actual    - actual double value
+ *     tolerance - acceptable difference (e.g. 0.0001)
+ *     label     - description
+ * Output:
+ *     None — prints PASS if |expected - actual| <= tolerance
+ */
+void assert_double_near(double expected, double actual, double tolerance, const char *label)
+{{
+	if (fabs(expected - actual) <= tolerance) {{
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s — expected %.6f, got %.6f (tolerance %.6f)\n",
+		       label, expected, actual, tolerance);
+		g_failed++;
+	}}
+}}
+
+/*
+ * Function:
+ *     test_run
+ * Input:
+ *     name    - human-readable test name printed as header
+ *     test_fn - function pointer to the test body (takes no args, returns void)
+ * Output:
+ *     None — runs test_fn and prints header
+ */
+void test_run(const char *name, void (*test_fn)(void))
+{{
+	printf("[TEST] %s\n", name);
+	test_fn();
+}}
+
+/*
+ * Function:
+ *     print_test_summary
+ * Input:
+ *     None
+ * Output:
+ *     None — prints final pass/fail summary and exits with 1 if any failures
+ */
+void print_test_summary(void)
+{{
+	int total = g_passed + g_failed;
+	printf("\n========================================\n");
+	printf("Results: %d / %d passed", g_passed, total);
+	if (g_failed == 0) {{
+		printf(" — ALL PASS\n");
+	}} else {{
+		printf(" — %d FAILED\n", g_failed);
+	}}
+	printf("========================================\n");
+}}
+"#
+    )
+}
+
+/// Makefile with an added `test` target that runs ./main and checks exit code.
+pub const MAKEFILE_WITH_TEST: &str = r#"CC = gcc
+
+# =========================
+# Warning levels
+# =========================
+BASE_WARNINGS = -Wall -Wextra -Wpedantic \
+-Wshadow -Wconversion -Wsign-conversion \
+-Wstrict-prototypes -Wmissing-prototypes \
+-Wundef -Wpointer-arith -Wcast-align \
+-Wformat=2 -Wswitch-enum -Wimplicit-fallthrough
+
+STRICT_FLAGS = -Werror
+
+# =========================
+# Flags
+# =========================
+CFLAGS = -std=c11 -Iinclude -MMD -MP $(BASE_WARNINGS)
+LDFLAGS = -lm
+
+DEBUG_CFLAGS  = -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
+DEBUG_LDFLAGS = -fsanitize=address,undefined
+
+RELEASE_CFLAGS  = -O2 -fstack-protector-strong -D_FORTIFY_SOURCE=2
+RELEASE_LDFLAGS = -O2 -fstack-protector-strong
+
+# =========================
+# Project structure
+# =========================
+TARGET = main
+
+SRC_DIR = src
+BUILD_DIR = build
+
+SRCS = $(wildcard $(SRC_DIR)/*.c)
+OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+DEPS = $(OBJS:.o=.d)
+
+# =========================
+# Default build
+# =========================
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR):
+	mkdir -p $@
+
+# Include dependency files
+-include $(DEPS)
+
+# =========================
+# Test
+# =========================
+test: all
+	./$(TARGET)
+
+# =========================
+# Run
+# =========================
+run: all
+	./$(TARGET)
+
+# =========================
+# Build modes
+# =========================
+
+debug: CFLAGS  += $(DEBUG_CFLAGS)
+debug: LDFLAGS += $(DEBUG_LDFLAGS)
+debug: all
+
+release: CFLAGS  += $(RELEASE_CFLAGS)
+release: LDFLAGS += $(RELEASE_LDFLAGS)
+release: all
+
+# STRICT MODE (clean rebuild + warnings = errors)
+strict: CFLAGS  += $(STRICT_FLAGS) $(RELEASE_CFLAGS)
+strict: LDFLAGS += $(RELEASE_LDFLAGS)
+strict: clean all
+	@echo "Strict build complete (warnings treated as errors)"
+
+# =========================
+# Clean
+# =========================
+clean:
+	rm -rf $(BUILD_DIR) $(TARGET)
+
+# =========================
+# Help
+# =========================
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all       Build the project (default)"
+	@echo "  test      Build and run tests"
+	@echo "  run       Build and run the executable"
+	@echo "  debug     Build with debug symbols and sanitizers (ASan, UBSan)"
+	@echo "  release   Build with optimisations and hardening flags"
+	@echo "  strict    Clean rebuild with -Werror and release optimisations"
+	@echo "  clean     Remove build artefacts and executable"
+	@echo "  help      Show this help message"
+
+.PHONY: all test run clean debug release strict help
+"#;

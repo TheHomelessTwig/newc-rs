@@ -150,7 +150,7 @@ pub fn show(
         let mut to_remove: Option<usize> = None;
         for (i, field) in sb.fields.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                if ui.small_button("X").clicked() { to_remove = Some(i); }
                 ui.add(egui::TextEdit::singleline(&mut field.type_name).desired_width(80.0).hint_text("type"));
                 ui.add(egui::TextEdit::singleline(&mut field.field_name).desired_width(90.0).hint_text("name"));
                 ui.add(egui::TextEdit::singleline(&mut field.comment).desired_width(120.0).hint_text("comment"));

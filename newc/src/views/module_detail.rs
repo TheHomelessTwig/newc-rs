@@ -22,6 +22,8 @@ pub struct ModuleDetailState {
     // Call tree
     pub show_call_tree: bool,
     pub call_tree_lines: Vec<String>,
+    /// When set (navigated from build error click), highlight this source line number.
+    pub highlight_line: Option<usize>,
 }
 
 pub enum ModuleDetailAction {
@@ -58,6 +60,13 @@ pub fn show(
             action = ModuleDetailAction::GoBack;
         }
         ui.heading(format!("Module: {module_name}"));
+        if let Some(line) = state.highlight_line {
+            ui.label(
+                RichText::new(format!("▶ line {line}"))
+                    .color(Color32::from_rgb(255, 180, 60))
+                    .small(),
+            );
+        }
         ui.label(
             RichText::new(src_path.display().to_string())
                 .small()

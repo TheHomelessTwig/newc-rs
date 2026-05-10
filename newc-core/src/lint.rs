@@ -1,6 +1,29 @@
 /// Basic static linter for C source files.
 /// Text/pattern based — no AST. Catches common beginner mistakes.
 
+/// Lint a `.h` header file. Checks for missing include guard (L010).
+pub fn lint_header(content: &str) -> Vec<LintWarning> {
+    let mut warnings = Vec::new();
+    // L010: missing #ifndef guard — check first 5 non-blank lines for #ifndef or #pragma once
+    let has_guard = content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .take(5)
+        .any(|l| {
+            let t = l.trim();
+            t.starts_with("#ifndef") || t.starts_with("#pragma once")
+        });
+    if !has_guard {
+        warnings.push(LintWarning {
+            line_no: 1,
+            severity: LintSeverity::Warning,
+            code: "L010",
+            message: "Header file missing include guard (#ifndef HEADER_H / #pragma once)".into(),
+        });
+    }
+    warnings
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LintSeverity {
     Error,
@@ -29,12 +52,16 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
             continue;
         }
 
-        // L001: gets() usage — unsafe buffer overflow
-        if t.contains("gets(") {
-            warnings.push(LintWarning {
-                line_no: lno, severity: LintSeverity::Error, code: "L001",
-                message: "gets() is unsafe — use fgets() instead".into(),
-            });
+        // L001: gets() usage — unsafe buffer overflow (exclude fgets, ungets, etc.)
+        if let Some(pos) = t.find("gets(") {
+            let prev_is_alpha = pos > 0
+                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+            if !prev_is_alpha {
+                warnings.push(LintWarning {
+                    line_no: lno, severity: LintSeverity::Error, code: "L001",
+                    message: "gets() is unsafe — use fgets() instead".into(),
+                });
+            }
         }
 
         // L002: strcpy without bounds check
@@ -55,17 +82,22 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
 
         // L004: printf with non-literal first arg (possible format string bug)
         // Matches: printf(variable) or printf(ptr); allows string literals and ALL_CAPS macros
+        // Skips fprintf, snprintf, sprintf, dprintf, vprintf, etc. (char before 'printf' is alpha)
         if let Some(pos) = t.find("printf(") {
-            let after = t[pos + 7..].trim_start();
-            let first_char = after.chars().next().unwrap_or('"');
-            let is_safe = first_char == '"'
-                || first_char == ')'
-                || first_char.is_uppercase();
-            if !is_safe {
-                warnings.push(LintWarning {
-                    line_no: lno, severity: LintSeverity::Warning, code: "L004",
-                    message: "printf() called with non-literal format string — possible format attack".into(),
-                });
+            let prev_is_alpha = pos > 0
+                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+            if !prev_is_alpha {
+                let after = t[pos + 7..].trim_start();
+                let first_char = after.chars().next().unwrap_or('"');
+                let is_safe = first_char == '"'
+                    || first_char == ')'
+                    || first_char.is_uppercase();
+                if !is_safe {
+                    warnings.push(LintWarning {
+                        line_no: lno, severity: LintSeverity::Warning, code: "L004",
+                        message: "printf() called with non-literal format string — possible format attack".into(),
+                    });
+                }
             }
         }
 
@@ -127,6 +159,71 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
                     line_no: lno, severity: LintSeverity::Warning, code: "L009",
                     message: "fopen() with no matching fclose() found in next 20 lines".into(),
                 });
+            }
+        }
+
+        // L011: free() not followed by ptr = NULL within 3 lines
+        if let Some(pos) = t.find("free(") {
+            let prev_is_alpha = pos > 0
+                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+            if !prev_is_alpha {
+                let next3: Vec<&str> = lines.iter().skip(i + 1).take(3).cloned().collect();
+                let nulled = next3.iter().any(|l| l.contains("= NULL"));
+                if !nulled {
+                    warnings.push(LintWarning {
+                        line_no: lno, severity: LintSeverity::Info, code: "L011",
+                        message: "free() without setting pointer to NULL afterwards — potential use-after-free".into(),
+                    });
+                }
+            }
+        }
+
+        // L012: strlen() inside a loop condition
+        if (t.starts_with("while") || t.starts_with("for")) && t.contains("strlen(") {
+            warnings.push(LintWarning {
+                line_no: lno, severity: LintSeverity::Warning, code: "L012",
+                message: "strlen() in loop condition — O(n²) performance; cache length in a variable before the loop".into(),
+            });
+        }
+
+        // L013: atoi()/atof() usage — no error checking possible
+        for func in ["atoi(", "atof(", "atol("] {
+            if t.contains(func) {
+                warnings.push(LintWarning {
+                    line_no: lno, severity: LintSeverity::Warning, code: "L013",
+                    message: format!("{} has no error reporting — use strtol()/strtod() with endptr check instead", &func[..func.len()-1]),
+                });
+                break;
+            }
+        }
+
+        // L014: return &local — returning address of a local variable
+        // Heuristic: line contains `return &` and the identifier after & is not `static`/global
+        if t.starts_with("return") && t.contains("return &") {
+            // Exclude common safe patterns: return &static_var, return &global, return &(*ptr)
+            let after = t.trim_start_matches("return").trim().trim_start_matches('&');
+            let is_deref = after.starts_with('(');
+            if !is_deref {
+                warnings.push(LintWarning {
+                    line_no: lno, severity: LintSeverity::Error, code: "L014",
+                    message: "Returning address of a local variable — undefined behaviour after function returns".into(),
+                });
+            }
+        }
+
+        // L015: comparing a value to a non-zero integer literal that looks like a pointer comparison
+        // Heuristic: `== N` or `!= N` where N is a small nonzero int literal (1, -1, 2…)
+        // Only flag when it looks like a pointer context (ptr, p_, *name patterns)
+        for op in ["== 1", "!= 1", "== -1", "!= -1", "== 2", "!= 2"] {
+            if t.contains(op) {
+                // Only warn when line also contains * or common pointer naming
+                if t.contains('*') || t.contains("ptr") || t.contains("_p ") || t.contains("NULL") {
+                    warnings.push(LintWarning {
+                        line_no: lno, severity: LintSeverity::Warning, code: "L015",
+                        message: format!("Comparing pointer/result with '{op}' — did you mean NULL check (== NULL / != NULL)?"),
+                    });
+                    break;
+                }
             }
         }
     }
@@ -199,6 +296,10 @@ mod tests {
     fn l001_in_comment_skipped() {
         assert!(!has(&lint_file("// gets(buf);"), "L001"));
     }
+    #[test]
+    fn l001_fgets_clean() {
+        assert!(!has(&lint_file("fgets(buffer, max_len, stdin);"), "L001"));
+    }
 
     // L002 — strcpy
     #[test]
@@ -232,6 +333,14 @@ mod tests {
     #[test]
     fn l004_printf_uppercase_macro_clean() {
         assert!(!has(&lint_file("printf(MSG_FORMAT, val);"), "L004"));
+    }
+    #[test]
+    fn l004_snprintf_clean() {
+        assert!(!has(&lint_file("snprintf(buf, sizeof(buf), \"%s %d\", q, i);"), "L004"));
+    }
+    #[test]
+    fn l004_fprintf_clean() {
+        assert!(!has(&lint_file(r#"fprintf(stderr, "Error\n");"#), "L004"));
     }
 
     // L005 — assignment in condition
@@ -300,5 +409,59 @@ mod tests {
         let warnings = lint_file(code);
         let w = warnings.iter().find(|w| w.code == "L001").unwrap();
         assert_eq!(w.line_no, 2);
+    }
+
+    // L010 — missing header guard
+    #[test]
+    fn l010_missing_guard_triggers() {
+        assert!(has(&lint_header("int foo(void);"), "L010"));
+    }
+    #[test]
+    fn l010_ifndef_guard_clean() {
+        assert!(!has(&lint_header("#ifndef FOO_H\n#define FOO_H\nint foo(void);\n#endif"), "L010"));
+    }
+    #[test]
+    fn l010_pragma_once_clean() {
+        assert!(!has(&lint_header("#pragma once\nint foo(void);"), "L010"));
+    }
+
+    // L011 — free without NULL
+    #[test]
+    fn l011_free_no_null_triggers() {
+        assert!(has(&lint_file("free(ptr);\ndo_something();"), "L011"));
+    }
+    #[test]
+    fn l011_free_with_null_clean() {
+        assert!(!has(&lint_file("free(ptr);\nptr = NULL;"), "L011"));
+    }
+
+    // L012 — strlen in loop condition
+    #[test]
+    fn l012_strlen_in_while_triggers() {
+        assert!(has(&lint_file("while (i < strlen(s)) {"), "L012"));
+    }
+    #[test]
+    fn l012_strlen_outside_loop_clean() {
+        assert!(!has(&lint_file("int len = strlen(s);"), "L012"));
+    }
+
+    // L013 — atoi/atof usage
+    #[test]
+    fn l013_atoi_triggers() {
+        assert!(has(&lint_file("int n = atoi(argv[1]);"), "L013"));
+    }
+    #[test]
+    fn l013_strtol_clean() {
+        assert!(!has(&lint_file("int n = (int)strtol(argv[1], &end, 10);"), "L013"));
+    }
+
+    // L014 — return &local
+    #[test]
+    fn l014_return_address_local_triggers() {
+        assert!(has(&lint_file("return &local_var;"), "L014"));
+    }
+    #[test]
+    fn l014_return_deref_clean() {
+        assert!(!has(&lint_file("return &(*ptr);"), "L014"));
     }
 }

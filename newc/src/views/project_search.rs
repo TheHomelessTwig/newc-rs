@@ -29,7 +29,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             if ui.button("Search").clicked() || enter {
                 state.search_results = grep::search(&project.root, &state.search_query);
             }
-            if ui.small_button("✕").clicked() {
+            if ui.small_button("X").clicked() {
                 state.search_query.clear();
                 state.search_results.clear();
             }

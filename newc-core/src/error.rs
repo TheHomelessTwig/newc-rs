@@ -17,6 +17,9 @@ pub enum NewcError {
     #[error("Module '{0}' already exists")]
     ModuleExists(String),
 
+    #[error("'{0}' is not a valid C identifier (use letters, digits, underscores; must not start with a digit)")]
+    InvalidName(String),
+
     #[error("No modules found")]
     NoModules,
 

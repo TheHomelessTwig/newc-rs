@@ -1,0 +1,198 @@
+module = "files"
+
+[[functions]]
+name = "file_open_safe"
+module = "files"
+description = "Open a file safely — prints an error to stderr and returns NULL on failure"
+signature = "FILE *file_open_safe(const char *path, const char *mode)"
+tags = ["file", "open", "safe", "error handling"]
+requires = ["stdio.h"]
+header_code = "/* Opens a file safely; prints error and returns NULL on failure */\nFILE *file_open_safe(const char *path, const char *mode);"
+impl_code = '''
+/*
+ * Function:
+ *     file_open_safe
+ * Input:
+ *     path - path to the file
+ *     mode - open mode string (e.g. "r", "w", "a")
+ * Output:
+ *     FILE pointer on success, NULL on failure (error printed to stderr)
+ * Algorithm:
+ *     call fopen; if NULL print error and return NULL
+ */
+FILE *file_open_safe(const char *path, const char *mode)
+{
+	FILE *fp = fopen(path, mode);
+	if (fp == NULL) {
+		fprintf(stderr, "Error: cannot open '%s' in mode '%s'\n", path, mode);
+	}
+	return fp;
+}
+'''
+
+[[functions]]
+name = "file_count_lines"
+module = "files"
+description = "Count newline-terminated lines in an open file; rewinds to start when done"
+signature = "int file_count_lines(FILE *fp)"
+tags = ["file", "count", "lines"]
+requires = ["stdio.h"]
+header_code = "/* Counts the number of newline-terminated lines in an open file; rewinds when done */\nint file_count_lines(FILE *fp);"
+impl_code = '''
+/*
+ * Function:
+ *     file_count_lines
+ * Input:
+ *     fp - open file pointer (must not be NULL)
+ * Output:
+ *     number of newline-terminated lines; file position rewound to start
+ * Algorithm:
+ *     read characters counting newlines, then rewind
+ */
+int file_count_lines(FILE *fp)
+{
+	int count = 0;
+	int c;
+	while ((c = fgetc(fp)) != EOF) {
+		if (c == '\n') {
+			count++;
+		}
+	}
+	rewind(fp);
+	return count;
+}
+'''
+
+[[functions]]
+name = "file_read_line_into"
+module = "files"
+description = "Read the next line from fp into buf; strips trailing newline; returns 1 on success, 0 on EOF/error"
+signature = "int file_read_line_into(FILE *fp, char *buf, int max_len)"
+tags = ["file", "read", "line", "fgets"]
+requires = ["stdio.h", "string.h"]
+header_code = "/* Reads the next line from fp into buf (max_len includes null terminator); strips newline; returns 1 on success */\nint file_read_line_into(FILE *fp, char *buf, int max_len);"
+impl_code = '''
+/*
+ * Function:
+ *     file_read_line_into
+ * Input:
+ *     fp      - open file pointer
+ *     buf     - destination buffer
+ *     max_len - buffer size including null terminator
+ * Output:
+ *     1 if a line was read, 0 on EOF or error
+ *     Trailing newline stripped from buf
+ * Algorithm:
+ *     use fgets; strip trailing newline if present
+ */
+int file_read_line_into(FILE *fp, char *buf, int max_len)
+{
+	if (fgets(buf, max_len, fp) == NULL) {
+		return 0;
+	}
+	int len = (int)strlen(buf);
+	if (len > 0 && buf[len - 1] == '\n') {
+		buf[len - 1] = '\0';
+	}
+	return 1;
+}
+'''
+
+[[functions]]
+name = "file_write_line"
+module = "files"
+description = "Write a string followed by a newline to an open file; returns 1 on success, 0 on error"
+signature = "int file_write_line(FILE *fp, const char *line)"
+tags = ["file", "write", "line"]
+requires = ["stdio.h"]
+header_code = "/* Writes a line to fp followed by a newline; returns 1 on success, 0 on error */\nint file_write_line(FILE *fp, const char *line);"
+impl_code = '''
+/*
+ * Function:
+ *     file_write_line
+ * Input:
+ *     fp   - open file pointer (write mode)
+ *     line - string to write
+ * Output:
+ *     1 on success, 0 on write error
+ * Algorithm:
+ *     fprintf with newline; check return value
+ */
+int file_write_line(FILE *fp, const char *line)
+{
+	return fprintf(fp, "%s\n", line) > 0 ? 1 : 0;
+}
+'''
+
+[[functions]]
+name = "file_exists"
+module = "files"
+description = "Return 1 if the file at path exists and can be opened for reading, 0 otherwise"
+signature = "int file_exists(const char *path)"
+tags = ["file", "exists", "check"]
+requires = ["stdio.h"]
+header_code = "/* Returns 1 if the file exists and is readable, 0 otherwise */\nint file_exists(const char *path);"
+impl_code = '''
+/*
+ * Function:
+ *     file_exists
+ * Input:
+ *     path - path to the file to check
+ * Output:
+ *     1 if file exists and is readable, 0 otherwise
+ * Algorithm:
+ *     attempt fopen for reading; close and return 1 if successful
+ */
+int file_exists(const char *path)
+{
+	FILE *fp = fopen(path, "r");
+	if (fp == NULL) {
+		return 0;
+	}
+	fclose(fp);
+	return 1;
+}
+'''
+
+[[functions]]
+name = "file_copy"
+module = "files"
+description = "Copy all bytes from src_path to dst_path; returns 1 on success, 0 on any error"
+signature = "int file_copy(const char *src_path, const char *dst_path)"
+tags = ["file", "copy", "binary"]
+requires = ["stdio.h"]
+header_code = "/* Copies src_path to dst_path byte-by-byte; returns 1 on success, 0 on error */\nint file_copy(const char *src_path, const char *dst_path);"
+impl_code = '''
+/*
+ * Function:
+ *     file_copy
+ * Input:
+ *     src_path - path to source file
+ *     dst_path - path to destination file (created/overwritten)
+ * Output:
+ *     1 on success, 0 on any error (error printed to stderr)
+ * Algorithm:
+ *     open both files in binary mode; copy one byte at a time; close both
+ */
+int file_copy(const char *src_path, const char *dst_path)
+{
+	FILE *src = fopen(src_path, "rb");
+	if (src == NULL) {
+		fprintf(stderr, "file_copy: cannot open source '%s'\n", src_path);
+		return 0;
+	}
+	FILE *dst = fopen(dst_path, "wb");
+	if (dst == NULL) {
+		fprintf(stderr, "file_copy: cannot open destination '%s'\n", dst_path);
+		fclose(src);
+		return 0;
+	}
+	int c;
+	while ((c = fgetc(src)) != EOF) {
+		fputc(c, dst);
+	}
+	fclose(src);
+	fclose(dst);
+	return 1;
+}
+'''

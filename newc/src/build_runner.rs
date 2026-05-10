@@ -83,9 +83,20 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                     Ok(c) => c,
                     Err(e) => {
                         let _ = line_tx.send(BuildLine {
-                            text: format!("Error spawning make: {e}"),
+                            text: format!("Error: {e}"),
                             kind: LineKind::Stderr,
                         });
+                        #[cfg(target_os = "windows")]
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            for msg in [
+                                "make not found. Install one of:",
+                                "  winget install GnuWin32.Make",
+                                "  or MinGW-w64 (includes mingw32-make)",
+                                "  https://www.mingw-w64.org/",
+                            ] {
+                                let _ = line_tx.send(BuildLine { text: msg.into(), kind: LineKind::Info });
+                            }
+                        }
                         let _ = line_tx.send(BuildLine {
                             text: String::new(),
                             kind: LineKind::Done { exit_code: None, duration_ms: start.elapsed().as_millis() as u64 },

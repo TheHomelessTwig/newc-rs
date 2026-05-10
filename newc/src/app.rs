@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use egui::{CentralPanel, Color32, Context, RichText, SidePanel, TopBottomPanel};
 use newc_core::{
+    function_lib::FunctionLibrary,
     analysis,
     build_history::{self, BuildRecord},
     diag,
@@ -23,8 +25,26 @@ use crate::state::{AppState, BuildState, View, save_known_projects};
 use crate::views;
 use crate::views::import_c::ImportState;
 
+/// State shared with floating OS-window viewports (must be Arc<Mutex<>> for 'static closures).
+pub struct SharedTools {
+    pub function_lib: FunctionLibrary,
+    pub library_state: views::library::LibraryState,
+    pub cref_state: views::cref::CRefState,
+    pub snippets_state: views::snippets::SnippetsState,
+    /// Actions queued by viewport callbacks; drained each frame in the main update.
+    pub lib_action_queue: Vec<views::library::LibraryAction>,
+    /// Close-request flags written by viewport close buttons, drained by main update.
+    pub close_library: bool,
+    pub close_cref: bool,
+    pub close_snippets: bool,
+}
+
 pub struct NewcApp {
     state: AppState,
+    tools: Arc<Mutex<SharedTools>>,
+    show_library_window: bool,
+    show_cref_window: bool,
+    show_snippets: bool,
     runner: BuildRunner,
     build_panel_open: bool,
     build_auto_scroll: bool,
@@ -51,7 +71,26 @@ impl NewcApp {
         }
 
         let runner = BuildRunner::spawn(cc.egui_ctx.clone());
-        let mut app = Self { state, runner, build_panel_open: true, build_auto_scroll: true };
+        let tools = Arc::new(Mutex::new(SharedTools {
+            function_lib: FunctionLibrary::load(),
+            library_state: views::library::LibraryState::default(),
+            cref_state: views::cref::CRefState::default(),
+            snippets_state: views::snippets::SnippetsState::default(),
+            lib_action_queue: Vec::new(),
+            close_library: false,
+            close_cref: false,
+            close_snippets: false,
+        }));
+        let mut app = Self {
+            state,
+            tools,
+            show_library_window: false,
+            show_cref_window: false,
+            show_snippets: false,
+            runner,
+            build_panel_open: true,
+            build_auto_scroll: true,
+        };
 
         // Open initial project if provided
         if let Some(path) = initial_path {
@@ -112,6 +151,80 @@ impl NewcApp {
             Err(e) => self.state.set_error(e.to_string()),
         }
     }
+
+    fn handle_library_action(&mut self, action: views::library::LibraryAction) {
+        match action {
+            views::library::LibraryAction::Save(func) => {
+                self.tools.lock().unwrap().function_lib.upsert(func.clone());
+                if let Err(e) = FunctionLibrary::save_user_function(&func) {
+                    self.state.set_error(e.to_string());
+                } else {
+                    self.state.set_status(format!("Saved '{}'.", func.name));
+                }
+            }
+            views::library::LibraryAction::Delete(name) => {
+                {
+                    let mut t = self.tools.lock().unwrap();
+                    t.function_lib.remove(&name);
+                    delete_user_function(&name, &t.function_lib);
+                }
+                self.state.set_status(format!("Deleted '{name}'."));
+            }
+            views::library::LibraryAction::UpdateNotes { name, notes } => {
+                let mut t = self.tools.lock().unwrap();
+                if let Some(f) = t.function_lib.get_mut(&name) {
+                    f.notes = notes;
+                    let func = f.clone();
+                    let _ = FunctionLibrary::save_user_function(&func);
+                }
+            }
+            views::library::LibraryAction::ToggleStar(name) => {
+                let mut t = self.tools.lock().unwrap();
+                if let Some(f) = t.function_lib.get_mut(&name) {
+                    f.starred = !f.starred;
+                    let func = f.clone();
+                    let _ = FunctionLibrary::save_user_function(&func);
+                }
+            }
+            views::library::LibraryAction::OpenImport => {
+                self.state.show_import = true;
+            }
+            views::library::LibraryAction::CreateGroup { name, .. } => {
+                if name == "__OPEN_DIALOG__" {
+                    self.state.show_new_group = true;
+                    self.state.new_group_name.clear();
+                    self.state.new_group_desc.clear();
+                } else {
+                    let mut t = self.tools.lock().unwrap();
+                    if t.function_lib.create_group(&name, "") {
+                        let _ = t.function_lib.save_groups();
+                        self.state.set_status(format!("Group '{name}' created."));
+                    }
+                }
+            }
+            views::library::LibraryAction::RenameGroup { old, new } => {
+                if old == "__OPEN_DIALOG__" {
+                    self.state.group_action_target = Some(new.clone());
+                    self.state.group_rename_input = new;
+                    self.state.delete_group_cascade = false;
+                } else {
+                    let mut t = self.tools.lock().unwrap();
+                    if t.function_lib.rename_group(&old, &new) {
+                        let _ = t.function_lib.save_groups();
+                        self.state.set_status(format!("Renamed '{old}' → '{new}'."));
+                    }
+                }
+            }
+            views::library::LibraryAction::DeleteGroup { name, cascade } => {
+                let mut t = self.tools.lock().unwrap();
+                t.function_lib.delete_group(&name, cascade);
+                let _ = t.function_lib.save_groups();
+                t.library_state.active_group = None;
+                self.state.set_status(format!("Group '{name}' deleted."));
+            }
+            views::library::LibraryAction::None => {}
+        }
+    }
 }
 
 impl eframe::App for NewcApp {
@@ -131,15 +244,88 @@ impl eframe::App for NewcApp {
         // Shortcuts modal (? key)
         views::shortcuts::show(ctx, &mut self.state);
 
-        // Snippets panel
-        views::snippets::show_panel(ctx, &mut self.state.show_snippets);
+        // Drain actions and close-requests from viewport callbacks (previous frame)
+        {
+            let mut t = self.tools.lock().unwrap();
+            if t.close_library { self.show_library_window = false; t.close_library = false; }
+            if t.close_cref    { self.show_cref_window   = false; t.close_cref    = false; }
+            if t.close_snippets{ self.show_snippets       = false; t.close_snippets= false; }
+            let queued: Vec<_> = t.lib_action_queue.drain(..).collect();
+            drop(t);
+            for action in queued { self.handle_library_action(action); }
+        }
+
+        // Floating OS-window viewports (shown when popped out)
+        if self.show_snippets {
+            let tools = Arc::clone(&self.tools);
+            ctx.show_viewport_deferred(
+                egui::ViewportId::from_hash_of("newc_snippets"),
+                egui::ViewportBuilder::default()
+                    .with_title("C Snippets")
+                    .with_inner_size([700.0, 450.0]),
+                move |ctx, _class| {
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        tools.lock().unwrap().close_snippets = true;
+                        return;
+                    }
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        views::snippets::show_contents(ui, &mut tools.lock().unwrap().snippets_state);
+                    });
+                },
+            );
+        }
+
+        if self.show_cref_window {
+            let tools = Arc::clone(&self.tools);
+            ctx.show_viewport_deferred(
+                egui::ViewportId::from_hash_of("newc_cref"),
+                egui::ViewportBuilder::default()
+                    .with_title("C Reference")
+                    .with_inner_size([820.0, 580.0]),
+                move |ctx, _class| {
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        tools.lock().unwrap().close_cref = true;
+                        return;
+                    }
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        views::cref::show(ui, &mut tools.lock().unwrap().cref_state);
+                    });
+                },
+            );
+        }
+
+        if self.show_library_window {
+            let tools = Arc::clone(&self.tools);
+            ctx.show_viewport_deferred(
+                egui::ViewportId::from_hash_of("newc_library"),
+                egui::ViewportBuilder::default()
+                    .with_title("Function Library")
+                    .with_inner_size([940.0, 600.0]),
+                move |ctx, _class| {
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        tools.lock().unwrap().close_library = true;
+                        return;
+                    }
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let mut t = tools.lock().unwrap();
+                        let lib = t.function_lib.clone();
+                        let action = views::library::show(ui, &lib, &mut t.library_state);
+                        if !matches!(action, views::library::LibraryAction::None) {
+                            t.lib_action_queue.push(action);
+                        }
+                    });
+                },
+            );
+        }
 
         // Top bar
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let is_home = matches!(self.state.view, View::Home);
-                let is_create = matches!(self.state.view, View::CreateProject);
-                let is_lib = matches!(self.state.view, View::FunctionLibrary);
+                let is_home     = matches!(self.state.view, View::Home);
+                let is_create   = matches!(self.state.view, View::CreateProject);
+                let is_lib      = matches!(self.state.view, View::FunctionLibrary);
+                let is_cref     = matches!(self.state.view, View::CReference);
+                let is_snippets = matches!(self.state.view, View::Snippets);
                 let is_settings = matches!(self.state.view, View::Settings);
                 if ui.selectable_label(is_home, "Home").clicked() {
                     self.state.view = View::Home;
@@ -147,20 +333,21 @@ impl eframe::App for NewcApp {
                 if ui.selectable_label(is_create, "New Project").clicked() {
                     self.state.view = View::CreateProject;
                 }
-                if ui.selectable_label(is_lib, "Function Library").clicked() {
+                if ui.selectable_label(is_lib, "Library").clicked() {
                     self.state.view = View::FunctionLibrary;
+                }
+                if ui.selectable_label(is_cref, "C Reference").clicked() {
+                    self.state.view = View::CReference;
+                }
+                if ui.selectable_label(is_snippets, "Snippets").clicked() {
+                    self.state.view = View::Snippets;
                 }
                 if ui.selectable_label(is_settings, "Settings").clicked() {
                     self.state.view = View::Settings;
                 }
-                let is_cref = matches!(self.state.view, View::CReference);
-                if ui.selectable_label(is_cref, "C Reference").clicked() {
-                    self.state.view = View::CReference;
-                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.toggle_value(&mut self.build_panel_open, "Build Output");
-                    ui.toggle_value(&mut self.state.show_snippets, "Snippets");
                     if ui.small_button("?").on_hover_text("Keyboard shortcuts").clicked() {
                         self.state.show_shortcuts = true;
                     }
@@ -236,11 +423,26 @@ impl eframe::App for NewcApp {
                             });
                         });
                     } else {
-                        views::build_panel::show(
+                        let clicked = views::build_panel::show(
                             ui,
                             &self.state.build_lines,
+                            &self.state.diagnostics,
                             &mut self.build_auto_scroll,
                         );
+                        if let Some((file, line_no)) = clicked {
+                            // file is typically "src/foo.c" — extract module name
+                            let module_name = std::path::Path::new(&file)
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string());
+                            if let Some(mod_name) = module_name {
+                                if let Some(project) = self.state.current_project().cloned() {
+                                    self.state.module_detail_state = Default::default();
+                                    self.state.module_detail_state.highlight_line = Some(line_no);
+                                    self.state.view = View::ModuleDetail { project, module_name: mod_name };
+                                }
+                            }
+                        }
                     }
                 });
         }
@@ -535,8 +737,8 @@ impl eframe::App for NewcApp {
                         }
                         views::import_c::ImportAction::Import(funcs) => {
                             for func in &funcs {
-                                self.state.function_lib.upsert(func.clone());
-                                let _ = newc_core::function_lib::FunctionLibrary::save_user_function(func);
+                                self.tools.lock().unwrap().function_lib.upsert(func.clone());
+                                let _ = FunctionLibrary::save_user_function(func);
                             }
                             self.state.set_status(format!("Imported {} function(s).", funcs.len()));
                             self.state.show_import = false;
@@ -571,11 +773,14 @@ impl eframe::App for NewcApp {
                         if ui.add_enabled(valid, egui::Button::new("Create")).clicked() {
                             let name = self.state.new_group_name.trim().to_string();
                             let desc = self.state.new_group_desc.trim().to_string();
-                            if self.state.function_lib.create_group(&name, &desc) {
-                                let _ = self.state.function_lib.save_groups();
-                                self.state.library_state.active_group = Some(name.clone());
+                            let mut t = self.tools.lock().unwrap();
+                            if t.function_lib.create_group(&name, &desc) {
+                                let _ = t.function_lib.save_groups();
+                                t.library_state.active_group = Some(name.clone());
+                                drop(t);
                                 self.state.set_status(format!("Group '{name}' created."));
                             } else {
+                                drop(t);
                                 self.state.set_error(format!("Group '{name}' already exists."));
                             }
                             self.state.show_new_group = false;
@@ -603,20 +808,22 @@ impl eframe::App for NewcApp {
                             && self.state.group_rename_input != target;
                         if ui.add_enabled(valid, egui::Button::new("Rename")).clicked() {
                             let new_name = self.state.group_rename_input.trim().to_string();
-                            if self.state.function_lib.rename_group(&target, &new_name) {
-                                // Persist renamed functions
-                                let funcs: Vec<_> = self.state.function_lib
+                            let mut t = self.tools.lock().unwrap();
+                            if t.function_lib.rename_group(&target, &new_name) {
+                                let funcs: Vec<_> = t.function_lib
                                     .by_module(&new_name)
                                     .into_iter()
                                     .cloned()
                                     .collect();
                                 for f in &funcs {
-                                    let _ = newc_core::function_lib::FunctionLibrary::save_user_function(f);
+                                    let _ = FunctionLibrary::save_user_function(f);
                                 }
-                                let _ = self.state.function_lib.save_groups();
-                                self.state.library_state.active_group = Some(new_name.clone());
+                                let _ = t.function_lib.save_groups();
+                                t.library_state.active_group = Some(new_name.clone());
+                                drop(t);
                                 self.state.set_status(format!("Renamed to '{new_name}'."));
                             } else {
+                                drop(t);
                                 self.state.set_error("Rename failed — name may already exist.".to_string());
                             }
                             self.state.group_action_target = None;
@@ -631,10 +838,13 @@ impl eframe::App for NewcApp {
                             .clicked()
                         {
                             let cascade = self.state.delete_group_cascade;
-                            self.state.function_lib.delete_group(&target, cascade);
-                            let _ = self.state.function_lib.save_groups();
+                            {
+                                let mut t = self.tools.lock().unwrap();
+                                t.function_lib.delete_group(&target, cascade);
+                                let _ = t.function_lib.save_groups();
+                                t.library_state.active_group = None;
+                            }
                             self.state.set_status(format!("Group '{target}' deleted."));
-                            self.state.library_state.active_group = None;
                             self.state.group_action_target = None;
                         }
                         if ui.button("Cancel").clicked() {
@@ -645,16 +855,24 @@ impl eframe::App for NewcApp {
         }
 
         // Quick search overlay
-        let qs_action = views::quick_search::show(
-            ctx,
-            &mut self.state.quick_search,
-            &self.state.function_lib,
-            &self.state.known_projects,
-        );
+        let qs_action = {
+            let t = self.tools.lock().unwrap();
+            let lib = t.function_lib.clone();
+            drop(t);
+            views::quick_search::show(
+                ctx,
+                &mut self.state.quick_search,
+                &lib,
+                &self.state.known_projects,
+            )
+        };
         match qs_action {
             views::quick_search::QuickSearchAction::OpenFunction(name) => {
-                self.state.library_state.selected = Some(name);
-                self.state.view = View::FunctionLibrary;
+                self.tools.lock().unwrap().library_state.selected = Some(name);
+                // Navigate to main panel if not already popped out
+                if !self.show_library_window {
+                    self.state.view = View::FunctionLibrary;
+                }
             }
             views::quick_search::QuickSearchAction::OpenProject(path) => {
                 self.open_project(path);
@@ -689,7 +907,15 @@ impl eframe::App for NewcApp {
                 }
 
                 View::CReference => {
-                    views::cref::show(ui, &mut self.state.cref_state);
+                    egui::TopBottomPanel::top("cref_popout_bar").show_inside(ui, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
+                                self.show_cref_window = true;
+                                self.state.view = View::Home;
+                            }
+                        });
+                    });
+                    views::cref::show(ui, &mut self.tools.lock().unwrap().cref_state);
                 }
 
                 View::ProjectNotes(ref project) => {
@@ -743,79 +969,34 @@ impl eframe::App for NewcApp {
 
                 View::FunctionLibrary => {
                     if self.state.show_import {
-                        return; // import modal is shown as a Window overlay
+                        return;
                     }
-                    let action = views::library::show(
-                        ui,
-                        &self.state.function_lib,
-                        &mut self.state.library_state,
-                    );
-                    match action {
-                        views::library::LibraryAction::Save(func) => {
-                            self.state.function_lib.upsert(func.clone());
-                            if let Err(e) = newc_core::function_lib::FunctionLibrary::save_user_function(&func) {
-                                self.state.set_error(e.to_string());
-                            } else {
-                                self.state.set_status(format!("Saved '{}'.", func.name));
+                    egui::TopBottomPanel::top("lib_popout_bar").show_inside(ui, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
+                                self.show_library_window = true;
+                                self.state.view = View::Home;
                             }
-                        }
-                        views::library::LibraryAction::Delete(name) => {
-                            self.state.function_lib.remove(&name);
-                            delete_user_function(&name, &self.state.function_lib);
-                            self.state.set_status(format!("Deleted '{name}'."));
-                        }
-                        views::library::LibraryAction::UpdateNotes { name, notes } => {
-                            if let Some(f) = self.state.function_lib.get_mut(&name) {
-                                f.notes = notes;
-                                let func = f.clone();
-                                let _ = newc_core::function_lib::FunctionLibrary::save_user_function(&func);
+                        });
+                    });
+                    let lib_clone = self.tools.lock().unwrap().function_lib.clone();
+                    let action = {
+                        let mut t = self.tools.lock().unwrap();
+                        views::library::show(ui, &lib_clone, &mut t.library_state)
+                    };
+                    self.handle_library_action(action);
+                }
+
+                View::Snippets => {
+                    egui::TopBottomPanel::top("snip_popout_bar").show_inside(ui, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
+                                self.show_snippets = true;
+                                self.state.view = View::Home;
                             }
-                        }
-                        views::library::LibraryAction::ToggleStar(name) => {
-                            if let Some(f) = self.state.function_lib.get_mut(&name) {
-                                f.starred = !f.starred;
-                                let func = f.clone();
-                                let _ = newc_core::function_lib::FunctionLibrary::save_user_function(&func);
-                            }
-                        }
-                        views::library::LibraryAction::OpenImport => {
-                            self.state.show_import = true;
-                        }
-                        views::library::LibraryAction::CreateGroup { name, .. } => {
-                            if name == "__OPEN_DIALOG__" {
-                                // Open the new-group modal
-                                self.state.show_new_group = true;
-                                self.state.new_group_name.clear();
-                                self.state.new_group_desc.clear();
-                            } else {
-                                // Direct create (no dialog needed)
-                                if self.state.function_lib.create_group(&name, "") {
-                                    let _ = self.state.function_lib.save_groups();
-                                    self.state.set_status(format!("Group '{name}' created."));
-                                }
-                            }
-                        }
-                        views::library::LibraryAction::RenameGroup { old, new } => {
-                            if old == "__OPEN_DIALOG__" {
-                                // Open group action modal for `new` (current group name)
-                                self.state.group_action_target = Some(new.clone());
-                                self.state.group_rename_input = new;
-                                self.state.delete_group_cascade = false;
-                            } else {
-                                if self.state.function_lib.rename_group(&old, &new) {
-                                    let _ = self.state.function_lib.save_groups();
-                                    self.state.set_status(format!("Renamed '{old}' → '{new}'."));
-                                }
-                            }
-                        }
-                        views::library::LibraryAction::DeleteGroup { name, cascade } => {
-                            self.state.function_lib.delete_group(&name, cascade);
-                            let _ = self.state.function_lib.save_groups();
-                            self.state.set_status(format!("Group '{name}' deleted."));
-                            self.state.library_state.active_group = None;
-                        }
-                        views::library::LibraryAction::None => {}
-                    }
+                        });
+                    });
+                    views::snippets::show_contents(ui, &mut self.tools.lock().unwrap().snippets_state);
                 }
 
                 View::Home => {
@@ -879,16 +1060,22 @@ impl eframe::App for NewcApp {
                         &mut self.state.create_include_math,
                         &mut self.state.create_include_display,
                         &mut self.state.create_include_array,
+                        &mut self.state.create_include_strings,
+                        &mut self.state.create_include_linked_list,
+                        &mut self.state.create_include_files,
+                        &mut self.state.create_include_test_utils,
                         &mut self.state.func_search,
                         &mut self.state.func_selected,
-                        &self.state.function_lib,
+                        &self.tools.lock().unwrap().function_lib.clone(),
                         &mut false,
                         &mut self.state.selected_template,
+                        &mut self.state.create_location,
                     );
                     match action {
                         views::create::CreateAction::Create {
                             name, git, author,
                             include_input, include_math, include_display, include_array,
+                            include_strings, include_linked_list, include_files, include_test_utils,
                             location,
                         } => {
                             let mut modules = Vec::new();
@@ -896,6 +1083,10 @@ impl eframe::App for NewcApp {
                             if include_math { modules.push(DefaultModule::Math); }
                             if include_display { modules.push(DefaultModule::Display); }
                             if include_array { modules.push(DefaultModule::Array); }
+                            if include_strings { modules.push(DefaultModule::Strings); }
+                            if include_linked_list { modules.push(DefaultModule::LinkedList); }
+                            if include_files { modules.push(DefaultModule::Files); }
+                            if include_test_utils { modules.push(DefaultModule::TestUtils); }
 
                             // Remember selected template to seed composer after project created
                             let template_idx = self.state.selected_template;
@@ -909,11 +1100,15 @@ impl eframe::App for NewcApp {
                             match create_project(&opts, &location) {
                                 Ok(()) => {
                                     let root = location.join(&name);
-                                    // Seed composer from template if one was selected
+                                    // Seed composer from template + write main.c to disk
                                     if let Some(idx) = template_idx {
                                         let templates = project_template::all_templates();
                                         if let Some(t) = templates.get(idx) {
-                                            self.state.main_builder = (t.builder)();
+                                            let builder_state = (t.builder)();
+                                            let date = chrono::Local::now().format("%d/%m/%Y").to_string();
+                                            let main_c = builder_state.preview(&opts.author, &date);
+                                            let _ = std::fs::write(root.join("src").join("main.c"), main_c);
+                                            self.state.main_builder = builder_state;
                                             self.state.composer_undo.clear();
                                             self.state.composer_redo.clear();
                                         }
@@ -1135,7 +1330,7 @@ impl eframe::App for NewcApp {
                     let project = project.clone();
                     let module_name = module_name.clone();
                     let src_path = project.root.join("src").join(format!("{module_name}.c"));
-                    let lib = self.state.function_lib.clone();
+                    let lib = self.tools.lock().unwrap().function_lib.clone();
                     let action = views::module_detail::show(
                         ui,
                         &module_name,
@@ -1278,7 +1473,8 @@ impl eframe::App for NewcApp {
                 }
 
                 View::UsageTracker(_) => {
-                    views::usage_tracker::show(ctx, &mut self.state);
+                    let lib = self.tools.lock().unwrap().function_lib.clone();
+                    views::usage_tracker::show(ctx, &mut self.state, &lib);
                 }
 
                 View::ProjectSearch(_) => {
@@ -1286,7 +1482,8 @@ impl eframe::App for NewcApp {
                 }
 
                 View::HealthDashboard(_) => {
-                    views::health::show(ctx, &mut self.state);
+                    let lib = self.tools.lock().unwrap().function_lib.clone();
+                    views::health::show(ctx, &mut self.state, &lib);
                 }
 
                 View::MakefileEditor(ref project) => {
@@ -1339,7 +1536,7 @@ impl eframe::App for NewcApp {
 
                 View::AddModule { ref project, .. } => {
                     let project = project.clone();
-                    let lib = self.state.function_lib.clone();
+                    let lib = self.tools.lock().unwrap().function_lib.clone();
                     let action = views::add_module::show(
                         ui,
                         &project,

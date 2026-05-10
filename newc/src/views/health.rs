@@ -1,10 +1,33 @@
 use egui::{Color32, Context, RichText, ScrollArea};
-use newc_core::{analysis, build_history, grep, project::Project};
+use newc_core::{analysis, build_history, function_lib::FunctionLibrary, grep, lint, project::Project, sync};
 
 use crate::state::{AppState, View};
 use crate::views::module_detail::compute_missing_includes_for_health;
 
-pub fn show(ctx: &Context, state: &mut AppState) {
+/// Return the max modification timestamp (seconds since epoch) of all .c/.h files in root.
+fn max_source_mtime(root: &std::path::Path) -> u64 {
+    let mut max: u64 = 0;
+    for dir in [root.join("src"), root.join("include")] {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.filter_map(|e| e.ok()) {
+                let ext = e.path().extension().and_then(|x| x.to_str()).unwrap_or("").to_string();
+                if ext == "c" || ext == "h" {
+                    if let Ok(meta) = e.metadata() {
+                        if let Ok(t) = meta.modified() {
+                            if let Ok(d) = t.duration_since(std::time::UNIX_EPOCH) {
+                                let secs = d.as_secs();
+                                if secs > max { max = secs; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    max
+}
+
+pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
     let project = match &state.view {
         View::HealthDashboard(p) => p.clone(),
         _ => return,
@@ -23,8 +46,16 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         });
         ui.separator();
 
+        // Auto-invalidate cache when source files have changed since last compute
+        if state.health_computed {
+            let current_mtime = max_source_mtime(&project.root);
+            if current_mtime > state.health_snapshot.source_mtime {
+                state.health_computed = false;
+            }
+        }
+
         if !state.health_computed {
-            compute_health(state, &project);
+            compute_health(state, &project, lib);
         }
 
         let snap = state.health_snapshot.clone();
@@ -36,6 +67,8 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                 health_card(ui, "Missing Includes", &snap.missing_includes_text, snap.missing_includes_count == 0);
                 health_card(ui, "TODO / FIXME", &snap.todos_text, snap.todos_count == 0);
                 health_card(ui, "Lint Warnings", &snap.lint_text, snap.lint_count == 0);
+                health_card(ui, "Header Guards", &snap.header_guard_text, snap.header_guard_count == 0);
+                health_card(ui, "Proto Mismatches", &snap.proto_mismatch_text, snap.proto_mismatch_count == 0);
             });
 
             ui.add_space(12.0);
@@ -73,6 +106,29 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                         ui.label(RichText::new(format!("{file}: {msg}")).small().color(Color32::from_rgb(255, 200, 80)));
                     });
                 }
+                ui.add_space(8.0);
+            }
+
+            // Header guard violations (L010)
+            if !snap.header_guard_files.is_empty() {
+                ui.label(RichText::new("Missing Header Guards [L010]").strong());
+                ui.separator();
+                for file in &snap.header_guard_files {
+                    ui.label(RichText::new(format!("  {file}: add #ifndef guard or #pragma once")).small().color(Color32::from_rgb(255, 180, 80)));
+                }
+                ui.add_space(8.0);
+            }
+
+            // Prototype mismatches
+            if !snap.proto_mismatches.is_empty() {
+                ui.label(RichText::new("Prototype Mismatches").strong());
+                ui.separator();
+                for (module, desc) in &snap.proto_mismatches {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(format!("{module}:")).monospace().small().color(Color32::GRAY));
+                        ui.label(RichText::new(desc).small().color(Color32::from_rgb(255, 140, 80)));
+                    });
+                }
             }
         });
     });
@@ -92,7 +148,7 @@ fn health_card(ui: &mut egui::Ui, title: &str, text: &str, ok: bool) {
         });
 }
 
-fn compute_health(state: &mut AppState, project: &Project) {
+fn compute_health(state: &mut AppState, project: &Project, lib: &FunctionLibrary) {
     let mut snap = HealthSnapshot::default();
 
     // Last build
@@ -133,7 +189,7 @@ fn compute_health(state: &mut AppState, project: &Project) {
             .collect();
         for path in &paths {
             if let Ok(content) = std::fs::read_to_string(path) {
-                let warnings = compute_missing_includes_for_health(&content, &state.function_lib);
+                let warnings = compute_missing_includes_for_health(&content, lib);
                 snap.missing_includes_count += warnings.len();
             }
         }
@@ -157,7 +213,7 @@ fn compute_health(state: &mut AppState, project: &Project) {
         format!("{}", snap.todos_count)
     };
 
-    // Lint warnings
+    // Lint warnings (.c files)
     if let Ok(entries) = std::fs::read_dir(&src_dir) {
         let paths: Vec<_> = entries
             .filter_map(|e| e.ok())
@@ -166,7 +222,7 @@ fn compute_health(state: &mut AppState, project: &Project) {
             .collect();
         for path in &paths {
             if let Ok(content) = std::fs::read_to_string(path) {
-                let warnings = newc_core::lint::lint_file(&content);
+                let warnings = lint::lint_file(&content);
                 let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 for w in &warnings {
                     snap.lint_warnings.push((file_name.clone(), w.code, w.message.clone()));
@@ -180,6 +236,58 @@ fn compute_health(state: &mut AppState, project: &Project) {
     } else {
         format!("{} warnings", snap.lint_count)
     };
+
+    // Header guard check (.h files via L010)
+    let include_dir = project.root.join("include");
+    if let Ok(entries) = std::fs::read_dir(&include_dir) {
+        let h_paths: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("h"))
+            .map(|e| e.path())
+            .collect();
+        for path in &h_paths {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let warnings = lint::lint_header(&content);
+                if !warnings.is_empty() {
+                    let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    snap.header_guard_files.push(file_name);
+                }
+            }
+        }
+    }
+    snap.header_guard_count = snap.header_guard_files.len();
+    snap.header_guard_text = if snap.header_guard_count == 0 {
+        "OK".to_string()
+    } else {
+        format!("{} files", snap.header_guard_count)
+    };
+
+    // Prototype mismatches: compare .c signatures vs .h declarations
+    if let Ok(modules) = newc_core::module::list_modules(&project.root) {
+        for m in &modules {
+            let c_content = std::fs::read_to_string(&m.source).unwrap_or_default();
+            let h_content = std::fs::read_to_string(&m.header).unwrap_or_default();
+            let c_fns = sync::extract_function_implementations(&c_content);
+            for f in &c_fns {
+                // Check if the .h contains the function name at all
+                if !h_content.contains(&f.name) {
+                    snap.proto_mismatches.push((
+                        m.name.clone(),
+                        format!("'{}' implemented in .c but not declared in .h", f.name),
+                    ));
+                }
+            }
+        }
+    }
+    snap.proto_mismatch_count = snap.proto_mismatches.len();
+    snap.proto_mismatch_text = if snap.proto_mismatch_count == 0 {
+        "OK".to_string()
+    } else {
+        format!("{} issues", snap.proto_mismatch_count)
+    };
+
+    // Record source mtime for cache invalidation
+    snap.source_mtime = max_source_mtime(&project.root);
 
     state.health_snapshot = snap;
     state.health_computed = true;
@@ -200,4 +308,12 @@ pub struct HealthSnapshot {
     pub lint_count: usize,
     pub lint_text: String,
     pub lint_warnings: Vec<(String, &'static str, String)>,
+    pub header_guard_count: usize,
+    pub header_guard_text: String,
+    pub header_guard_files: Vec<String>,
+    pub proto_mismatch_count: usize,
+    pub proto_mismatch_text: String,
+    pub proto_mismatches: Vec<(String, String)>,
+    /// Max mtime (unix seconds) of source files at last compute — used for auto-invalidation.
+    pub source_mtime: u64,
 }

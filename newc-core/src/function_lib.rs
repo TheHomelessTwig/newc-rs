@@ -273,6 +273,77 @@ impl FunctionLibrary {
     }
 }
 
+/// Scan C implementation code and return inferred `requires` entries.
+/// Detects stdlib header needs and calls to other known library functions.
+pub fn detect_requires(impl_code: &str, lib: &FunctionLibrary) -> Vec<String> {
+    let mut reqs: Vec<String> = Vec::new();
+
+    let stdlib: &[(&str, &str)] = &[
+        // stdio
+        ("printf(",   "stdio.h"), ("fprintf(",  "stdio.h"), ("scanf(",    "stdio.h"),
+        ("fscanf(",   "stdio.h"), ("sscanf(",   "stdio.h"), ("fgets(",    "stdio.h"),
+        ("fopen(",    "stdio.h"), ("fclose(",   "stdio.h"), ("fread(",    "stdio.h"),
+        ("fwrite(",   "stdio.h"), ("puts(",     "stdio.h"), ("getchar(",  "stdio.h"),
+        ("putchar(",  "stdio.h"), ("snprintf(", "stdio.h"), ("sprintf(",  "stdio.h"),
+        ("perror(",   "stdio.h"), ("rewind(",   "stdio.h"), ("feof(",     "stdio.h"),
+        ("FILE",      "stdio.h"), ("EOF",       "stdio.h"),
+        // stdlib
+        ("malloc(",   "stdlib.h"), ("calloc(",  "stdlib.h"), ("realloc(", "stdlib.h"),
+        ("free(",     "stdlib.h"), ("exit(",    "stdlib.h"), ("abort(",   "stdlib.h"),
+        ("atoi(",     "stdlib.h"), ("atof(",    "stdlib.h"), ("atol(",    "stdlib.h"),
+        ("rand(",     "stdlib.h"), ("srand(",   "stdlib.h"), ("abs(",     "stdlib.h"),
+        ("qsort(",    "stdlib.h"), ("bsearch(", "stdlib.h"), ("getenv(",  "stdlib.h"),
+        // string
+        ("strlen(",   "string.h"), ("strcpy(",  "string.h"), ("strncpy(", "string.h"),
+        ("strcmp(",   "string.h"), ("strncmp(", "string.h"), ("strcat(",  "string.h"),
+        ("strncat(",  "string.h"), ("strchr(",  "string.h"), ("strrchr(", "string.h"),
+        ("strstr(",   "string.h"), ("memset(",  "string.h"), ("memcpy(",  "string.h"),
+        ("memcmp(",   "string.h"), ("memmove(", "string.h"),
+        // math
+        ("sqrt(",  "math.h"), ("pow(",   "math.h"), ("fabs(",  "math.h"),
+        ("sin(",   "math.h"), ("cos(",   "math.h"), ("tan(",   "math.h"),
+        ("asin(",  "math.h"), ("acos(",  "math.h"), ("atan(",  "math.h"),
+        ("atan2(", "math.h"), ("log(",   "math.h"), ("log2(",  "math.h"),
+        ("log10(", "math.h"), ("exp(",   "math.h"), ("floor(", "math.h"),
+        ("ceil(",  "math.h"), ("round(", "math.h"), ("fmod(",  "math.h"),
+        // ctype
+        ("isdigit(", "ctype.h"), ("isalpha(", "ctype.h"), ("isspace(",  "ctype.h"),
+        ("toupper(", "ctype.h"), ("tolower(", "ctype.h"), ("isalnum(",  "ctype.h"),
+        ("ispunct(", "ctype.h"), ("isupper(", "ctype.h"), ("islower(",  "ctype.h"),
+        // time
+        ("time(",      "time.h"), ("clock(",     "time.h"), ("difftime(", "time.h"),
+        ("localtime(", "time.h"), ("strftime(",  "time.h"), ("mktime(",   "time.h"),
+        // assert
+        ("assert(", "assert.h"),
+        // stdarg
+        ("va_list", "stdarg.h"), ("va_start(", "stdarg.h"), ("va_end(", "stdarg.h"),
+        // stdbool
+        ("bool ", "stdbool.h"), ("true", "stdbool.h"), ("false", "stdbool.h"),
+    ];
+
+    for (pattern, header) in stdlib {
+        if impl_code.contains(pattern) {
+            let h = header.to_string();
+            if !reqs.contains(&h) {
+                reqs.push(h);
+            }
+        }
+    }
+
+    // Library function calls
+    for func in lib.all() {
+        let call = format!("{}(", func.name);
+        if impl_code.contains(&call) {
+            let n = func.name.clone();
+            if !reqs.contains(&n) {
+                reqs.push(n);
+            }
+        }
+    }
+
+    reqs
+}
+
 fn user_functions_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("newc").join("functions"))
 }
@@ -282,9 +353,13 @@ fn groups_path() -> Option<PathBuf> {
 }
 
 const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
-    ("input",      include_str!("../../assets/functions/input.toml")),
-    ("math",       include_str!("../../assets/functions/math.toml")),
-    ("display",    include_str!("../../assets/functions/display.toml")),
-    ("array",      include_str!("../../assets/functions/array.toml")),
-    ("algorithms", include_str!("../../assets/functions/algorithms.toml")),
+    ("input",       include_str!("../../assets/functions/input.toml")),
+    ("math",        include_str!("../../assets/functions/math.toml")),
+    ("display",     include_str!("../../assets/functions/display.toml")),
+    ("array",       include_str!("../../assets/functions/array.toml")),
+    ("algorithms",  include_str!("../../assets/functions/algorithms.toml")),
+    ("strings",     include_str!("../../assets/functions/strings.toml")),
+    ("linked_list", include_str!("../../assets/functions/linked_list.toml")),
+    ("files",       include_str!("../../assets/functions/files.toml")),
+    ("test_utils",  include_str!("../../assets/functions/test_utils.toml")),
 ];

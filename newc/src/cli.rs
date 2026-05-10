@@ -68,6 +68,13 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Run `make test` in the current project (requires a test: target in the Makefile)
+    Test,
+    /// Internal: run the GUI in-process (spawned by `newc` itself; not for direct use)
+    #[command(hide = true)]
+    InternalGui {
+        path: Option<PathBuf>,
+    },
 }
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
@@ -82,7 +89,9 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::Stats => cmd_stats(),
         Command::Funcs { module } => cmd_funcs(module.as_deref()),
         Command::Gui { .. } => unreachable!("GUI handled in main"),
+        Command::InternalGui { .. } => unreachable!("InternalGui handled in main"),
         Command::Update { check } => cmd_update(check),
+        Command::Test => cmd_test(),
     }
 }
 
@@ -315,6 +324,26 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
     }
     if !any {
         println!("No functions found.");
+    }
+    Ok(())
+}
+
+fn cmd_test() -> anyhow::Result<()> {
+    let root = find_project_root()?;
+    use std::process::Command;
+    let status = Command::new("make")
+        .arg("test")
+        .current_dir(&root)
+        .status()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
+            } else {
+                anyhow::anyhow!("Failed to run make: {e}")
+            }
+        })?;
+    if !status.success() {
+        anyhow::bail!("Tests failed (exit code {:?})", status.code());
     }
     Ok(())
 }

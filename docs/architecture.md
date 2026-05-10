@@ -29,22 +29,22 @@ Pure Rust logic. No dependency on `egui`, `eframe`, or any GUI toolkit.
 | `diag` | Compiler diagnostic line parser (gcc/clang format) |
 | `error` | `NewcError` + `Result<T>` alias |
 | `export` | ZIP bundle generation |
-| `function_lib` | Function library: load, save, groups, search, dependency resolution |
+| `function_lib` | Function library: load/save/groups/search/dependency resolution/`detect_requires` |
 | `git` | `std::process::Command` wrappers for git operations |
 | `grep` | Project-wide substring search across `.c`/`.h` files |
 | `header` | `.h` file read/write with `SYNC_IGNORE_START/END` block preservation |
-| `lint` | Static C linter — 9 pattern-based rules |
+| `lint` | Static C linter — 15 pattern-based rules (L001–L015) |
 | `main_builder` | `MainBlock` enum, `MainBuilderState`, C code generation |
 | `meta` | Project metadata (`course`, `assignment`, `due_date`, marks) |
-| `module` | Module add/remove filesystem operations |
+| `module` | Module add/remove filesystem operations + C identifier validation |
 | `notes` | Plain-text project notes read/write |
 | `project` | `Project` struct, discovery, `is_newc_project()` |
-| `project_template` | Built-in project templates + builder functions |
+| `project_template` | 11 built-in project templates + builder functions |
 | `report` | Markdown project report generation |
-| `scaffold` | Project directory creation, Makefile generation |
+| `scaffold` | Project directory creation, Makefile generation, `DefaultModule` enum |
 | `stats` | LOC and function-count metrics |
 | `sync` | Prototype extraction and `.h` regeneration |
-| `templates` | C reference data (static arrays) |
+| `templates` | C file content for all built-in modules (including test Makefile target) |
 | `user_template` | User-defined template save/load |
 
 ### Key types
@@ -76,12 +76,29 @@ pub struct FunctionTemplate {
     pub signature: String,   // "int clamp(int value, int min, int max)"
     pub header_code: String, // goes into .h
     pub impl_code: String,   // goes into .c
-    pub requires: Vec<String>, // names of other FunctionTemplates this depends on
+    pub requires: Vec<String>, // stdlib headers or names of other FunctionTemplates
     pub tags: Vec<String>,
     pub notes: String,
     pub starred: bool,
 }
 ```
+
+**`DefaultModule`** (`scaffold.rs`) — modules selectable at project creation time:
+
+```rust
+pub enum DefaultModule {
+    Input,
+    Math,
+    Display,
+    Array,
+    Strings,
+    LinkedList,
+    Files,
+    TestUtils,
+}
+```
+
+When `TestUtils` is selected, the generated `Makefile` includes a `test:` target that compiles `src/test_main.c` and runs the resulting binary.
 
 **`AppConfig`** (`config.rs`):
 
@@ -107,13 +124,36 @@ pub struct Workspace {
 
 The binary. Depends on `newc-core`, `eframe`, `egui`, `clap`.
 
+One binary is built: `newc` (`src/main.rs`) — handles both CLI and GUI.
+
 ### Entry point
 
-`main.rs` does four things:
+`main.rs` does:
 1. Parse CLI args via `clap` (`Cli::parse()`)
-2. Route to either `cli::run(cmd)` or `run_gui(initial_path)`
-3. In `run_gui()`: detect WSL2 and set `LIBGL_ALWAYS_SOFTWARE=1` if needed
-4. Start `eframe::run_native()` with `NewcApp`
+2. Route to either `cli::run(cmd)` or `launch_gui(initial_path)`
+3. `launch_gui()` spawns `current_exe()` with the hidden `internal-gui [path]` subcommand as a detached child process; the parent exits immediately, freeing the terminal
+   - On Windows: `CREATE_NO_WINDOW` process creation flag suppresses the console window in the child, so only the GUI window appears
+4. The child process matches `Command::InternalGui { path }` → calls `run_gui_inline(path)`
+5. `run_gui_inline()`: detect WSL2, set `LIBGL_ALWAYS_SOFTWARE=1` if needed, start `eframe::run_native()`
+
+### Shared state (`app.rs`)
+
+Multi-viewport floating windows (Library, C Reference, Snippets) require `'static` closures for `ctx.show_viewport_deferred()`. These closures cannot borrow from `NewcApp` directly, so mutable state shared with them is held in `Arc<Mutex<SharedTools>>`:
+
+```rust
+pub struct SharedTools {
+    pub function_lib: FunctionLibrary,
+    pub library_state: LibraryState,
+    pub cref_state: CrefState,
+    pub snippets_state: SnippetsState,
+    pub lib_action_queue: Vec<LibraryAction>,
+    pub close_library: bool,
+    pub close_cref: bool,
+    pub close_snippets: bool,
+}
+```
+
+`NewcApp` holds `tools: Arc<Mutex<SharedTools>>`. Each viewport closure captures a clone of `Arc`. Communication back to the main thread uses the action queue and close flags, which are drained in `update()` after locking.
 
 ### Event loop (`app.rs`)
 
@@ -125,14 +165,16 @@ update()
   │   └── on Done: append build_history, parse diagnostics, reset timer
   ├── set_visuals()               — apply theme (dark/light) every frame
   ├── handle_shortcuts()          — Ctrl+P, ?
-  ├── show_snippets_panel()       — floating window
-  ├── TopBottomPanel (top bar)    — nav tabs, status, Build Output toggle
-  ├── TopBottomPanel (build panel)— streaming build output / diagnostics table
+  ├── handle_library_action()     — process queued LibraryAction items from viewports
+  ├── viewport management         — open/close Library, CRef, Snippets OS windows
+  ├── TopBottomPanel (top bar)    — Home, New Project, Library, C Ref, Snippets, Settings
+  ├── TopBottomPanel (build panel)— streaming build output / clickable diagnostics table
   ├── SidePanel (sidebar)         — filtered project list + recents
   ├── modals (Windows)            — error, tidy confirm, remove confirm,
   │                                 save template, meta editor, import, groups
   ├── quick_search overlay
   └── CentralPanel                — dispatch on state.view (match)
+                                    diagnostic click → navigate to ModuleDetail + highlight line
 ```
 
 ### State (`state.rs`)
@@ -147,6 +189,7 @@ pub enum View {
     CreateProject,
     FunctionLibrary,
     CReference,
+    Snippets,
     ProjectDetail(Project),
     ProjectStats(Project),
     ProjectNotes(Project),
@@ -186,7 +229,7 @@ Each view is a free function in its own file:
 
 ```rust
 // Pattern for full-page views that need Context (for overlays/panels)
-pub fn show(ctx: &Context, state: &mut AppState)
+pub fn show(ctx: &Context, state: &mut AppState, tools: &mut SharedTools)
 
 // Pattern for inline views rendered into the CentralPanel Ui
 pub fn show(ui: &mut Ui, ...) -> SomeAction
@@ -206,6 +249,10 @@ pub enum ProjectAction {
 ```
 
 `app.rs` matches on the returned action and performs the side effect (file I/O, navigation, spawning builds, etc.). This keeps all filesystem and subprocess calls in one place.
+
+### Diagnostic click-through
+
+`build_panel::show()` returns `Option<(String, usize)>` — the source filename and line number when a diagnostic row is clicked. `app.rs` receives this, finds the matching module in the current project, and navigates to `View::ModuleDetail { … }`. `ModuleDetailState.highlight_line: Option<usize>` is set; the module detail view scrolls to and marks that line with a `▶` indicator.
 
 ### Syntax highlighter (`highlight.rs`)
 
@@ -273,17 +320,60 @@ Text-based, no AST. Each rule is a simple pattern check on each source line:
 
 | Rule | Pattern |
 |---|---|
-| L001 | Line contains `gets(` |
+| L001 | Line contains `gets(` (not preceded by a word char — avoids `fgets`) |
 | L002 | Line contains `strcpy(` but not `strncpy(` |
 | L003 | Line contains `scanf(` and `"%s"` |
-| L004 | `printf(` followed by a non-`"` character |
+| L004 | `printf(` followed by a non-`"` character (not preceded by a word char — avoids `fprintf`/`snprintf`) |
 | L005 | `if`/`while` condition contains a single `=` |
 | L006 | Line contains `sprintf(` but not `snprintf(` |
 | L007 | `malloc`/`calloc`/`realloc` with no NULL check in next 4 lines |
 | L008 | Integer literal > 9 not in the common-constants allow-list |
 | L009 | `fopen(` with no `fclose(` in next 20 lines |
+| L010 | Header (`.h`) file missing `#ifndef` guard in first 5 non-blank lines |
+| L011 | `free(ptr)` not followed by `ptr = NULL` within 3 lines |
+| L012 | `strlen(` appears in a `while`/`for` loop condition |
+| L013 | `atoi(` or `atof(` usage (suggest `strtol`/`strtod`) |
+| L014 | `return &` with a non-static, non-global identifier (heuristic for returning local address) |
+| L015 | Pointer compared to non-zero integer literal (`== 1`, `== -1`, etc.) |
+
+L001 and L004 use a `prev_is_alpha` guard to avoid false positives from `fgets(` and `fprintf(`/`snprintf(` respectively.
+
+`lint_header()` is a separate function that applies only L010 to `.h` files. `lint_file()` applies L001–L009 and L011–L015 to `.c` files.
 
 Rules are applied per-file and per-function (in module detail view) giving immediate feedback without needing a build.
+
+---
+
+## Function library (`function_lib.rs`)
+
+Built-in modules are embedded at compile time via `include_str!` from `assets/functions/*.toml`. The `BUILTIN_TOML_FILES` constant lists all built-in modules:
+
+```rust
+const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
+    ("input",       include_str!("../../assets/functions/input.toml")),
+    ("math",        include_str!("../../assets/functions/math.toml")),
+    ("display",     include_str!("../../assets/functions/display.toml")),
+    ("array",       include_str!("../../assets/functions/array.toml")),
+    ("algorithms",  include_str!("../../assets/functions/algorithms.toml")),
+    ("strings",     include_str!("../../assets/functions/strings.toml")),
+    ("linked_list", include_str!("../../assets/functions/linked_list.toml")),
+    ("files",       include_str!("../../assets/functions/files.toml")),
+    ("test_utils",  include_str!("../../assets/functions/test_utils.toml")),
+];
+```
+
+`detect_requires(impl_code, lib)` scans implementation code for ~50 known stdlib patterns and all known library function names, returning a `Vec<String>` of inferred dependencies. This is used by the "Detect" button in the library editor.
+
+---
+
+## Updater (`updater.rs`)
+
+`newc update` downloads the release asset from GitHub and replaces the running binary in-place:
+
+1. Fetch latest tag from the GitHub Releases API
+2. Compare against `CARGO_PKG_VERSION` via `semver_gt()`
+3. Download `newc-<platform>` asset → temp file → install to `current_exe()` path
+4. Attempt direct file copy; escalates to `sudo cp` if the destination is system-owned
 
 ---
 
@@ -295,7 +385,7 @@ Rules are applied per-file and per-function (in module detail view) giving immed
 | Linux (Wayland) | ✓ | ✓ | Full support |
 | WSL2 | ✓ | ✓ | Auto-detects via `/proc/version`; forces Mesa software rendering |
 | macOS | ✓ | ✓ | Uses native window backend |
-| Windows | ✓ | ✓ | Uses native window backend; `where` replaces `which` |
+| Windows | ✓ | ✓ | GUI spawned with `CREATE_NO_WINDOW` — no console alongside GUI; `where` replaces `which` |
 
 Platform-conditional compilation:
 - `eframe` features `wayland` and `x11` only compiled on Linux (`cfg(target_os = "linux")`)

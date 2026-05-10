@@ -1,0 +1,280 @@
+module = "linked_list"
+
+[[functions]]
+name = "list_insert"
+module = "linked_list"
+description = "Prepend a new node with the given integer data at the front of the list"
+signature = "void list_insert(Node **head, int data)"
+tags = ["linked list", "insert", "prepend", "pointer"]
+requires = ["stdlib.h", "stdio.h"]
+header_code = "/* Inserts a new node with data at the front of the list; updates *head */\nvoid list_insert(Node **head, int data);"
+impl_code = '''
+/*
+ * Function:
+ *     list_insert
+ * Input:
+ *     head - pointer to the head pointer of the list
+ *     data - integer to store in the new node
+ * Output:
+ *     None — new node prepended to the list
+ * Algorithm:
+ *     allocate new node, set data and next, update *head
+ */
+void list_insert(Node **head, int data)
+{
+	Node *node = malloc(sizeof(Node));
+	if (node == NULL) {
+		fprintf(stderr, "list_insert: malloc failed\n");
+		return;
+	}
+	node->data = data;
+	node->next = *head;
+	*head = node;
+}
+'''
+
+[[functions]]
+name = "list_delete_value"
+module = "linked_list"
+description = "Remove the first node matching data; returns 1 if found and removed, 0 otherwise"
+signature = "int list_delete_value(Node **head, int data)"
+tags = ["linked list", "delete", "remove", "pointer"]
+requires = ["stdlib.h"]
+header_code = "/* Removes the first node with matching data; returns 1 if removed, 0 if not found */\nint list_delete_value(Node **head, int data);"
+impl_code = '''
+/*
+ * Function:
+ *     list_delete_value
+ * Input:
+ *     head - pointer to the head pointer of the list
+ *     data - value to remove
+ * Output:
+ *     1 if node was found and removed, 0 otherwise
+ * Algorithm:
+ *     traverse with prev/curr pointers; unlink matching node
+ */
+int list_delete_value(Node **head, int data)
+{
+	Node *prev = NULL;
+	Node *curr = *head;
+	while (curr != NULL) {
+		if (curr->data == data) {
+			if (prev == NULL) {
+				*head = curr->next;
+			} else {
+				prev->next = curr->next;
+			}
+			free(curr);
+			curr = NULL;
+			return 1;
+		}
+		prev = curr;
+		curr = curr->next;
+	}
+	return 0;
+}
+'''
+
+[[functions]]
+name = "list_print"
+module = "linked_list"
+description = "Print all elements as [a -> b -> c -> NULL]"
+signature = "void list_print(Node *head)"
+tags = ["linked list", "print", "display"]
+requires = ["stdio.h"]
+header_code = "/* Prints all elements as [a -> b -> c -> NULL] */\nvoid list_print(Node *head);"
+impl_code = '''
+/*
+ * Function:
+ *     list_print
+ * Input:
+ *     head - first node of the list (may be NULL)
+ * Output:
+ *     None — prints list in format [a -> b -> c -> NULL]
+ * Algorithm:
+ *     traverse nodes printing each data value
+ */
+void list_print(Node *head)
+{
+	printf("[");
+	Node *curr = head;
+	while (curr != NULL) {
+		printf("%d", curr->data);
+		if (curr->next != NULL) {
+			printf(" -> ");
+		}
+		curr = curr->next;
+	}
+	printf(" -> NULL]\n");
+}
+'''
+
+[[functions]]
+name = "list_free"
+module = "linked_list"
+description = "Free all nodes in the list and set the head pointer to NULL"
+signature = "void list_free(Node **head)"
+tags = ["linked list", "free", "memory", "cleanup"]
+requires = ["stdlib.h"]
+header_code = "/* Frees all nodes in the list and sets *head to NULL */\nvoid list_free(Node **head);"
+impl_code = '''
+/*
+ * Function:
+ *     list_free
+ * Input:
+ *     head - pointer to the head pointer of the list
+ * Output:
+ *     None — all nodes freed, *head set to NULL
+ * Algorithm:
+ *     traverse freeing each node; advance before freeing
+ */
+void list_free(Node **head)
+{
+	Node *curr = *head;
+	while (curr != NULL) {
+		Node *next = curr->next;
+		free(curr);
+		curr = next;
+	}
+	*head = NULL;
+}
+'''
+
+[[functions]]
+name = "list_find"
+module = "linked_list"
+description = "Return pointer to first node with matching data, or NULL if not found"
+signature = "Node *list_find(Node *head, int data)"
+tags = ["linked list", "search", "find", "pointer"]
+requires = []
+header_code = "/* Returns pointer to first node with data, or NULL if not found */\nNode *list_find(Node *head, int data);"
+impl_code = '''
+/*
+ * Function:
+ *     list_find
+ * Input:
+ *     head - first node of the list
+ *     data - value to search for
+ * Output:
+ *     pointer to first matching node, or NULL if not found
+ * Algorithm:
+ *     linear scan comparing each node's data
+ */
+Node *list_find(Node *head, int data)
+{
+	Node *curr = head;
+	while (curr != NULL) {
+		if (curr->data == data) {
+			return curr;
+		}
+		curr = curr->next;
+	}
+	return NULL;
+}
+'''
+
+[[functions]]
+name = "list_length"
+module = "linked_list"
+description = "Count and return the number of nodes in the list"
+signature = "int list_length(Node *head)"
+tags = ["linked list", "length", "count"]
+requires = []
+header_code = "/* Returns the number of nodes in the list */\nint list_length(Node *head);"
+impl_code = '''
+/*
+ * Function:
+ *     list_length
+ * Input:
+ *     head - first node of the list (may be NULL)
+ * Output:
+ *     number of nodes in the list
+ * Algorithm:
+ *     count each node traversed
+ */
+int list_length(Node *head)
+{
+	int count = 0;
+	Node *curr = head;
+	while (curr != NULL) {
+		count++;
+		curr = curr->next;
+	}
+	return count;
+}
+'''
+
+[[functions]]
+name = "list_append"
+module = "linked_list"
+description = "Append a new node with data at the end (tail) of the list"
+signature = "void list_append(Node **head, int data)"
+tags = ["linked list", "append", "tail", "insert"]
+requires = ["stdlib.h", "stdio.h"]
+header_code = "/* Appends a new node with data at the tail of the list */\nvoid list_append(Node **head, int data);"
+impl_code = '''
+/*
+ * Function:
+ *     list_append
+ * Input:
+ *     head - pointer to the head pointer of the list
+ *     data - integer to store in the new node
+ * Output:
+ *     None — new node appended at the tail
+ * Algorithm:
+ *     allocate new node; traverse to tail and link
+ */
+void list_append(Node **head, int data)
+{
+	Node *node = malloc(sizeof(Node));
+	if (node == NULL) {
+		fprintf(stderr, "list_append: malloc failed\n");
+		return;
+	}
+	node->data = data;
+	node->next = NULL;
+	if (*head == NULL) {
+		*head = node;
+		return;
+	}
+	Node *curr = *head;
+	while (curr->next != NULL) {
+		curr = curr->next;
+	}
+	curr->next = node;
+}
+'''
+
+[[functions]]
+name = "list_reverse"
+module = "linked_list"
+description = "Reverse the linked list in-place using three-pointer iteration"
+signature = "void list_reverse(Node **head)"
+tags = ["linked list", "reverse", "in-place"]
+requires = []
+header_code = "/* Reverses the linked list in-place; updates *head */\nvoid list_reverse(Node **head);"
+impl_code = '''
+/*
+ * Function:
+ *     list_reverse
+ * Input:
+ *     head - pointer to the head pointer of the list
+ * Output:
+ *     None — list reversed in-place, *head updated to old tail
+ * Algorithm:
+ *     three-pointer iteration: prev, curr, next
+ *     for each node, redirect next to previous, then advance
+ */
+void list_reverse(Node **head)
+{
+	Node *prev = NULL;
+	Node *curr = *head;
+	while (curr != NULL) {
+		Node *next = curr->next;
+		curr->next = prev;
+		prev = curr;
+		curr = next;
+	}
+	*head = prev;
+}
+'''

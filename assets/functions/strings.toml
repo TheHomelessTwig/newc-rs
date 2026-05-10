@@ -1,0 +1,342 @@
+module = "strings"
+
+[[functions]]
+name = "str_length"
+module = "strings"
+description = "Return the length of a string (number of chars before null terminator)"
+signature = "int str_length(const char *str)"
+tags = ["string", "length", "utility"]
+requires = []
+header_code = "/* Returns the length of str (not counting null terminator) */\nint str_length(const char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_length
+ * Input:
+ *     str - the string to measure
+ * Output:
+ *     number of characters before the null terminator
+ * Algorithm:
+ *     walk pointer until null terminator, count steps
+ */
+int str_length(const char *str)
+{
+	int len = 0;
+	while (str[len] != '\0') {
+		len++;
+	}
+	return len;
+}
+'''
+
+[[functions]]
+name = "str_copy_safe"
+module = "strings"
+description = "Copy src into dst safely — always null-terminates, truncates if needed"
+signature = "void str_copy_safe(char *dst, const char *src, int dst_size)"
+tags = ["string", "copy", "safe", "buffer"]
+requires = []
+header_code = "/* Copies src into dst safely; dst_size is total buffer size including null terminator */\nvoid str_copy_safe(char *dst, const char *src, int dst_size);"
+impl_code = '''
+/*
+ * Function:
+ *     str_copy_safe
+ * Input:
+ *     dst      - destination buffer
+ *     src      - source string
+ *     dst_size - total size of dst including null terminator
+ * Output:
+ *     None — result written into dst, always null-terminated
+ * Algorithm:
+ *     copy at most dst_size - 1 characters, then append null terminator
+ */
+void str_copy_safe(char *dst, const char *src, int dst_size)
+{
+	int i;
+	for (i = 0; i < dst_size - 1 && src[i] != '\0'; i++) {
+		dst[i] = src[i];
+	}
+	dst[i] = '\0';
+}
+'''
+
+[[functions]]
+name = "str_to_upper"
+module = "strings"
+description = "Convert all characters in a string to uppercase in-place"
+signature = "void str_to_upper(char *str)"
+tags = ["string", "case", "uppercase"]
+requires = ["ctype.h"]
+header_code = "/* Converts all characters in str to uppercase in-place */\nvoid str_to_upper(char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_to_upper
+ * Input:
+ *     str - string to convert in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     for each character apply toupper
+ */
+void str_to_upper(char *str)
+{
+	for (int i = 0; str[i] != '\0'; i++) {
+		str[i] = (char)toupper((unsigned char)str[i]);
+	}
+}
+'''
+
+[[functions]]
+name = "str_to_lower"
+module = "strings"
+description = "Convert all characters in a string to lowercase in-place"
+signature = "void str_to_lower(char *str)"
+tags = ["string", "case", "lowercase"]
+requires = ["ctype.h"]
+header_code = "/* Converts all characters in str to lowercase in-place */\nvoid str_to_lower(char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_to_lower
+ * Input:
+ *     str - string to convert in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     for each character apply tolower
+ */
+void str_to_lower(char *str)
+{
+	for (int i = 0; str[i] != '\0'; i++) {
+		str[i] = (char)tolower((unsigned char)str[i]);
+	}
+}
+'''
+
+[[functions]]
+name = "str_reverse"
+module = "strings"
+description = "Reverse a string in-place using two-pointer technique"
+signature = "void str_reverse(char *str)"
+tags = ["string", "reverse", "two-pointer"]
+requires = ["str_length"]
+header_code = "/* Reverses str in-place */\nvoid str_reverse(char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_reverse
+ * Input:
+ *     str - string to reverse in-place
+ * Output:
+ *     None — str modified directly
+ * Algorithm:
+ *     swap characters from both ends walking inward
+ */
+void str_reverse(char *str)
+{
+	int left = 0;
+	int right = str_length(str) - 1;
+	while (left < right) {
+		char tmp = str[left];
+		str[left]  = str[right];
+		str[right] = tmp;
+		left++;
+		right--;
+	}
+}
+'''
+
+[[functions]]
+name = "str_compare"
+module = "strings"
+description = "Compare two strings: returns 0 if equal, negative if a < b, positive if a > b"
+signature = "int str_compare(const char *a, const char *b)"
+tags = ["string", "compare", "lexicographic"]
+requires = []
+header_code = "/* Returns 0 if a == b, negative if a < b, positive if a > b */\nint str_compare(const char *a, const char *b);"
+impl_code = '''
+/*
+ * Function:
+ *     str_compare
+ * Input:
+ *     a, b - strings to compare
+ * Output:
+ *     0 if equal, negative if a < b, positive if a > b
+ * Algorithm:
+ *     compare characters until difference or null terminator
+ */
+int str_compare(const char *a, const char *b)
+{
+	while (*a != '\0' && *a == *b) {
+		a++;
+		b++;
+	}
+	return (unsigned char)*a - (unsigned char)*b;
+}
+'''
+
+[[functions]]
+name = "str_contains_char"
+module = "strings"
+description = "Return 1 if the string contains the given character, 0 otherwise"
+signature = "int str_contains_char(const char *str, char c)"
+tags = ["string", "search", "char"]
+requires = []
+header_code = "/* Returns 1 if str contains the character c, 0 otherwise */\nint str_contains_char(const char *str, char c);"
+impl_code = '''
+/*
+ * Function:
+ *     str_contains_char
+ * Input:
+ *     str - the string to search
+ *     c   - the character to look for
+ * Output:
+ *     1 if c is found in str, 0 otherwise
+ * Algorithm:
+ *     scan each character; return 1 on match
+ */
+int str_contains_char(const char *str, char c)
+{
+	for (int i = 0; str[i] != '\0'; i++) {
+		if (str[i] == c) {
+			return 1;
+		}
+	}
+	return 0;
+}
+'''
+
+[[functions]]
+name = "str_starts_with"
+module = "strings"
+description = "Return 1 if str begins with prefix, 0 otherwise"
+signature = "int str_starts_with(const char *str, const char *prefix)"
+tags = ["string", "prefix", "search"]
+requires = []
+header_code = "/* Returns 1 if str starts with prefix, 0 otherwise */\nint str_starts_with(const char *str, const char *prefix);"
+impl_code = '''
+/*
+ * Function:
+ *     str_starts_with
+ * Input:
+ *     str    - the string to test
+ *     prefix - the prefix to look for
+ * Output:
+ *     1 if str begins with prefix, 0 otherwise
+ * Algorithm:
+ *     compare prefix characters against str; fail on first mismatch
+ */
+int str_starts_with(const char *str, const char *prefix)
+{
+	for (int i = 0; prefix[i] != '\0'; i++) {
+		if (str[i] != prefix[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+'''
+
+[[functions]]
+name = "str_trim"
+module = "strings"
+description = "Strip leading and trailing whitespace from a string in-place"
+signature = "void str_trim(char *str)"
+tags = ["string", "trim", "whitespace"]
+requires = ["ctype.h", "str_length"]
+header_code = "/* Strips leading and trailing whitespace from str in-place */\nvoid str_trim(char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_trim
+ * Input:
+ *     str - string to trim in-place
+ * Output:
+ *     None — leading and trailing whitespace removed
+ * Algorithm:
+ *     find first and last non-whitespace; shift and null-terminate
+ */
+void str_trim(char *str)
+{
+	int start = 0;
+	while (str[start] != '\0' && isspace((unsigned char)str[start])) {
+		start++;
+	}
+	int end = str_length(str) - 1;
+	while (end >= start && isspace((unsigned char)str[end])) {
+		end--;
+	}
+	int len = end - start + 1;
+	for (int i = 0; i < len; i++) {
+		str[i] = str[start + i];
+	}
+	str[len] = '\0';
+}
+'''
+
+[[functions]]
+name = "str_count_char"
+module = "strings"
+description = "Count how many times a character appears in a string"
+signature = "int str_count_char(const char *str, char c)"
+tags = ["string", "count", "char"]
+requires = []
+header_code = "/* Returns the number of times c appears in str */\nint str_count_char(const char *str, char c);"
+impl_code = '''
+/*
+ * Function:
+ *     str_count_char
+ * Input:
+ *     str - the string to search
+ *     c   - the character to count
+ * Output:
+ *     number of times c appears in str
+ * Algorithm:
+ *     scan string incrementing counter on each match
+ */
+int str_count_char(const char *str, char c)
+{
+	int count = 0;
+	for (int i = 0; str[i] != '\0'; i++) {
+		if (str[i] == c) {
+			count++;
+		}
+	}
+	return count;
+}
+'''
+
+[[functions]]
+name = "str_is_palindrome"
+module = "strings"
+description = "Return 1 if the string reads the same forwards and backwards, 0 otherwise"
+signature = "int str_is_palindrome(const char *str)"
+tags = ["string", "palindrome", "two-pointer"]
+requires = ["str_length"]
+header_code = "/* Returns 1 if str is a palindrome, 0 otherwise */\nint str_is_palindrome(const char *str);"
+impl_code = '''
+/*
+ * Function:
+ *     str_is_palindrome
+ * Input:
+ *     str - the string to test
+ * Output:
+ *     1 if str reads identically forwards and backwards, 0 otherwise
+ * Algorithm:
+ *     compare characters from both ends walking inward; fail on mismatch
+ */
+int str_is_palindrome(const char *str)
+{
+	int left = 0;
+	int right = str_length(str) - 1;
+	while (left < right) {
+		if (str[left] != str[right]) {
+			return 0;
+		}
+		left++;
+		right--;
+	}
+	return 1;
+}
+'''

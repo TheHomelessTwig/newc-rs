@@ -6,7 +6,7 @@ use newc_core::project::Project;
 
 use crate::state::{AppState, View};
 
-pub fn show(ctx: &Context, state: &mut AppState) {
+pub fn show(ctx: &Context, state: &mut AppState, lib: &FunctionLibrary) {
     let project = match &state.view {
         View::UsageTracker(p) => p.clone(),
         _ => return,
@@ -22,12 +22,12 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         });
         ui.separator();
 
-        let usage_map = compute_usage(&project, &state.function_lib);
+        let usage_map = compute_usage(&project, lib);
 
         ui.horizontal(|ui| {
             ui.label("Search:");
             ui.text_edit_singleline(&mut state.usage_search);
-            if ui.small_button("✕").clicked() {
+            if ui.small_button("X").clicked() {
                 state.usage_search.clear();
             }
         });
@@ -48,7 +48,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     continue;
                 }
                 // Find which module this function belongs to
-                let module = state.function_lib.all().iter()
+                let module = lib.all().iter()
                     .find(|f| &f.name == fname)
                     .map(|f| f.module.clone())
                     .unwrap_or_else(|| "unknown".to_string());

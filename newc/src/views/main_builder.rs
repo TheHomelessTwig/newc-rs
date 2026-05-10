@@ -151,7 +151,7 @@ fn show_left_panel(
             let mut to_remove: Option<usize> = None;
             for (i, g) in builder.globals.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
-                    if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                    if ui.small_button("X").clicked() { to_remove = Some(i); }
                     ui.checkbox(&mut g.is_static, "static");
                     ui.add(egui::TextEdit::singleline(&mut g.type_name).desired_width(60.0).hint_text("type"));
                     ui.add(egui::TextEdit::singleline(&mut g.name).desired_width(80.0).hint_text("name"));
@@ -217,10 +217,10 @@ fn show_left_panel(
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(block.label()).small().color(block_label_color(block)));
-                        if i > 0 && ui.small_button("↑").clicked() { move_up = Some(i); }
-                        if i + 1 < n && ui.small_button("↓").clicked() { move_down = Some(i); }
-                        if ui.small_button("⧉").on_hover_text("Duplicate block").clicked() { to_duplicate = Some(i); }
-                        if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                        if i > 0 && ui.small_button("Up").clicked() { move_up = Some(i); }
+                        if i + 1 < n && ui.small_button("Dn").clicked() { move_down = Some(i); }
+                        if ui.small_button("Dup").on_hover_text("Duplicate block").clicked() { to_duplicate = Some(i); }
+                        if ui.small_button("X").clicked() { to_remove = Some(i); }
                     });
                     show_block_editor(ui, block, &available_funcs, func_sigs);
                 });
@@ -382,9 +382,9 @@ fn show_nested_blocks(
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(blocks[i].label()).small().color(block_label_color(&blocks[i])));
-                    if i > 0 && ui.small_button("↑").clicked() { move_up = Some(i); }
-                    if i + 1 < n && ui.small_button("↓").clicked() { move_down = Some(i); }
-                    if ui.small_button("✕").clicked() { to_remove = Some(i); }
+                    if i > 0 && ui.small_button("Up").clicked() { move_up = Some(i); }
+                    if i + 1 < n && ui.small_button("Dn").clicked() { move_down = Some(i); }
+                    if ui.small_button("X").clicked() { to_remove = Some(i); }
                 });
                 show_block_editor(ui, &mut blocks[i], funcs, func_sigs);
             });

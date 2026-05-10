@@ -1,0 +1,216 @@
+module = "test_utils"
+
+[[functions]]
+name = "assert_int_eq"
+module = "test_utils"
+description = "Assert two integers are equal; prints PASS or FAIL with values to stdout"
+signature = "void assert_int_eq(int expected, int actual, const char *label)"
+tags = ["testing", "assert", "int", "equality"]
+requires = ["stdio.h"]
+header_code = "/* Assert that two integers are equal; prints PASS/FAIL with values */\nvoid assert_int_eq(int expected, int actual, const char *label);"
+impl_code = '''
+/*
+ * Function:
+ *     assert_int_eq
+ * Input:
+ *     expected - the expected integer value
+ *     actual   - the actual integer value
+ *     label    - description of the assertion
+ * Output:
+ *     None — prints PASS or FAIL to stdout; updates counters
+ * Algorithm:
+ *     compare expected and actual; print result
+ */
+void assert_int_eq(int expected, int actual, const char *label)
+{
+	if (expected == actual) {
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	} else {
+		printf("  [FAIL] %s — expected %d, got %d\n", label, expected, actual);
+		g_failed++;
+	}
+}
+'''
+
+[[functions]]
+name = "assert_str_eq"
+module = "test_utils"
+description = "Assert two strings are equal; prints PASS or FAIL with values"
+signature = "void assert_str_eq(const char *expected, const char *actual, const char *label)"
+tags = ["testing", "assert", "string", "equality"]
+requires = ["stdio.h", "string.h"]
+header_code = "/* Assert that two strings are equal; prints PASS/FAIL */\nvoid assert_str_eq(const char *expected, const char *actual, const char *label);"
+impl_code = '''
+/*
+ * Function:
+ *     assert_str_eq
+ * Input:
+ *     expected - expected string
+ *     actual   - actual string
+ *     label    - description of the assertion
+ * Output:
+ *     None — prints PASS or FAIL
+ * Algorithm:
+ *     strcmp; print match or mismatch
+ */
+void assert_str_eq(const char *expected, const char *actual, const char *label)
+{
+	if (strcmp(expected, actual) == 0) {
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	} else {
+		printf("  [FAIL] %s — expected \"%s\", got \"%s\"\n", label, expected, actual);
+		g_failed++;
+	}
+}
+'''
+
+[[functions]]
+name = "assert_null"
+module = "test_utils"
+description = "Assert that a pointer is NULL; prints PASS or FAIL"
+signature = "void assert_null(const void *ptr, const char *label)"
+tags = ["testing", "assert", "null", "pointer"]
+requires = ["stdio.h"]
+header_code = "/* Assert that pointer is NULL */\nvoid assert_null(const void *ptr, const char *label);"
+impl_code = '''
+/*
+ * Function:
+ *     assert_null
+ * Input:
+ *     ptr   - pointer to check
+ *     label - description
+ * Output:
+ *     None — prints PASS if ptr is NULL
+ */
+void assert_null(const void *ptr, const char *label)
+{
+	if (ptr == NULL) {
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	} else {
+		printf("  [FAIL] %s — expected NULL, got non-NULL\n", label);
+		g_failed++;
+	}
+}
+'''
+
+[[functions]]
+name = "assert_not_null"
+module = "test_utils"
+description = "Assert that a pointer is not NULL; prints PASS or FAIL"
+signature = "void assert_not_null(const void *ptr, const char *label)"
+tags = ["testing", "assert", "null", "pointer"]
+requires = ["stdio.h"]
+header_code = "/* Assert that pointer is not NULL */\nvoid assert_not_null(const void *ptr, const char *label);"
+impl_code = '''
+/*
+ * Function:
+ *     assert_not_null
+ * Input:
+ *     ptr   - pointer to check
+ *     label - description
+ * Output:
+ *     None — prints PASS if ptr is non-NULL
+ */
+void assert_not_null(const void *ptr, const char *label)
+{
+	if (ptr != NULL) {
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	} else {
+		printf("  [FAIL] %s — expected non-NULL, got NULL\n", label);
+		g_failed++;
+	}
+}
+'''
+
+[[functions]]
+name = "assert_double_near"
+module = "test_utils"
+description = "Assert two doubles are within tolerance of each other; prints PASS or FAIL"
+signature = "void assert_double_near(double expected, double actual, double tolerance, const char *label)"
+tags = ["testing", "assert", "double", "float", "tolerance"]
+requires = ["stdio.h", "math.h"]
+header_code = "/* Assert that two doubles are equal within tolerance */\nvoid assert_double_near(double expected, double actual, double tolerance, const char *label);"
+impl_code = '''
+/*
+ * Function:
+ *     assert_double_near
+ * Input:
+ *     expected  - expected double value
+ *     actual    - actual double value
+ *     tolerance - acceptable difference (e.g. 0.0001)
+ *     label     - description
+ * Output:
+ *     None — prints PASS if |expected - actual| <= tolerance
+ */
+void assert_double_near(double expected, double actual, double tolerance, const char *label)
+{
+	if (fabs(expected - actual) <= tolerance) {
+		printf("  [PASS] %s\n", label);
+		g_passed++;
+	} else {
+		printf("  [FAIL] %s — expected %.6f, got %.6f (tolerance %.6f)\n",
+		       label, expected, actual, tolerance);
+		g_failed++;
+	}
+}
+'''
+
+[[functions]]
+name = "test_run"
+module = "test_utils"
+description = "Run a named test function and print its name as a header"
+signature = "void test_run(const char *name, void (*test_fn)(void))"
+tags = ["testing", "runner", "function pointer"]
+requires = ["stdio.h"]
+header_code = "/* Run a named test function; updates pass/fail counters */\nvoid test_run(const char *name, void (*test_fn)(void));"
+impl_code = '''
+/*
+ * Function:
+ *     test_run
+ * Input:
+ *     name    - human-readable test name printed as header
+ *     test_fn - function pointer to the test body (takes no args, returns void)
+ * Output:
+ *     None — runs test_fn and prints header
+ */
+void test_run(const char *name, void (*test_fn)(void))
+{
+	printf("[TEST] %s\n", name);
+	test_fn();
+}
+'''
+
+[[functions]]
+name = "print_test_summary"
+module = "test_utils"
+description = "Print final pass/fail summary to stdout"
+signature = "void print_test_summary(void)"
+tags = ["testing", "summary", "report"]
+requires = ["stdio.h"]
+header_code = "/* Print final summary: passed/total */\nvoid print_test_summary(void);"
+impl_code = '''
+/*
+ * Function:
+ *     print_test_summary
+ * Input:
+ *     None
+ * Output:
+ *     None — prints final pass/fail summary
+ */
+void print_test_summary(void)
+{
+	int total = g_passed + g_failed;
+	printf("\n========================================\n");
+	printf("Results: %d / %d passed", g_passed, total);
+	if (g_failed == 0) {
+		printf(" — ALL PASS\n");
+	} else {
+		printf(" — %d FAILED\n", g_failed);
+	}
+	printf("========================================\n");
+}
+'''

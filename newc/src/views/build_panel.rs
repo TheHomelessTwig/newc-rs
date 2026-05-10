@@ -1,15 +1,20 @@
 use egui::{Color32, RichText, ScrollArea, Ui};
+use newc_core::diag::Diagnostic;
 
 use crate::build_runner::{BuildLine, LineKind};
 
-pub fn show(ui: &mut Ui, lines: &[BuildLine], auto_scroll: &mut bool) {
+/// Returns `Some((file, line_no))` when the user clicks a diagnostic line.
+pub fn show(
+    ui: &mut Ui,
+    lines: &[BuildLine],
+    diagnostics: &[Diagnostic],
+    auto_scroll: &mut bool,
+) -> Option<(String, usize)> {
+    let mut clicked: Option<(String, usize)> = None;
+
     ui.horizontal(|ui| {
         ui.label(RichText::new("Build Output").strong());
         ui.checkbox(auto_scroll, "Auto-scroll");
-        if ui.small_button("Clear").clicked() {
-            // Caller must handle clear — we signal via return value.
-            // For simplicity: handled by the app layer checking cleared flag.
-        }
     });
     ui.separator();
 
@@ -35,8 +40,32 @@ pub fn show(ui: &mut Ui, lines: &[BuildLine], auto_scroll: &mut bool) {
                     };
                     ui.label(RichText::new(msg).color(color).strong());
                 } else if !line.text.is_empty() {
-                    ui.label(RichText::new(&line.text).color(color).monospace());
+                    // Check if this line matches a diagnostic — if so, make it clickable
+                    let diag_match = diagnostics.iter().find(|d| {
+                        let prefix = format!("{}:{}", d.file, d.line);
+                        line.text.starts_with(&prefix)
+                            || line.text.starts_with(&format!("./{prefix}"))
+                    });
+                    if let Some(d) = diag_match {
+                        let resp = ui.add(
+                            egui::Label::new(
+                                RichText::new(&line.text)
+                                    .color(color)
+                                    .monospace()
+                                    .underline(),
+                            )
+                            .sense(egui::Sense::click()),
+                        );
+                        if resp.clicked() {
+                            clicked = Some((d.file.clone(), d.line));
+                        }
+                        resp.on_hover_text("Click to navigate to module");
+                    } else {
+                        ui.label(RichText::new(&line.text).color(color).monospace());
+                    }
                 }
             }
         });
+
+    clicked
 }

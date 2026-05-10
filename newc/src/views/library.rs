@@ -1,5 +1,5 @@
 use egui::{Color32, RichText, ScrollArea, SidePanel, CentralPanel, Ui};
-use newc_core::function_lib::{FunctionLibrary, FunctionTemplate};
+use newc_core::function_lib::{FunctionLibrary, FunctionTemplate, detect_requires};
 
 #[derive(Default, Clone)]
 pub struct LibraryState {
@@ -12,6 +12,14 @@ pub struct LibraryState {
     pub active_group: Option<String>,
     /// Rename input for the group rename dialog
     pub rename_input: String,
+    // ── Structured signature builder ──────────────────────────────────────────
+    /// (type, name) pairs for the parameter builder
+    pub draft_params: Vec<(String, String)>,
+    pub draft_return_type: String,
+    /// When true, user types the signature manually instead of builder
+    pub draft_override_sig: bool,
+    /// Guards one-time init of draft_params when entering edit mode
+    pub draft_params_ready: bool,
 }
 
 impl LibraryState {
@@ -29,6 +37,20 @@ impl LibraryState {
             starred: false,
         }
     }
+
+    pub fn init_params_from_sig(&mut self, sig: &str) {
+        let (ret, params) = parse_sig(sig);
+        self.draft_return_type = ret;
+        self.draft_params = params;
+        self.draft_params_ready = true;
+    }
+
+    pub fn reset_builder(&mut self) {
+        self.draft_params.clear();
+        self.draft_return_type = "void".to_string();
+        self.draft_override_sig = false;
+        self.draft_params_ready = true;
+    }
 }
 
 pub enum LibraryAction {
@@ -43,6 +65,96 @@ pub enum LibraryAction {
     DeleteGroup { name: String, cascade: bool },
 }
 
+// ── Signature helpers ─────────────────────────────────────────────────────────
+
+/// Best-effort parse of `return_type name(params)` → (return_type, [(type, name)])
+fn parse_sig(sig: &str) -> (String, Vec<(String, String)>) {
+    let sig = sig.trim().trim_end_matches(';').trim();
+    let Some(paren) = sig.find('(') else {
+        return (String::new(), Vec::new());
+    };
+    let before = sig[..paren].trim();
+    let inner = sig[paren + 1..].trim_end_matches(')').trim();
+
+    let return_type = if let Some(pos) = before.rfind(|c: char| c.is_whitespace()) {
+        before[..pos].trim().to_string()
+    } else {
+        String::new()
+    };
+
+    let params = if inner.is_empty() || inner == "void" {
+        Vec::new()
+    } else {
+        inner
+            .split(',')
+            .filter_map(|p| {
+                let p = p.trim();
+                if p.is_empty() { return None; }
+                if let Some(sp) = p.rfind(|c: char| c.is_whitespace()) {
+                    let mut ptype = p[..sp].trim().to_string();
+                    let pname = p[sp..].trim().to_string();
+                    // `int *ptr` → after rfind: ptype=`int`, pname=`*ptr`; move `*` to type
+                    if pname.starts_with('*') {
+                        ptype.push('*');
+                        Some((ptype, pname.trim_start_matches('*').trim().to_string()))
+                    } else {
+                        Some((ptype, pname))
+                    }
+                } else {
+                    Some((p.to_string(), String::new()))
+                }
+            })
+            .collect()
+    };
+    (return_type, params)
+}
+
+fn build_sig(return_type: &str, name: &str, params: &[(String, String)]) -> String {
+    let params_str = if params.is_empty() {
+        "void".to_string()
+    } else {
+        params
+            .iter()
+            .map(|(t, n)| if n.is_empty() { t.clone() } else { format!("{t} {n}") })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!("{return_type} {name}({params_str})")
+}
+
+fn build_skeleton(return_type: &str, name: &str, params: &[(String, String)]) -> (String, String) {
+    let sig = build_sig(return_type, name, params);
+
+    let input_docs = if params.is_empty() {
+        " *     None\n".to_string()
+    } else {
+        params
+            .iter()
+            .map(|(t, n)| format!(" *     {} - ({})\n", if n.is_empty() { t } else { n }, t))
+            .collect()
+    };
+
+    let return_doc = if return_type == "void" || return_type.is_empty() {
+        " *     None\n"
+    } else {
+        " *     result\n"
+    };
+
+    let return_stmt = if return_type == "void" || return_type.is_empty() {
+        String::new()
+    } else {
+        "\t/* TODO: compute and return result */\n".to_string()
+    };
+
+    let header = format!("{sig};\n");
+    let impl_code = format!(
+        "/*\n * Function:\n *     {name}\n * Input:\n{input_docs} * Output:\n{return_doc} * Algorithm:\n *     TODO\n */\n{sig}\n{{\n{return_stmt}}}\n"
+    );
+    (header, impl_code)
+}
+
+// ── Main show ─────────────────────────────────────────────────────────────────
+
 pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> LibraryAction {
     let mut action = LibraryAction::None;
 
@@ -56,12 +168,12 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
             state.adding_new = true;
             state.edit_mode = true;
             let mut draft = LibraryState::new_draft();
-            // Pre-fill module from active group
             if let Some(g) = &state.active_group {
                 draft.module = g.clone();
             }
             state.draft = Some(draft);
             state.selected = None;
+            state.reset_builder();
         }
         if ui.button("Import from .c…").clicked() {
             action = LibraryAction::OpenImport;
@@ -73,11 +185,12 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
     if state.adding_new {
         if state.draft.is_none() {
             state.draft = Some(LibraryState::new_draft());
+            state.reset_builder();
         }
         let mut draft = state.draft.take().unwrap();
         egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
             ui.heading("New Function");
-            show_edit_form(ui, &mut draft, lib);
+            show_edit_form(ui, &mut draft, lib, state);
         });
         let valid = !draft.name.trim().is_empty() && !draft.module.trim().is_empty();
         ui.horizontal(|ui| {
@@ -107,7 +220,6 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Groups").strong());
                 if ui.small_button("+").on_hover_text("New group").clicked() {
-                    // Signal via a special "new_group" selected state; app.rs shows modal
                     action = LibraryAction::CreateGroup {
                         name: "__OPEN_DIALOG__".to_string(),
                         description: String::new(),
@@ -117,14 +229,12 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
             ui.separator();
 
             ScrollArea::vertical().id_salt("groups_scroll").show(ui, |ui| {
-                // "All" entry
                 let all_sel = state.active_group.is_none();
                 if ui.selectable_label(all_sel, "All").clicked() {
                     state.active_group = None;
                     state.selected = None;
                 }
 
-                // "Starred" filter
                 let starred_count = lib.all().iter().filter(|f| f.starred).count();
                 let starred_sel = state.active_group.as_deref() == Some("__starred__");
                 if ui.selectable_label(starred_sel, format!("★ Starred ({})", starred_count)).clicked() {
@@ -137,8 +247,7 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                     let count = lib.by_module(&group.name).len();
                     let is_sel = state.active_group.as_deref() == Some(&group.name);
                     ui.horizontal(|ui| {
-                        let label =
-                            format!("{} ({})", group.name, count);
+                        let label = format!("{} ({})", group.name, count);
                         if ui.selectable_label(is_sel, &label).clicked() {
                             state.active_group = Some(group.name.clone());
                             state.selected = None;
@@ -147,12 +256,7 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if ui
-                                        .small_button("…")
-                                        .on_hover_text("Rename / delete")
-                                        .clicked()
-                                    {
-                                        // Signal app.rs to open the group action modal
+                                    if ui.small_button("…").on_hover_text("Rename / delete").clicked() {
                                         state.rename_input = group.name.clone();
                                         action = LibraryAction::RenameGroup {
                                             old: "__OPEN_DIALOG__".to_string(),
@@ -167,8 +271,7 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
             });
         });
 
-    // ── Right: function list + detail ────────────────────────────────────────
-    // Build candidate list filtered by active group and search
+    // ── Build candidate list ─────────────────────────────────────────────────
     let candidates: Vec<_> = {
         let by_group: Vec<_> = match state.active_group.as_deref() {
             Some("__starred__") => lib.all().iter().filter(|f| f.starred).collect(),
@@ -190,36 +293,61 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
         }
     };
 
-    // Sub-split: function list (inner left) + detail (inner right)
+    // ── Function list (inner left) ───────────────────────────────────────────
     SidePanel::left("lib_list")
         .min_width(180.0)
         .max_width(260.0)
         .show_inside(ui, |ui| {
             ScrollArea::vertical().id_salt("lib_list_scroll").show(ui, |ui| {
-                let mut modules: Vec<String> =
-                    candidates.iter().map(|f| f.module.clone()).collect();
-                modules.sort();
-                modules.dedup();
+                let show_flat = state.active_group.is_none();
 
-                for module in &modules {
-                    ui.collapsing(module.as_str(), |ui| {
-                        for func in candidates.iter().filter(|f| &f.module == module) {
-                            let selected = state.selected.as_deref() == Some(&func.name);
-                            ui.horizontal(|ui| {
-                                let star = if func.starred { "★" } else { "☆" };
-                                if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
-                                    action = LibraryAction::ToggleStar(func.name.clone());
+                if show_flat {
+                    // ── Flat alphabetical list (no group headers) ─────────────
+                    let mut sorted = candidates.clone();
+                    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+                    for func in sorted {
+                        let selected = state.selected.as_deref() == Some(&func.name);
+                        ui.horizontal(|ui| {
+                            let star = if func.starred { "★" } else { "☆" };
+                            if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
+                                action = LibraryAction::ToggleStar(func.name.clone());
+                            }
+                            if ui.selectable_label(selected, &func.name).clicked() {
+                                if state.selected.as_deref() != Some(&func.name) {
+                                    state.selected = Some(func.name.clone());
+                                    state.edit_mode = false;
+                                    state.draft = None;
                                 }
-                                if ui.selectable_label(selected, &func.name).clicked() {
-                                    if state.selected.as_deref() != Some(&func.name) {
-                                        state.selected = Some(func.name.clone());
-                                        state.edit_mode = false;
-                                        state.draft = None;
+                            }
+                        });
+                    }
+                } else {
+                    // ── Grouped list (when a group filter is active) ──────────
+                    let mut modules: Vec<String> =
+                        candidates.iter().map(|f| f.module.clone()).collect();
+                    modules.sort();
+                    modules.dedup();
+
+                    for module in &modules {
+                        ui.collapsing(module.as_str(), |ui| {
+                            for func in candidates.iter().filter(|f| &f.module == module) {
+                                let selected = state.selected.as_deref() == Some(&func.name);
+                                ui.horizontal(|ui| {
+                                    let star = if func.starred { "★" } else { "☆" };
+                                    if ui.small_button(star).on_hover_text("Toggle favourite").clicked() {
+                                        action = LibraryAction::ToggleStar(func.name.clone());
                                     }
-                                }
-                            });
-                        }
-                    });
+                                    if ui.selectable_label(selected, &func.name).clicked() {
+                                        if state.selected.as_deref() != Some(&func.name) {
+                                            state.selected = Some(func.name.clone());
+                                            state.edit_mode = false;
+                                            state.draft = None;
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
                 }
 
                 if candidates.is_empty() {
@@ -249,10 +377,14 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
         if state.edit_mode {
             if state.draft.is_none() {
                 state.draft = Some(func.clone());
+                // Init builder from existing signature on first open
+                let sig = func.signature.clone();
+                state.init_params_from_sig(&sig);
+                state.draft_override_sig = false;
             }
             let mut draft = state.draft.take().unwrap();
             ScrollArea::vertical().id_salt("lib_edit").show(ui, |ui| {
-                show_edit_form(ui, &mut draft, lib);
+                show_edit_form(ui, &mut draft, lib, state);
             });
             ui.separator();
             let valid = !draft.name.trim().is_empty() && !draft.module.trim().is_empty();
@@ -266,6 +398,7 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                 }
                 if ui.button("Cancel").clicked() {
                     state.edit_mode = false;
+                    state.draft_params_ready = false;
                 }
             });
             if !saved && state.edit_mode {
@@ -283,6 +416,7 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Edit").clicked() {
                             state.edit_mode = true;
+                            state.draft_params_ready = false; // trigger init on next frame
                         }
                         if ui.button("Delete").on_hover_text("Remove from library").clicked() {
                             action = LibraryAction::Delete(func.name.clone());
@@ -349,7 +483,15 @@ pub fn show(ui: &mut Ui, lib: &FunctionLibrary, state: &mut LibraryState) -> Lib
     action
 }
 
-fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibrary) {
+// ── Edit form ─────────────────────────────────────────────────────────────────
+
+fn show_edit_form(
+    ui: &mut Ui,
+    draft: &mut FunctionTemplate,
+    lib: &FunctionLibrary,
+    state: &mut LibraryState,
+) {
+    // ── Metadata grid ────────────────────────────────────────────────────────
     egui::Grid::new("func_edit_grid")
         .num_columns(2)
         .min_col_width(80.0)
@@ -358,7 +500,6 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
             ui.text_edit_singleline(&mut draft.name);
             ui.end_row();
 
-            // Group/module as a combo-box populated from known groups
             ui.label("Group:");
             egui::ComboBox::from_id_salt("func_module_combo")
                 .selected_text(if draft.module.is_empty() { "— pick group —" } else { &draft.module })
@@ -366,11 +507,7 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
                     for group in &lib.groups {
                         ui.selectable_value(&mut draft.module, group.name.clone(), &group.name);
                     }
-                    ui.separator();
-                    // Allow typing a new group name via a text field inside the combo
-                    // (handled below — free-text fallback)
                 });
-            // Free-text override if they want a brand-new group name
             if !lib.groups.iter().any(|g| g.name == draft.module) && !draft.module.is_empty() {
                 ui.label(
                     RichText::new(format!("New group: {}", draft.module))
@@ -384,10 +521,6 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
             ui.text_edit_singleline(&mut draft.description);
             ui.end_row();
 
-            ui.label("Signature:");
-            ui.text_edit_singleline(&mut draft.signature);
-            ui.end_row();
-
             ui.label("Tags:");
             let mut tags_str = draft.tags.join(", ");
             if ui.text_edit_singleline(&mut tags_str).changed() {
@@ -398,25 +531,145 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
                     .collect();
             }
             ui.end_row();
-
-            ui.label("Requires:");
-            let mut req_str = draft.requires.join(", ");
-            if ui.text_edit_singleline(&mut req_str).changed() {
-                draft.requires = req_str
-                    .split(',')
-                    .map(|t| t.trim().to_string())
-                    .filter(|t| !t.is_empty())
-                    .collect();
-            }
-            ui.end_row();
         });
 
+    ui.add_space(8.0);
+    ui.separator();
+
+    // ── Signature builder ────────────────────────────────────────────────────
+    ui.label(RichText::new("Signature Builder").strong());
+
+    // Return type + function name row
+    ui.horizontal(|ui| {
+        ui.label("Return type:");
+        ui.add(
+            egui::TextEdit::singleline(&mut state.draft_return_type)
+                .desired_width(80.0)
+                .hint_text("void"),
+        );
+        ui.add_space(12.0);
+        ui.label("Function name:");
+        ui.add(
+            egui::TextEdit::singleline(&mut draft.name)
+                .desired_width(140.0)
+                .hint_text("my_function"),
+        );
+    });
+
+    // Parameters list
     ui.add_space(4.0);
+    ui.label(RichText::new("Parameters:").small().color(Color32::GRAY));
+    let mut to_remove: Option<usize> = None;
+    for (i, (ptype, pname)) in state.draft_params.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            if ui.small_button("X").clicked() {
+                to_remove = Some(i);
+            }
+            ui.add(egui::TextEdit::singleline(ptype).desired_width(90.0).hint_text("type"));
+            ui.add(egui::TextEdit::singleline(pname).desired_width(90.0).hint_text("name"));
+        });
+    }
+    if let Some(i) = to_remove {
+        state.draft_params.remove(i);
+    }
+    if ui.small_button("+ Add Parameter").clicked() {
+        state.draft_params.push((String::new(), String::new()));
+    }
+
+    // Live signature generation
+    ui.add_space(4.0);
+    let ret = state.draft_return_type.trim().to_string();
+    let fn_name = draft.name.trim().to_string();
+    if !fn_name.is_empty() && !ret.is_empty() {
+        let gen_sig = build_sig(&ret, &fn_name, &state.draft_params);
+        if !state.draft_override_sig {
+            draft.signature = gen_sig.clone();
+            draft.header_code = format!("{gen_sig};\n");
+        }
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Generated:").small().color(Color32::GRAY));
+            ui.label(RichText::new(&gen_sig).monospace().small().color(Color32::LIGHT_GRAY));
+        });
+
+        // Skeleton button — only fill if impl_code is empty
+        if draft.impl_code.trim().is_empty() {
+            if ui.small_button("Generate skeleton").on_hover_text("Fill header_code + impl_code from signature").clicked() {
+                let (hdr, imp) = build_skeleton(&ret, &fn_name, &state.draft_params);
+                draft.header_code = hdr;
+                draft.impl_code = imp;
+            }
+        } else if ui.small_button("Regenerate skeleton").on_hover_text("Overwrite header_code + impl_code from signature").clicked() {
+            let (hdr, imp) = build_skeleton(&ret, &fn_name, &state.draft_params);
+            draft.header_code = hdr;
+            draft.impl_code = imp;
+        }
+    }
+
+    ui.checkbox(&mut state.draft_override_sig, "Override signature manually");
+    if state.draft_override_sig {
+        ui.horizontal(|ui| {
+            ui.label("Signature:");
+            ui.add(
+                egui::TextEdit::singleline(&mut draft.signature)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("return_type name(type param, ...)"),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label("Header (.h):");
+            ui.add(
+                egui::TextEdit::singleline(&mut draft.header_code)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("return_type name(type param, ...);"),
+            );
+        });
+    }
+
+    ui.add_space(4.0);
+    ui.separator();
+
+    // ── Requires ─────────────────────────────────────────────────────────────
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Requires:").strong());
+        if ui.small_button("Detect").on_hover_text("Scan implementation for stdlib and library calls").clicked() {
+            let detected = detect_requires(&draft.impl_code, lib);
+            for r in detected {
+                if !draft.requires.contains(&r) {
+                    draft.requires.push(r);
+                }
+            }
+        }
+        if ui.small_button("Clear").clicked() {
+            draft.requires.clear();
+        }
+    });
+    ui.label(
+        RichText::new("System headers (stdio.h, math.h…) and library function names this function depends on.")
+            .small()
+            .color(Color32::GRAY),
+    );
+    let mut req_str = draft.requires.join(", ");
+    if ui.add(
+        egui::TextEdit::singleline(&mut req_str)
+            .desired_width(f32::INFINITY)
+            .hint_text("stdio.h, math.h, my_helper_fn, …"),
+    ).changed() {
+        draft.requires = req_str
+            .split(',')
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .collect();
+    }
+
+    ui.add_space(4.0);
+    ui.separator();
+
+    // ── Code blocks ──────────────────────────────────────────────────────────
     ui.label(RichText::new("Prototype (.h):").strong());
     ui.add(
         egui::TextEdit::multiline(&mut draft.header_code)
             .code_editor()
-            .desired_rows(3)
+            .desired_rows(2)
             .desired_width(f32::INFINITY),
     );
 
@@ -425,7 +678,7 @@ fn show_edit_form(ui: &mut Ui, draft: &mut FunctionTemplate, lib: &FunctionLibra
     ui.add(
         egui::TextEdit::multiline(&mut draft.impl_code)
             .code_editor()
-            .desired_rows(12)
+            .desired_rows(14)
             .desired_width(f32::INFINITY),
     );
 

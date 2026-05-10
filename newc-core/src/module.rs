@@ -36,7 +36,23 @@ pub fn list_modules(root: &Path) -> Result<Vec<Module>> {
     Ok(modules)
 }
 
+/// Returns true if `s` is a valid C identifier: `[a-zA-Z_][a-zA-Z0-9_]*`, max 63 chars.
+pub fn is_valid_c_ident(s: &str) -> bool {
+    if s.is_empty() || s.len() > 63 {
+        return false;
+    }
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 pub fn add_module(root: &Path, name: &str) -> Result<()> {
+    if !is_valid_c_ident(name) {
+        return Err(NewcError::InvalidName(name.to_string()));
+    }
     let header = root.join("include").join(format!("{name}.h"));
     let source = root.join("src").join(format!("{name}.c"));
 

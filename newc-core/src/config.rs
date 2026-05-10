@@ -195,11 +195,19 @@ impl AppConfig {
 
         #[cfg(target_os = "windows")]
         {
-            // Windows Terminal with working directory
-            std::process::Command::new("cmd")
-                .args(["/c", "start", terminal, "--", "/d", &root_str, editor, "."])
-                .spawn()
-                .ok();
+            // Windows Terminal (wt) uses -d flag; other terminals use cmd start /d
+            if terminal.eq_ignore_ascii_case("wt") || terminal.eq_ignore_ascii_case("wt.exe") {
+                std::process::Command::new("wt")
+                    .args(["-d", &root_str, editor, "."])
+                    .spawn()
+                    .ok();
+            } else {
+                // cmd /c start uses /d for working directory; empty string is the window title
+                std::process::Command::new("cmd")
+                    .args(["/c", "start", "", terminal.as_str(), "/d", &root_str, editor, "."])
+                    .spawn()
+                    .ok();
+            }
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]

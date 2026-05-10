@@ -25,6 +25,7 @@ The debug binary lands at `target/debug/newc`.
 cargo run                          # open GUI
 cargo run -- gui ~/projects/myapp  # open to a specific project
 cargo run -- stats                 # CLI stats in current directory
+cargo run --bin newc-gui           # GUI-only binary (no console window)
 ```
 
 ---
@@ -45,6 +46,7 @@ newc-rs/
     ├── Cargo.toml
     └── src/
         ├── main.rs
+        ├── gui_main.rs         # GUI-only entry point (no console on Windows)
         ├── app.rs
         ├── state.rs
         ├── cli.rs
@@ -126,19 +128,34 @@ requires = []
 
 If the function depends on another, list its name in `requires`. The library's `resolve_deps()` will automatically include dependencies when a user imports this function.
 
+**If creating a new module TOML file**, also add it to `BUILTIN_TOML_FILES` in `newc-core/src/function_lib.rs`:
+
+```rust
+const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
+    // existing entries …
+    ("my_module", include_str!("../../assets/functions/my_module.toml")),
+];
+```
+
+Without this entry the module will compile into the binary but never be loaded.
+
 ---
 
 ## Adding a new lint rule
 
-Edit `newc-core/src/lint.rs`. The simplest pattern:
+Edit `newc-core/src/lint.rs`. Two functions exist:
+- `lint_file(content, filename)` — applies to `.c` files (L001–L009, L011–L015)
+- `lint_header(content)` — applies to `.h` files (currently L010)
+
+The simplest pattern for a new `.c` rule:
 
 ```rust
-// L010: descriptive name
+// L016: descriptive name
 if line.contains("dangerous_pattern(") {
     warnings.push(LintWarning {
         line_no: lno,
         severity: LintSeverity::Warning,
-        code: "L010",
+        code: "L016",
         message: "Explain the problem and what to use instead".into(),
     });
 }
@@ -148,6 +165,14 @@ Rules must:
 - Operate on a single `&str` line (or a small lookahead window for multi-line patterns)
 - Never panic
 - Be fast enough to run every render frame without noticeable lag
+- Have at least two unit tests: one that triggers the rule, one clean case that does not
+
+Watch for false positives from function names that contain the matched substring (e.g. `fgets` contains `gets`, `snprintf` contains `printf`). Use a `prev_is_alpha` guard when needed:
+
+```rust
+let prev_is_alpha = pos > 0 && line.as_bytes()[pos - 1].is_ascii_alphabetic();
+if !prev_is_alpha { /* fire rule */ }
+```
 
 ---
 
@@ -187,6 +212,20 @@ fn my_template_builder() -> MainBuilderState {
 
 ---
 
+## Adding a new default module
+
+A default module is one the user can include at project-creation time. Adding one requires three steps:
+
+1. **Add C file content** — add `pub fn my_module_h() -> &'static str` and `pub fn my_module_c() -> &'static str` to `newc-core/src/templates.rs`
+
+2. **Wire into scaffold** — add a variant to `DefaultModule` in `newc-core/src/scaffold.rs` and handle it in the `match` arm that writes module files
+
+3. **Add library TOML** — create `newc-core/assets/functions/my_module.toml` and add it to `BUILTIN_TOML_FILES` in `function_lib.rs` so it appears in the library browser
+
+Optionally, wire the checkbox into `newc/src/views/create.rs` so users can select it in the GUI project creation form.
+
+---
+
 ## Commit style
 
 ```
@@ -199,8 +238,6 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
-The pre-commit hook automatically bumps the patch version in both `Cargo.toml` files. Do not edit version numbers manually.
-
 ---
 
 ## Testing
@@ -212,11 +249,11 @@ Run the full suite:
 cargo test --workspace
 ```
 
-39 tests across 5 modules (all in `newc-core` or `newc` — no display required):
+48 tests across 5 modules (all in `newc-core` or `newc` — no display required):
 
 | Module | Tests | Coverage |
 |---|---|---|
-| `lint.rs` | 18 | All 9 lint rules — trigger and clean case, including bug-fix regressions |
+| `lint.rs` | 30 | All 15 lint rules — trigger and clean case; false-positive regressions for L001/L004 |
 | `sync.rs` | 4 | `extract_signatures` — single, multiple, empty, text accuracy |
 | `module.rs` | 5 | `add_module`, `remove_module` with tempdir — files, includes, duplicates |
 | `scaffold.rs` | 4 | `create_project` — dirs, module files, duplicate error, main.c includes |
@@ -248,14 +285,14 @@ LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe cargo run
 
 ## Release process
 
-1. For patch releases: the pre-commit hook bumps the version automatically on every commit — no manual action needed.
-2. For minor/major releases: edit the version in both `Cargo.toml` files manually before committing, then commit with `--no-verify` to skip the hook's auto-increment.
-3. Tag: `git tag v0.x.y`
+1. Bump the version in both `Cargo.toml` files to the new version.
+2. Commit: `git commit -m "chore: bump to vX.Y.Z"`
+3. Tag: `git tag vX.Y.Z`
 4. Push tag: `git push origin main --tags`
 
 GitHub Actions (`.github/workflows/release.yml`) then automatically:
 - Runs the test suite
-- Builds binaries for Linux x86_64/aarch64, macOS Intel/ARM, and Windows x86_64
+- Builds binaries for Linux x86_64/aarch64, macOS ARM, and Windows x86_64
 - Creates a GitHub Release with all binaries attached
 
 Once the release is live, users on any platform can install it with:

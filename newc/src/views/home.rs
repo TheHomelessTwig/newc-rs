@@ -179,11 +179,12 @@ pub fn show(
                 );
 
                 // Workspace move menu
-                let response = ui.small_button("⋮").on_hover_text("Project options");
+                let popup_id = egui::Id::new(("proj_menu", i));
+                let response = ui.small_button("...").on_hover_text("Project options");
                 if response.clicked() {
-                    // We'll show it as a popup
+                    ui.memory_mut(|m| m.toggle_popup(popup_id));
                 }
-                egui::popup::popup_below_widget(ui, egui::Id::new(("proj_menu", i)), &response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                egui::popup::popup_below_widget(ui, popup_id, &response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
                     ui.set_min_width(140.0);
                     if !*show_archived {
                         if ui.button("Archive").clicked() {
@@ -207,7 +208,7 @@ pub fn show(
                     }
                 });
 
-                if ui.small_button("✕").clicked() {
+                if ui.small_button("X").clicked() {
                     to_remove = Some(*i);
                 }
                 ui.end_row();

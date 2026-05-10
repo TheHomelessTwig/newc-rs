@@ -8,7 +8,6 @@ No Rust installation required. Download the binary for your platform from [GitHu
 |---|---|
 | Linux x86_64 | `newc-x86_64-linux` |
 | Linux aarch64 | `newc-aarch64-linux` |
-| macOS Intel | `newc-x86_64-macos` |
 | macOS Apple Silicon | `newc-aarch64-macos` |
 | Windows x86_64 | `newc-x86_64-windows.exe` |
 
@@ -157,6 +156,8 @@ cargo build --release
 ```
 
 The binary is at `target\release\newc.exe`. Add it to your PATH.
+
+When `newc` opens the GUI on Windows, it spawns itself with `CREATE_NO_WINDOW` so no console window appears alongside the GUI window.
 
 ### Notes
 
