@@ -75,6 +75,16 @@ fn install_binary(tmp: &Path, target: &Path) -> Result<()> {
     print!("Installing to {}... ", target.display());
     std::io::stdout().flush()?;
 
+    #[cfg(windows)]
+    {
+        if std::fs::copy(tmp, target).is_ok() {
+            println!("done.");
+            return Ok(());
+        }
+        return install_windows_deferred(tmp, target);
+    }
+
+    #[cfg(not(windows))]
     match std::fs::copy(tmp, target) {
         Ok(_) => {
             println!("done.");
@@ -100,6 +110,28 @@ fn install_binary(tmp: &Path, target: &Path) -> Result<()> {
             }
         }
     }
+}
+
+#[cfg(windows)]
+fn install_windows_deferred(tmp: &Path, target: &Path) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    const DETACHED_PROCESS: u32 = 0x00000008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+
+    let bat = std::env::temp_dir().join("newc-finish-update.bat");
+    let script = format!(
+        "@echo off\r\ntimeout /t 1 /nobreak >nul\r\ncopy /y \"{src}\" \"{dst}\"\r\ndel \"{src}\"\r\ndel \"%~f0\"\r\n",
+        src = tmp.display(),
+        dst = target.display(),
+    );
+    std::fs::write(&bat, script.as_bytes())?;
+    std::process::Command::new("cmd")
+        .arg("/c")
+        .arg(&bat)
+        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        .spawn()?;
+    println!("done.\nUpdate installs after newc exits.");
+    Ok(())
 }
 
 /// Returns Some(latest_version) if a newer release exists, None if up-to-date.
