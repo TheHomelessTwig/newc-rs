@@ -54,7 +54,7 @@ impl FunctionLibrary {
         let mut lib = Self::default();
 
         // Built-in groups always present
-        for name in ["input", "math", "display", "array"] {
+        for name in ["input", "math", "display", "array", "algorithms", "strings", "linked_list", "files", "test_utils"] {
             lib.groups.push(FunctionGroup {
                 name: name.to_string(),
                 description: String::new(),

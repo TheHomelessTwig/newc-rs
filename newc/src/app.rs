@@ -461,13 +461,23 @@ impl eframe::App for NewcApp {
                 // Recent projects
                 if !self.state.recent_projects.is_empty() {
                     ui.label(egui::RichText::new("Recent").small().color(egui::Color32::GRAY));
-                    for path in &self.state.recent_projects.clone() {
+                    let mut remove_recent: Option<usize> = None;
+                    for (ri, path) in self.state.recent_projects.clone().iter().enumerate() {
                         let name = path.file_name()
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_default();
-                        if ui.small_button(&name).clicked() {
-                            self.open_project(path.clone());
-                        }
+                        ui.horizontal(|ui| {
+                            if ui.small_button(&name).on_hover_text(path.display().to_string()).clicked() {
+                                self.open_project(path.clone());
+                            }
+                            if ui.small_button("×").on_hover_text("Remove from recents").clicked() {
+                                remove_recent = Some(ri);
+                            }
+                        });
+                    }
+                    if let Some(ri) = remove_recent {
+                        self.state.recent_projects.remove(ri);
+                        crate::state::save_recent_projects(&self.state.recent_projects);
                     }
                     ui.separator();
                 }
