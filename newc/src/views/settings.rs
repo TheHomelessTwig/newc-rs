@@ -1,41 +1,16 @@
-use iced::widget::{button, column, row, text, text_input};
+use iced::widget::{button, column, row, text, text_input, Space};
 use iced::{Color, Element};
 
-use crate::state::{Message};
+use crate::app::ALL_THEMES;
+use crate::state::{AppState, Message};
 
-pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
+pub fn view(state: &AppState) -> Element<'_, Message> {
     let cfg = &state.config_draft;
+    let current_theme = &state.active_theme;
 
-    let theme_row = row![
-        text("Theme:").width(140),
-        button(text("Dark"))
-            .on_press(Message::SettingsDraftTheme("dark".to_string())),
-        button(text("Light"))
-            .on_press(Message::SettingsDraftTheme("light".to_string())),
-        text(format!("(current: {})", cfg.theme))
-            .size(12)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
-    ]
-    .spacing(8)
-    .align_y(iced::Alignment::Center);
-
-    let clang_styles = ["file", "LLVM", "Google", "Chromium", "GNU", "Microsoft"];
-    let _clang_btns: Vec<Element<Message>> = clang_styles.iter().map(|s| {
-        button(text(*s))
-            .on_press(Message::SettingsDraftTheme(s.to_string())) // reuses theme message for now
-            .into()
-    }).collect();
-
-    let _scan_dirs_text = cfg.scan_dirs.join("\n");
-
-    let scan_label = if cfg.scan_dirs.is_empty() {
-        "(none)".to_string()
-    } else {
-        format!("{} directories", cfg.scan_dirs.len())
-    };
-
-    column![
-        text("Settings").size(18),
+    // ── Editor / Terminal ──────────────────────────────────────────────────────
+    let fields = column![
+        text("Settings").size(20),
         row![
             text("Terminal:").width(140),
             text_input("e.g. kitty", &cfg.terminal)
@@ -52,28 +27,91 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center),
-        theme_row,
-        row![
-            text("Scan dirs:").width(140),
-            text(scan_label).color(Color::from_rgb(0.5, 0.5, 0.5)),
-        ]
-        .spacing(8),
-        text("(Edit scan directories in the config file: ~/.config/newc/config.toml)")
-            .size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+    ]
+    .spacing(10);
+
+    // ── Theme picker ──────────────────────────────────────────────────────────
+    let theme_btns: Vec<Element<Message>> = ALL_THEMES.iter().map(|(key, label)| {
+        let is_active = current_theme == *key;
+        let color = if is_active {
+            Color::from_rgb(0.663, 0.863, 0.463)
+        } else {
+            Color::WHITE
+        };
+        button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+            .on_press(Message::ThemeSelect(key.to_string()))
+            .width(180)
+            .into()
+    }).collect();
+
+    // Lay them out in 3 columns
+    let col1: Vec<Element<Message>> = theme_btns.into_iter()
+        .enumerate()
+        .filter(|(i, _)| i % 3 == 0)
+        .map(|(_, e)| e)
+        .collect();
+    let col2: Vec<Element<Message>> = ALL_THEMES.iter().enumerate()
+        .filter(|(i, _)| i % 3 == 1)
+        .map(|(_, (key, label))| {
+            let is_active = current_theme == *key;
+            let color = if is_active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
+            button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+                .on_press(Message::ThemeSelect(key.to_string()))
+                .width(180)
+                .into()
+        }).collect();
+    let col3: Vec<Element<Message>> = ALL_THEMES.iter().enumerate()
+        .filter(|(i, _)| i % 3 == 2)
+        .map(|(_, (key, label))| {
+            let is_active = current_theme == *key;
+            let color = if is_active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
+            button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+                .on_press(Message::ThemeSelect(key.to_string()))
+                .width(180)
+                .into()
+        }).collect();
+
+    let theme_grid = row![
+        column(col1).spacing(4),
+        column(col2).spacing(4),
+        column(col3).spacing(4),
+    ]
+    .spacing(8);
+
+    // ── clang-format style ────────────────────────────────────────────────────
+    let clang_styles = ["file", "LLVM", "Google", "Chromium", "GNU", "Microsoft"];
+    let clang_btns: Vec<Element<Message>> = clang_styles.iter().map(|s| {
+        let active = cfg.clang_format_style == *s;
+        let color = if active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
+        button(text(*s).size(12).color(color))
+            .on_press(Message::SettingsDraftClangStyle(s.to_string()))
+            .into()
+    }).collect();
+
+    // ── Save / Discard ────────────────────────────────────────────────────────
+    column![
+        fields,
+        Space::new().height(8),
+        text("Theme (applied immediately):").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Note: Nightfly is the closest built-in theme to Monokai Pro.")
+            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        theme_grid,
+        Space::new().height(8),
+        text("clang-format style:").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        row(clang_btns).spacing(4).wrap(),
+        Space::new().height(8),
         row![
             button(text("Save")).on_press(Message::SettingsSave),
             button(text("Discard")).on_press(Message::SettingsDiscard),
         ]
         .spacing(8),
-        text("Terminal + editor used by 'Open in Editor' on project detail view.")
-            .size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
-        text("Scan dirs are searched on startup for existing newc projects (max depth 3).")
-            .size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+        Space::new().height(8),
+        text("Terminal + editor are used by the 'Open in Editor' button.")
+            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text("Scan dirs: edit ~/.config/newc/config.toml directly.")
+            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
     ]
-    .spacing(12)
+    .spacing(8)
     .padding(16)
     .into()
 }

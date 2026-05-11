@@ -1,6 +1,8 @@
 pub mod home;
 pub mod create;
 pub mod project;
+pub mod call_graph;
+pub mod dependency_graph;
 pub mod add_module;
 pub mod build_history;
 pub mod build_panel;

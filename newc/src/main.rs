@@ -55,9 +55,24 @@ fn launch_gui(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn is_wsl2() -> bool {
+    std::fs::read_to_string("/proc/version")
+        .map(|s| s.to_ascii_lowercase().contains("microsoft"))
+        .unwrap_or(false)
+}
+
 fn run_gui_inline(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     use app::NewcApp;
     use iced::window;
+
+    // Under WSL2, force the wgpu GL backend to avoid Vulkan/Zink failures
+    if is_wsl2() {
+        unsafe {
+            if std::env::var("WGPU_BACKEND").is_err() {
+                std::env::set_var("WGPU_BACKEND", "gl");
+            }
+        }
+    }
 
     iced::application(
         move || NewcApp::new(initial_path.clone()),

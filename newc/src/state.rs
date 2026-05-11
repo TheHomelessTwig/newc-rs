@@ -34,6 +34,8 @@ pub enum View {
     MakefileEditor(Project),
     ProjectSearch(Project),
     HealthDashboard(Project),
+    CallGraph(Project),
+    DependencyGraph(Project),
     Settings,
 }
 
@@ -94,6 +96,9 @@ pub enum Message {
     SettingsDraftEditor(String),
     SettingsDraftTerminal(String),
     SettingsDraftTheme(String),
+    SettingsDraftClangStyle(String),
+    // Theme — applied immediately (no save needed)
+    ThemeSelect(String),
 
     // Library
     LibraryAction(crate::views::library::LibraryAction),
@@ -158,6 +163,14 @@ pub enum Message {
 
     // Usage tracker
     UsageSearch(String),
+
+    // Main builder block manipulation
+    ComposerBlockMoveUp(usize),
+    ComposerBlockMoveDown(usize),
+    ComposerBlockDelete(usize),
+    ComposerUndo,
+    ComposerRedo,
+    ComposerWriteMainC,
 
     // Module detail
     ModuleSelectFunc(Option<String>),
@@ -252,6 +265,7 @@ pub struct AppState {
     pub view: View,
     pub known_projects: Vec<PathBuf>,
     pub config: AppConfig,
+    pub active_theme: String,
     pub build_lines: Vec<BuildLine>,
     pub build_state: BuildState,
     pub status: Option<(String, Instant)>,
@@ -374,9 +388,11 @@ impl AppState {
             .unwrap_or(false);
         let is_first_run = !config_dir_exists;
         let known_projects = load_known_projects();
+        let active_theme = config.theme.clone();
         Self {
             view: View::Home,
             known_projects,
+            active_theme,
             config,
             build_lines: Vec::new(),
             build_state: BuildState::Idle,
@@ -482,7 +498,9 @@ impl AppState {
             | View::UsageTracker(p)
             | View::MakefileEditor(p)
             | View::ProjectSearch(p)
-            | View::HealthDashboard(p) => Some(p),
+            | View::HealthDashboard(p)
+            | View::CallGraph(p)
+            | View::DependencyGraph(p) => Some(p),
             View::ModuleDetail { project, .. }
             | View::HeaderEditor { project, .. }
             | View::AddModule { project, .. } => Some(project),

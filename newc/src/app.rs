@@ -65,10 +65,22 @@ impl NewcApp {
 
         match message {
             Message::Navigate(view) => {
-                if let View::HealthDashboard(ref project) = view {
-                    if !self.state.health_computed {
-                        views::health::compute_health(&mut self.state, project);
+                // Pre-compute for views that need it
+                match &view {
+                    View::HealthDashboard(project) => {
+                        if !self.state.health_computed {
+                            views::health::compute_health(&mut self.state, project);
+                        }
                     }
+                    View::MainBuilder(project) => {
+                        // Load existing main.c into composer
+                        self.state.main_builder =
+                            newc_core::main_builder::MainBuilderState::load_from_main_c(&project.root);
+                        if self.state.create_author.is_empty() {
+                            self.state.create_author = newc_core::scaffold::detect_author();
+                        }
+                    }
+                    _ => {}
                 }
                 self.state.view = view;
             }
@@ -244,6 +256,7 @@ impl NewcApp {
 
             Message::SettingsSave => {
                 self.state.config = self.state.config_draft.clone();
+                self.state.active_theme = self.state.config.theme.clone();
                 if let Err(e) = self.state.config.save() {
                     self.state.set_error(e.to_string());
                 } else {
@@ -260,6 +273,15 @@ impl NewcApp {
             Message::SettingsDraftEditor(s) => self.state.config_draft.editor = s,
             Message::SettingsDraftTerminal(s) => self.state.config_draft.terminal = s,
             Message::SettingsDraftTheme(s) => self.state.config_draft.theme = s,
+            Message::SettingsDraftClangStyle(s) => self.state.config_draft.clang_format_style = s,
+
+            // Apply theme immediately without requiring settings save
+            Message::ThemeSelect(name) => {
+                self.state.active_theme = name.clone();
+                self.state.config.theme = name.clone();
+                self.state.config_draft.theme = name;
+                let _ = self.state.config.save();
+            }
 
             Message::LibraryToggleOpen => {
                 self.state.show_library = !self.state.show_library;
@@ -578,6 +600,62 @@ impl NewcApp {
                 return iced::clipboard::write(code);
             }
 
+            // Main builder
+            Message::ComposerUndo => {
+                if let Some(prev) = self.state.composer_undo.pop() {
+                    let cur = std::mem::replace(&mut self.state.main_builder, prev);
+                    self.state.composer_redo.push(cur);
+                    self.state.composer_redo.truncate(50);
+                }
+            }
+            Message::ComposerRedo => {
+                if let Some(next) = self.state.composer_redo.pop() {
+                    let cur = std::mem::replace(&mut self.state.main_builder, next);
+                    self.state.composer_undo.push(cur);
+                    self.state.composer_undo.truncate(50);
+                }
+            }
+            Message::ComposerBlockMoveUp(i) => {
+                if i > 0 && i < self.state.main_builder.blocks.len() {
+                    let snap = self.state.main_builder.clone();
+                    self.state.main_builder.blocks.swap(i, i - 1);
+                    self.state.composer_undo.push(snap);
+                    self.state.composer_undo.truncate(50);
+                    self.state.composer_redo.clear();
+                }
+            }
+            Message::ComposerBlockMoveDown(i) => {
+                let len = self.state.main_builder.blocks.len();
+                if i + 1 < len {
+                    let snap = self.state.main_builder.clone();
+                    self.state.main_builder.blocks.swap(i, i + 1);
+                    self.state.composer_undo.push(snap);
+                    self.state.composer_undo.truncate(50);
+                    self.state.composer_redo.clear();
+                }
+            }
+            Message::ComposerBlockDelete(i) => {
+                if i < self.state.main_builder.blocks.len() {
+                    let snap = self.state.main_builder.clone();
+                    self.state.main_builder.blocks.remove(i);
+                    self.state.composer_undo.push(snap);
+                    self.state.composer_undo.truncate(50);
+                    self.state.composer_redo.clear();
+                }
+            }
+            Message::ComposerWriteMainC => {
+                if let Some(project) = self.state.current_project().cloned() {
+                    let author = self.state.create_author.clone();
+                    let date = chrono::Local::now().format("%d/%m/%Y").to_string();
+                    let code = self.state.main_builder.preview(&author, &date);
+                    let main_c = project.root.join("src").join("main.c");
+                    match std::fs::write(&main_c, &code) {
+                        Ok(_) => self.state.set_status("main.c written."),
+                        Err(e) => self.state.set_error(e.to_string()),
+                    }
+                }
+            }
+
             // Module detail
             Message::ModuleSelectFunc(sel) => {
                 self.state.module_detail_state.selected_func = sel;
@@ -761,11 +839,7 @@ impl NewcApp {
     }
 
     pub fn theme(&self) -> Theme {
-        if self.state.config.is_dark() {
-            Theme::Dark
-        } else {
-            Theme::Light
-        }
+        theme_from_name(&self.state.active_theme)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -887,9 +961,9 @@ impl NewcApp {
         let bar = row![
             nav_btn("Home", Message::Navigate(View::Home)),
             nav_btn("New", Message::Navigate(View::CreateProject)),
-            nav_btn("Library", Message::LibraryToggleOpen),
-            nav_btn("CRef", Message::CRefToggleOpen),
-            nav_btn("Snippets", Message::SnippetsToggleOpen),
+            nav_btn("Library", Message::Navigate(View::FunctionLibrary)),
+            nav_btn("CRef", Message::Navigate(View::CReference)),
+            nav_btn("Snippets", Message::Navigate(View::Snippets)),
             nav_btn("Settings", Message::Navigate(View::Settings)),
             Space::new().width(Length::Fill),
             status_text,
@@ -973,6 +1047,8 @@ impl NewcApp {
             View::FunctionLibrary => views::library::view(&self.state, &self.function_lib),
             View::CReference => views::cref::view(&self.state),
             View::Snippets => views::snippets::view(&self.state),
+            View::CallGraph(p) => views::call_graph::view(&self.state, p),
+            View::DependencyGraph(p) => views::dependency_graph::view(&self.state, p),
         };
 
         // Drawer overlays (library, cref, snippets)
@@ -1039,3 +1115,55 @@ impl NewcApp {
         .into()
     }
 }
+
+pub fn theme_from_name(name: &str) -> Theme {
+    match name {
+        "light" => Theme::Light,
+        "dracula" => Theme::Dracula,
+        "nord" => Theme::Nord,
+        "solarized_light" => Theme::SolarizedLight,
+        "solarized_dark" => Theme::SolarizedDark,
+        "gruvbox_light" => Theme::GruvboxLight,
+        "gruvbox_dark" => Theme::GruvboxDark,
+        "catppuccin_latte" => Theme::CatppuccinLatte,
+        "catppuccin_frappe" => Theme::CatppuccinFrappe,
+        "catppuccin_macchiato" => Theme::CatppuccinMacchiato,
+        "catppuccin_mocha" => Theme::CatppuccinMocha,
+        "tokyo_night" => Theme::TokyoNight,
+        "tokyo_night_storm" => Theme::TokyoNightStorm,
+        "tokyo_night_light" => Theme::TokyoNightLight,
+        "kanagawa_wave" => Theme::KanagawaWave,
+        "kanagawa_dragon" => Theme::KanagawaDragon,
+        "kanagawa_lotus" => Theme::KanagawaLotus,
+        "moonfly" => Theme::Moonfly,
+        "nightfly" => Theme::Nightfly,
+        "oxocarbon" => Theme::Oxocarbon,
+        "ferra" => Theme::Ferra,
+        _ => Theme::Dark, // default "dark" + any unknown
+    }
+}
+
+pub const ALL_THEMES: &[(&str, &str)] = &[
+    ("dark", "Dark"),
+    ("light", "Light"),
+    ("dracula", "Dracula"),
+    ("nord", "Nord"),
+    ("solarized_dark", "Solarized Dark"),
+    ("solarized_light", "Solarized Light"),
+    ("gruvbox_dark", "Gruvbox Dark"),
+    ("gruvbox_light", "Gruvbox Light"),
+    ("catppuccin_mocha", "Catppuccin Mocha"),
+    ("catppuccin_macchiato", "Catppuccin Macchiato"),
+    ("catppuccin_frappe", "Catppuccin Frappé"),
+    ("catppuccin_latte", "Catppuccin Latte"),
+    ("tokyo_night", "Tokyo Night"),
+    ("tokyo_night_storm", "Tokyo Night Storm"),
+    ("tokyo_night_light", "Tokyo Night Light"),
+    ("kanagawa_wave", "Kanagawa Wave"),
+    ("kanagawa_dragon", "Kanagawa Dragon"),
+    ("kanagawa_lotus", "Kanagawa Lotus"),
+    ("moonfly", "Moonfly"),
+    ("nightfly", "Nightfly (≈Monokai)"),
+    ("oxocarbon", "Oxocarbon"),
+    ("ferra", "Ferra"),
+];

@@ -24,18 +24,18 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         Space::new().width(Length::Fill),
         button(text("↩ Undo").size(12))
             .on_press_maybe(if !state.composer_undo.is_empty() {
-                Some(Message::None) // TODO: wire undo
+                Some(Message::ComposerUndo)
             } else {
                 None
             }),
         button(text("↪ Redo").size(12))
             .on_press_maybe(if !state.composer_redo.is_empty() {
-                Some(Message::None) // TODO: wire redo
+                Some(Message::ComposerRedo)
             } else {
                 None
             }),
         button(text("Write main.c"))
-            .on_press(Message::None), // TODO: wire write
+            .on_press(Message::ComposerWriteMainC),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -68,15 +68,16 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .spacing(4)
     .align_y(iced::Alignment::Center);
 
-    // Block list (simplified — drag-and-drop porting planned separately)
-    let block_rows: Vec<Element<Message>> = builder.blocks.iter().enumerate().map(|(_i, block)| {
+    // Block list — up/down/delete wired; drag-and-drop planned
+    let block_count = builder.blocks.len();
+    let block_rows: Vec<Element<Message>> = builder.blocks.iter().enumerate().map(|(i, block)| {
         let label = block_label(block);
         row![
             text(label).size(12).font(iced::Font::MONOSPACE),
             Space::new().width(Length::Fill),
-            button(text("↑").size(10)).on_press(Message::None),
-            button(text("↓").size(10)).on_press(Message::None),
-            button(text("✗").size(10)).on_press(Message::None),
+            button(text("↑").size(10)).on_press_maybe(if i > 0 { Some(Message::ComposerBlockMoveUp(i)) } else { None }),
+            button(text("↓").size(10)).on_press_maybe(if i + 1 < block_count { Some(Message::ComposerBlockMoveDown(i)) } else { None }),
+            button(text("✗").size(10)).on_press(Message::ComposerBlockDelete(i)),
         ]
         .spacing(4)
         .into()

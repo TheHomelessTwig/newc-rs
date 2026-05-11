@@ -36,6 +36,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         button(text("Export ZIP")).on_press(Message::None),
         button(text("Save Template")).on_press(Message::ShowSaveTemplate(true)),
         button(text("Compose main()")).on_press(Message::Navigate(View::MainBuilder(project.clone()))),
+        button(text("Call Graph")).on_press(Message::Navigate(View::CallGraph(project.clone()))),
+        button(text("Dep Graph")).on_press(Message::Navigate(View::DependencyGraph(project.clone()))),
     ]
     .spacing(4)
     .wrap();
