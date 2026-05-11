@@ -1,62 +1,35 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use egui::{CentralPanel, Color32, Context, RichText, SidePanel, TopBottomPanel};
+use iced::{Element, Subscription, Task, Theme};
+use iced::widget::{column, row, text, button, container, scrollable, Space};
+use iced::{Alignment, Length, Color};
 use newc_core::{
     function_lib::FunctionLibrary,
-    analysis,
     build_history::{self, BuildRecord},
     diag,
-    export,
-    header,
-    main_builder::MainBuilderState,
     meta,
     module,
     notes,
     project::Project,
-    project_template,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
-    sync::{self, extract_function_implementations, update_function_in_source},
-    user_template::UserTemplate,
 };
 
-use crate::build_runner::{BuildLine, BuildRunner, LineKind};
-use crate::state::{AppState, BuildState, View, save_known_projects};
+use crate::build_runner::{BuildRunner, LineKind};
+use crate::state::{AppState, BuildState, Message, View, save_known_projects};
 use crate::views;
-use crate::views::import_c::ImportState;
-
-/// State shared with floating OS-window viewports (must be Arc<Mutex<>> for 'static closures).
-pub struct SharedTools {
-    pub function_lib: FunctionLibrary,
-    pub library_state: views::library::LibraryState,
-    pub cref_state: views::cref::CRefState,
-    pub snippets_state: views::snippets::SnippetsState,
-    /// Actions queued by viewport callbacks; drained each frame in the main update.
-    pub lib_action_queue: Vec<views::library::LibraryAction>,
-    /// Close-request flags written by viewport close buttons, drained by main update.
-    pub close_library: bool,
-    pub close_cref: bool,
-    pub close_snippets: bool,
-}
 
 pub struct NewcApp {
     state: AppState,
-    tools: Arc<Mutex<SharedTools>>,
-    show_library_window: bool,
-    show_cref_window: bool,
-    show_snippets: bool,
     runner: BuildRunner,
-    build_panel_open: bool,
-    build_auto_scroll: bool,
+    function_lib: FunctionLibrary,
 }
 
 impl NewcApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, initial_path: Option<PathBuf>) -> Self {
-        setup_fonts(&cc.egui_ctx);
-
+    pub fn new(initial_path: Option<PathBuf>) -> (Self, Task<Message>) {
         let mut state = AppState::new();
 
-        // Merge discovered projects (don't replace loaded known_projects)
+        // Merge discovered projects
         let scan_paths = state.config.scan_paths();
         let discovered = Project::discover(&scan_paths);
         for p in discovered {
@@ -65,43 +38,541 @@ impl NewcApp {
             }
         }
 
-        // Apply theme from config immediately
-        if state.config.is_dark() {
-            cc.egui_ctx.set_visuals(egui::Visuals::dark());
-        } else {
-            cc.egui_ctx.set_visuals(egui::Visuals::light());
-        }
+        let runner = BuildRunner::spawn();
+        let function_lib = FunctionLibrary::load();
 
-        let runner = BuildRunner::spawn(cc.egui_ctx.clone());
-        let tools = Arc::new(Mutex::new(SharedTools {
-            function_lib: FunctionLibrary::load(),
-            library_state: views::library::LibraryState::default(),
-            cref_state: views::cref::CRefState::default(),
-            snippets_state: views::snippets::SnippetsState::default(),
-            lib_action_queue: Vec::new(),
-            close_library: false,
-            close_cref: false,
-            close_snippets: false,
-        }));
-        let mut app = Self {
-            state,
-            tools,
-            show_library_window: false,
-            show_cref_window: false,
-            show_snippets: false,
-            runner,
-            build_panel_open: true,
-            build_auto_scroll: true,
-        };
+        let mut app = Self { state, runner, function_lib };
 
-        // Open initial project if provided
         if let Some(path) = initial_path {
             app.open_project(path);
         }
 
-        app
+        (app, Task::none())
     }
 
+    pub fn title(&self) -> String {
+        match &self.state.view {
+            View::ProjectDetail(p) | View::ProjectStats(p) | View::ModuleDetail { project: p, .. } => {
+                format!("newc — {}", p.name)
+            }
+            _ => String::from("newc"),
+        }
+    }
+
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        // Drain any buffered build output first
+        self.drain_build_output();
+
+        match message {
+            Message::Navigate(view) => {
+                self.state.view = view;
+            }
+
+            Message::OpenProject(path) => {
+                self.open_project(path);
+            }
+
+            Message::AddKnownProject(path) => {
+                if !self.state.known_projects.contains(&path) {
+                    self.state.known_projects.push(path);
+                    save_known_projects(&self.state.known_projects);
+                }
+            }
+
+            Message::BrowseForProject => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .set_title("Open newc Project")
+                            .pick_folder()
+                            .await
+                            .map(|h| h.path().to_path_buf())
+                    },
+                    |p| p.map(Message::OpenProject).unwrap_or(Message::None),
+                );
+            }
+
+            Message::RefreshProject => {
+                if let Some(root) = self.state.current_project().map(|p| p.root.clone()) {
+                    self.open_project(root);
+                }
+            }
+
+            Message::BuildStart(target) => {
+                if let Some(project) = self.state.current_project() {
+                    let cwd = project.root.clone();
+                    self.state.build_target_current = target.clone();
+                    self.state.build_state = BuildState::Running;
+                    self.state.build_lines.clear();
+                    self.state.diagnostics.clear();
+                    self.runner.run(&target, cwd);
+                }
+            }
+
+            Message::BuildKill => {
+                self.runner.kill();
+            }
+
+            Message::BuildLine(_) => {
+                // Handled in drain_build_output; this Message variant exists for subscription use
+            }
+
+            Message::ToggleBuildPanel => {
+                self.state.build_panel_open = !self.state.build_panel_open;
+            }
+
+            Message::BuildPanelClear => {
+                self.state.build_lines.clear();
+                self.state.diagnostics.clear();
+            }
+
+            Message::BuildAutoScrollToggle => {
+                self.state.build_auto_scroll = !self.state.build_auto_scroll;
+            }
+
+            Message::DiagTabRaw(raw) => {
+                self.state.diag_tab_raw = raw;
+            }
+
+            Message::CreateName(s) => self.state.create_name = s,
+            Message::CreateAuthor(s) => self.state.create_author = s,
+            Message::CreateLocation(s) => self.state.create_location = s,
+
+            Message::CreateLocationBrowse => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .set_title("Project Location")
+                            .pick_folder()
+                            .await
+                            .map(|h| h.path().to_path_buf())
+                    },
+                    |p| p.map(|path| Message::CreateLocation(
+                        path.to_string_lossy().into_owned()
+                    )).unwrap_or(Message::None),
+                );
+            }
+
+            Message::CreateGitToggle(v) => self.state.create_git = v,
+            Message::CreateTemplate(i) => self.state.selected_template = Some(i),
+
+            Message::CreateInclude(name, val) => match name.as_str() {
+                "input" => self.state.create_include_input = val,
+                "math" => self.state.create_include_math = val,
+                "display" => self.state.create_include_display = val,
+                "array" => self.state.create_include_array = val,
+                "strings" => self.state.create_include_strings = val,
+                "linked_list" => self.state.create_include_linked_list = val,
+                "files" => self.state.create_include_files = val,
+                "test_utils" => self.state.create_include_test_utils = val,
+                _ => {}
+            },
+
+            Message::CreateSubmit => {
+                self.handle_create_project();
+            }
+
+            Message::AddModuleName(s) => self.state.add_module_name = s,
+
+            Message::AddModuleSubmit => {
+                if let View::AddModule { project } = self.state.view.clone() {
+                    let name = self.state.add_module_name.trim().to_string();
+                    if !name.is_empty() {
+                        match module::add_module(&project.root, &name) {
+                            Ok(_) => {
+                                self.state.set_status(format!("Module '{}' added.", name));
+                                self.state.add_module_name.clear();
+                                self.open_project(project.root);
+                            }
+                            Err(e) => self.state.set_error(e.to_string()),
+                        }
+                    }
+                }
+            }
+
+            Message::RemoveModule(name) => {
+                if let Some(project) = self.state.current_project().cloned() {
+                    self.state.confirm_remove_module = Some((project, name));
+                }
+            }
+
+            Message::ConfirmRemoveModule => {
+                if let Some((project, name)) = self.state.confirm_remove_module.take() {
+                    match module::remove_module(&project.root, &name) {
+                        Ok(_) => {
+                            self.state.set_status(format!("Module '{}' removed.", name));
+                            self.open_project(project.root);
+                        }
+                        Err(e) => self.state.set_error(e.to_string()),
+                    }
+                }
+            }
+
+            Message::CancelRemoveModule => {
+                self.state.confirm_remove_module = None;
+            }
+
+            Message::QuickSearchToggle => {
+                self.state.quick_search.open = !self.state.quick_search.open;
+                if self.state.quick_search.open {
+                    self.state.quick_search.query.clear();
+                    self.state.quick_search.cursor = 0;
+                }
+            }
+
+            Message::QuickSearchQuery(q) => {
+                self.state.quick_search.query = q;
+                self.state.quick_search.cursor = 0;
+            }
+
+            Message::QuickSearchCursor(i) => {
+                self.state.quick_search.cursor = i;
+            }
+
+            Message::QuickSearchClose => {
+                self.state.quick_search.open = false;
+            }
+
+            Message::QuickSearchSelect(_) => {
+                // Handled per-view during porting
+            }
+
+            Message::SettingsSave => {
+                self.state.config = self.state.config_draft.clone();
+                if let Err(e) = self.state.config.save() {
+                    self.state.set_error(e.to_string());
+                } else {
+                    self.state.set_status("Settings saved.");
+                    self.state.view = View::Home;
+                }
+            }
+
+            Message::SettingsDiscard => {
+                self.state.config_draft = self.state.config.clone();
+                self.state.view = View::Home;
+            }
+
+            Message::SettingsDraftEditor(s) => self.state.config_draft.editor = s,
+            Message::SettingsDraftTerminal(s) => self.state.config_draft.terminal = s,
+            Message::SettingsDraftTheme(s) => self.state.config_draft.theme = s,
+
+            Message::LibraryToggleOpen => {
+                self.state.show_library = !self.state.show_library;
+            }
+
+            Message::CRefToggleOpen => {
+                self.state.show_cref = !self.state.show_cref;
+            }
+
+            Message::SnippetsToggleOpen => {
+                self.state.show_snippets = !self.state.show_snippets;
+            }
+
+            Message::LibrarySave(func) => {
+                self.function_lib.upsert(func.clone());
+                if let Err(e) = FunctionLibrary::save_user_function(&func) {
+                    self.state.set_error(e.to_string());
+                } else {
+                    self.state.set_status(format!("Saved '{}'.", func.name));
+                }
+            }
+
+            Message::LibraryDelete(name) => {
+                self.function_lib.remove(&name);
+                self.state.set_status(format!("Deleted '{name}'."));
+            }
+
+            Message::LibraryToggleStar(name) => {
+                if let Some(f) = self.function_lib.get_mut(&name) {
+                    f.starred = !f.starred;
+                    let func = f.clone();
+                    let _ = FunctionLibrary::save_user_function(&func);
+                }
+            }
+
+            Message::NotesSave => {
+                if let Some(project) = self.state.current_project() {
+                    let _ = notes::save(&project.root, &self.state.notes_content);
+                    self.state.notes_dirty = false;
+                    self.state.set_status("Notes saved.");
+                }
+            }
+
+            Message::NotesContent(s) => {
+                self.state.notes_content = s;
+                self.state.notes_dirty = true;
+            }
+
+            Message::MakefileSave => {
+                if let Some(project) = self.state.current_project() {
+                    let path = project.root.join("Makefile");
+                    if let Err(e) = std::fs::write(&path, &self.state.makefile_content) {
+                        self.state.set_error(e.to_string());
+                    } else {
+                        self.state.makefile_dirty = false;
+                        self.state.set_status("Makefile saved.");
+                    }
+                }
+            }
+
+            Message::MakefileContent(s) => {
+                self.state.makefile_content = s;
+                self.state.makefile_dirty = true;
+            }
+
+            Message::GitCommitMsg(s) => self.state.git_commit_msg = s,
+            Message::GitNewBranch(s) => self.state.git_new_branch = s,
+            Message::GitShowDiff(v) => self.state.git_show_diff = v,
+            Message::GitDiffStaged(v) => self.state.git_diff_staged = v,
+
+            Message::GitCommit => {
+                if let Some(project) = self.state.current_project() {
+                    let root = project.root.clone();
+                    let msg = self.state.git_commit_msg.trim().to_string();
+                    if msg.is_empty() { return Task::none(); }
+                    match newc_core::git::commit(&root, &msg) {
+                        Ok(_) => {
+                            self.state.git_commit_msg.clear();
+                            self.state.set_status("Committed.");
+                        }
+                        Err(e) => self.state.set_error(e.to_string()),
+                    }
+                }
+            }
+
+            Message::GitPull => {
+                if let Some(p) = self.state.current_project() {
+                    match newc_core::git::pull(&p.root) {
+                        Ok(_) => self.state.set_status("Pulled."),
+                        Err(e) => self.state.set_error(e.to_string()),
+                    }
+                }
+            }
+
+            Message::GitPush => {
+                if let Some(p) = self.state.current_project() {
+                    match newc_core::git::push(&p.root) {
+                        Ok(_) => self.state.set_status("Pushed."),
+                        Err(e) => self.state.set_error(e.to_string()),
+                    }
+                }
+            }
+
+            Message::GitCreateBranch => {
+                if let Some(p) = self.state.current_project() {
+                    let name = self.state.git_new_branch.trim().to_string();
+                    if !name.is_empty() {
+                        match newc_core::git::new_branch(&p.root, &name) {
+                            Ok(_) => {
+                                self.state.git_new_branch.clear();
+                                self.state.set_status(format!("Branch '{name}' created."));
+                            }
+                            Err(e) => self.state.set_error(e.to_string()),
+                        }
+                    }
+                }
+            }
+
+            Message::GitCheckout(branch) => {
+                if let Some(p) = self.state.current_project() {
+                    let _ = newc_core::git::switch_branch(&p.root, &branch);
+                }
+            }
+
+            Message::GitDeleteBranch(_branch) => {
+                // delete_branch not available in newc_core::git — no-op until added
+            }
+
+            Message::SearchQuery(s) => self.state.search_query = s,
+            Message::SearchSubmit => {
+                if let Some(project) = self.state.current_project() {
+                    let query = self.state.search_query.trim().to_string();
+                    if !query.is_empty() {
+                        self.state.search_results = newc_core::grep::search(&project.root, &query);
+                    }
+                }
+            }
+
+            Message::UsageSearch(s) => self.state.usage_search = s,
+
+            Message::ErrorDismiss => self.state.error_msg = None,
+
+            Message::ShowShortcuts(v) => self.state.show_shortcuts = v,
+
+            Message::ShowSaveTemplate(v) => self.state.show_save_template_modal = v,
+            Message::SaveTemplateName(s) => self.state.save_template_name = s,
+            Message::SaveTemplateDesc(s) => self.state.save_template_desc = s,
+            Message::SaveTemplateSubmit => {
+                // TODO: wire up save_template logic during views::project port
+            }
+
+            Message::ShowTidyConfirm(v) => self.state.show_tidy_confirm = v,
+            Message::TidyConfirm => {
+                // TODO: wire up tidy logic
+            }
+
+            Message::WorkspaceSelect(ws) => self.state.active_workspace = ws,
+            Message::WorkspaceInput(s) => self.state.workspace_input = s,
+            Message::WorkspaceNew => {
+                let name = self.state.workspace_input.trim().to_string();
+                if !name.is_empty() {
+                    self.state.config.workspaces.push(newc_core::config::Workspace {
+                        name: name.clone(),
+                        paths: Vec::new(),
+                    });
+                    let _ = self.state.config.save();
+                    self.state.workspace_input.clear();
+                    self.state.show_new_workspace = false;
+                    self.state.active_workspace = Some(name);
+                }
+            }
+            Message::WorkspaceCancelNew => {
+                self.state.show_new_workspace = false;
+                self.state.workspace_input.clear();
+            }
+            Message::ShowArchivedToggle => self.state.show_archived = !self.state.show_archived,
+
+            Message::MetaShowEditor(v) => self.state.show_meta_editor = v,
+            Message::MetaCourse(s) => self.state.meta_draft.course = s,
+            Message::MetaVersion(s) => self.state.meta_draft.assignment = s,
+            Message::MetaSave => {
+                if let Some(p) = self.state.current_project() {
+                    let _ = meta::save(&p.root, &self.state.meta_draft);
+                    self.state.show_meta_editor = false;
+                    self.state.set_status("Metadata saved.");
+                }
+            }
+
+            Message::ShowImport(v) => self.state.show_import = v,
+            Message::ImportPickFile => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .set_title("Import .c file")
+                            .add_filter("C source", &["c"])
+                            .pick_file()
+                            .await
+                            .map(|h| h.path().to_path_buf())
+                    },
+                    |p| {
+                        if let Some(path) = p {
+                            // Will be handled in import_c view port
+                            Message::CreateLocation(path.to_string_lossy().into_owned())
+                        } else {
+                            Message::None
+                        }
+                    },
+                );
+            }
+
+            Message::ShowNewGroup(v) => self.state.show_new_group = v,
+            Message::NewGroupName(s) => self.state.new_group_name = s,
+            Message::NewGroupDesc(s) => self.state.new_group_desc = s,
+            Message::NewGroupSubmit => {
+                let name = self.state.new_group_name.trim().to_string();
+                if !name.is_empty() {
+                    self.function_lib.create_group(&name, &self.state.new_group_desc);
+                    self.state.show_new_group = false;
+                    self.state.new_group_name.clear();
+                    self.state.new_group_desc.clear();
+                }
+            }
+
+            Message::GroupActionTarget(t) => self.state.group_action_target = t,
+            Message::GroupRenameInput(s) => self.state.group_rename_input = s,
+            Message::GroupRenameSubmit => {
+                if let Some(old) = self.state.group_action_target.take() {
+                    let new_name = self.state.group_rename_input.trim().to_string();
+                    if !new_name.is_empty() {
+                        self.function_lib.rename_group(&old, &new_name);
+                    }
+                }
+            }
+            Message::GroupDeleteCascade(v) => self.state.delete_group_cascade = v,
+            Message::GroupDeleteSubmit => {
+                if let Some(name) = self.state.group_action_target.take() {
+                    self.function_lib.delete_group(&name, self.state.delete_group_cascade);
+                }
+            }
+
+            Message::UpdateCheck | Message::UpdateInstall(_) => {
+                // Updater will be wired in during standalone features phase
+            }
+
+            Message::DiagJumpTo { module, line } => {
+                if let Some(project) = self.state.current_project().cloned() {
+                    self.state.module_detail_state.highlight_line = Some(line);
+                    self.state.view = View::ModuleDetail {
+                        project,
+                        module_name: module,
+                    };
+                }
+            }
+
+            _ => {}
+        }
+
+        Task::none()
+    }
+
+    pub fn view(&self) -> Element<'_, Message> {
+        let top_bar = self.top_bar();
+        let sidebar = self.sidebar();
+        let central = self.central_panel();
+        let bottom = if self.state.build_panel_open {
+            Some(self.build_output_panel())
+        } else {
+            None
+        };
+
+        let content = row![
+            sidebar,
+            central,
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        let mut layout = column![top_bar, content];
+
+        if let Some(panel) = bottom {
+            layout = layout.push(panel);
+        }
+
+        // Error modal overlay
+        if let Some(err) = &self.state.error_msg {
+            let modal = self.error_modal(err);
+            // TODO: overlay support once iced modal widget available
+            let _ = modal;
+        }
+
+        container(layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    pub fn theme(&self) -> Theme {
+        if self.state.config.is_dark() {
+            Theme::Dark
+        } else {
+            Theme::Light
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        // Status message auto-clear: tick every second, clear if > 4 seconds old
+        if self.state.status.is_some() {
+            iced::time::every(Duration::from_secs(1))
+                .map(|_| Message::None)
+        } else {
+            Subscription::none()
+        }
+    }
+}
+
+// ── Private helpers ────────────────────────────────────────────────────────────
+
+impl NewcApp {
     fn drain_build_output(&mut self) {
         let mut new_stderr_lines: Vec<String> = Vec::new();
         for line in self.runner.drain() {
@@ -119,7 +590,6 @@ impl NewcApp {
                         },
                     );
                 }
-                // Parse diagnostics from accumulated stderr
                 self.state.diagnostics = diag::parse(&new_stderr_lines);
                 self.state.build_lines.push(line);
             } else {
@@ -139,7 +609,6 @@ impl NewcApp {
                     self.state.known_projects.push(path.clone());
                     save_known_projects(&self.state.known_projects);
                 }
-                // Update recents (last 5)
                 self.state.recent_projects.retain(|r| r != &path);
                 self.state.recent_projects.insert(0, path.clone());
                 self.state.recent_projects.truncate(5);
@@ -148,1591 +617,216 @@ impl NewcApp {
                 self.state.cached_stats = None;
                 self.state.health_computed = false;
                 self.state.meta_draft = meta::load(&p.root);
+                self.state.notes_content = notes::load(&p.root);
+                self.state.notes_dirty = false;
                 self.state.view = View::ProjectDetail(p);
             }
             Err(e) => self.state.set_error(e.to_string()),
         }
     }
 
-    fn handle_library_action(&mut self, action: views::library::LibraryAction) {
-        match action {
-            views::library::LibraryAction::Save(func) => {
-                self.tools.lock().unwrap().function_lib.upsert(func.clone());
-                if let Err(e) = FunctionLibrary::save_user_function(&func) {
-                    self.state.set_error(e.to_string());
-                } else {
-                    self.state.set_status(format!("Saved '{}'.", func.name));
-                }
-            }
-            views::library::LibraryAction::Delete(name) => {
-                {
-                    let mut t = self.tools.lock().unwrap();
-                    t.function_lib.remove(&name);
-                    delete_user_function(&name, &t.function_lib);
-                }
-                self.state.set_status(format!("Deleted '{name}'."));
-            }
-            views::library::LibraryAction::UpdateNotes { name, notes } => {
-                let mut t = self.tools.lock().unwrap();
-                if let Some(f) = t.function_lib.get_mut(&name) {
-                    f.notes = notes;
-                    let func = f.clone();
-                    let _ = FunctionLibrary::save_user_function(&func);
-                }
-            }
-            views::library::LibraryAction::ToggleStar(name) => {
-                let mut t = self.tools.lock().unwrap();
-                if let Some(f) = t.function_lib.get_mut(&name) {
-                    f.starred = !f.starred;
-                    let func = f.clone();
-                    let _ = FunctionLibrary::save_user_function(&func);
-                }
-            }
-            views::library::LibraryAction::OpenImport => {
-                self.state.show_import = true;
-            }
-            views::library::LibraryAction::CreateGroup { name, .. } => {
-                if name == "__OPEN_DIALOG__" {
-                    self.state.show_new_group = true;
-                    self.state.new_group_name.clear();
-                    self.state.new_group_desc.clear();
-                } else {
-                    let mut t = self.tools.lock().unwrap();
-                    if t.function_lib.create_group(&name, "") {
-                        let _ = t.function_lib.save_groups();
-                        self.state.set_status(format!("Group '{name}' created."));
-                    }
-                }
-            }
-            views::library::LibraryAction::RenameGroup { old, new } => {
-                if old == "__OPEN_DIALOG__" {
-                    self.state.group_action_target = Some(new.clone());
-                    self.state.group_rename_input = new;
-                    self.state.delete_group_cascade = false;
-                } else {
-                    let mut t = self.tools.lock().unwrap();
-                    if t.function_lib.rename_group(&old, &new) {
-                        let _ = t.function_lib.save_groups();
-                        self.state.set_status(format!("Renamed '{old}' → '{new}'."));
-                    }
-                }
-            }
-            views::library::LibraryAction::DeleteGroup { name, cascade } => {
-                let mut t = self.tools.lock().unwrap();
-                t.function_lib.delete_group(&name, cascade);
-                let _ = t.function_lib.save_groups();
-                t.library_state.active_group = None;
-                self.state.set_status(format!("Group '{name}' deleted."));
-            }
-            views::library::LibraryAction::None => {}
-        }
-    }
-}
-
-impl eframe::App for NewcApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        self.drain_build_output();
-
-        // Apply theme every frame (cheap — egui deduplicates)
-        if self.state.config.is_dark() {
-            ctx.set_visuals(egui::Visuals::dark());
-        } else {
-            ctx.set_visuals(egui::Visuals::light());
+    fn handle_create_project(&mut self) {
+        let name = self.state.create_name.trim().to_string();
+        if name.is_empty() {
+            self.state.set_error("Project name cannot be empty.");
+            return;
         }
 
-        // Handle Ctrl+P quick search shortcut
-        views::quick_search::handle_shortcut(ctx, &mut self.state.quick_search);
+        let parent = std::path::PathBuf::from(&self.state.create_location);
+        let root = parent.join(&name);
 
-        // Shortcuts modal (? key)
-        views::shortcuts::show(ctx, &mut self.state);
+        let mut modules = Vec::new();
+        if self.state.create_include_input { modules.push(DefaultModule::Input); }
+        if self.state.create_include_math { modules.push(DefaultModule::Math); }
+        if self.state.create_include_display { modules.push(DefaultModule::Display); }
+        if self.state.create_include_array { modules.push(DefaultModule::Array); }
+        if self.state.create_include_strings { modules.push(DefaultModule::Strings); }
+        if self.state.create_include_linked_list { modules.push(DefaultModule::LinkedList); }
+        if self.state.create_include_files { modules.push(DefaultModule::Files); }
+        if self.state.create_include_test_utils { modules.push(DefaultModule::TestUtils); }
 
-        // Drain actions and close-requests from viewport callbacks (previous frame)
-        {
-            let mut t = self.tools.lock().unwrap();
-            if t.close_library { self.show_library_window = false; t.close_library = false; }
-            if t.close_cref    { self.show_cref_window   = false; t.close_cref    = false; }
-            if t.close_snippets{ self.show_snippets       = false; t.close_snippets= false; }
-            let queued: Vec<_> = t.lib_action_queue.drain(..).collect();
-            drop(t);
-            for action in queued { self.handle_library_action(action); }
-        }
-
-        // Floating OS-window viewports (shown when popped out)
-        if self.show_snippets {
-            let tools = Arc::clone(&self.tools);
-            ctx.show_viewport_deferred(
-                egui::ViewportId::from_hash_of("newc_snippets"),
-                egui::ViewportBuilder::default()
-                    .with_title("C Snippets")
-                    .with_inner_size([700.0, 450.0]),
-                move |ctx, _class| {
-                    if ctx.input(|i| i.viewport().close_requested()) {
-                        tools.lock().unwrap().close_snippets = true;
-                        return;
-                    }
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        views::snippets::show_contents(ui, &mut tools.lock().unwrap().snippets_state);
-                    });
-                },
-            );
-        }
-
-        if self.show_cref_window {
-            let tools = Arc::clone(&self.tools);
-            ctx.show_viewport_deferred(
-                egui::ViewportId::from_hash_of("newc_cref"),
-                egui::ViewportBuilder::default()
-                    .with_title("C Reference")
-                    .with_inner_size([820.0, 580.0]),
-                move |ctx, _class| {
-                    if ctx.input(|i| i.viewport().close_requested()) {
-                        tools.lock().unwrap().close_cref = true;
-                        return;
-                    }
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        views::cref::show(ui, &mut tools.lock().unwrap().cref_state);
-                    });
-                },
-            );
-        }
-
-        if self.show_library_window {
-            let tools = Arc::clone(&self.tools);
-            ctx.show_viewport_deferred(
-                egui::ViewportId::from_hash_of("newc_library"),
-                egui::ViewportBuilder::default()
-                    .with_title("Function Library")
-                    .with_inner_size([940.0, 600.0]),
-                move |ctx, _class| {
-                    if ctx.input(|i| i.viewport().close_requested()) {
-                        tools.lock().unwrap().close_library = true;
-                        return;
-                    }
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        let mut t = tools.lock().unwrap();
-                        let lib = t.function_lib.clone();
-                        let action = views::library::show(ui, &lib, &mut t.library_state);
-                        if !matches!(action, views::library::LibraryAction::None) {
-                            t.lib_action_queue.push(action);
-                        }
-                    });
-                },
-            );
-        }
-
-        // Top bar
-        TopBottomPanel::top("top_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                let is_home     = matches!(self.state.view, View::Home);
-                let is_create   = matches!(self.state.view, View::CreateProject);
-                let is_lib      = matches!(self.state.view, View::FunctionLibrary);
-                let is_cref     = matches!(self.state.view, View::CReference);
-                let is_snippets = matches!(self.state.view, View::Snippets);
-                let is_settings = matches!(self.state.view, View::Settings);
-                if ui.selectable_label(is_home, "Home").clicked() {
-                    self.state.view = View::Home;
-                }
-                if ui.selectable_label(is_create, "New Project").clicked() {
-                    self.state.view = View::CreateProject;
-                }
-                if ui.selectable_label(is_lib, "Library").clicked() {
-                    self.state.view = View::FunctionLibrary;
-                }
-                if ui.selectable_label(is_cref, "C Reference").clicked() {
-                    self.state.view = View::CReference;
-                }
-                if ui.selectable_label(is_snippets, "Snippets").clicked() {
-                    self.state.view = View::Snippets;
-                }
-                if ui.selectable_label(is_settings, "Settings").clicked() {
-                    self.state.view = View::Settings;
-                }
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.toggle_value(&mut self.build_panel_open, "Build Output");
-                    if ui.small_button("?").on_hover_text("Keyboard shortcuts").clicked() {
-                        self.state.show_shortcuts = true;
-                    }
-                    ui.label(
-                        RichText::new("Ctrl+P")
-                            .small()
-                            .color(Color32::GRAY),
-                    );
-                    if let Some((msg, t)) = &self.state.status {
-                        if t.elapsed().as_secs() < 4 {
-                            ui.label(RichText::new(msg).color(Color32::from_rgb(100, 220, 100)));
-                        } else {
-                            self.state.status = None;
-                        }
-                    }
-                });
-            });
-        });
-
-        // Bottom build panel
-        if self.build_panel_open {
-            TopBottomPanel::bottom("build_panel")
-                .min_height(150.0)
-                .resizable(true)
-                .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        if ui.small_button("Clear").clicked() {
-                            self.state.build_lines.clear();
-                            self.state.build_state = BuildState::Idle;
-                        }
-                        match &self.state.build_state {
-                            BuildState::Running => {
-                                if ui.small_button("Kill").clicked() {
-                                    self.runner.kill();
-                                }
-                            }
-                            BuildState::Done { exit_code: Some(0) } => {
-                                ui.label(RichText::new("✓ OK").color(Color32::from_rgb(100, 220, 100)));
-                            }
-                            BuildState::Done { .. } => {
-                                ui.label(RichText::new("✗ Failed").color(Color32::from_rgb(255, 80, 80)));
-                            }
-                            BuildState::Idle => {}
-                        }
-                    });
-                    // Diagnostics tab toggle
-                    if !self.state.diagnostics.is_empty() {
-                        ui.separator();
-                        ui.toggle_value(&mut self.state.diag_tab_raw, "Raw");
-                        ui.label(RichText::new(format!("{} diagnostics", self.state.diagnostics.len())).small());
-                    }
-                    if !self.state.diag_tab_raw && !self.state.diagnostics.is_empty() {
-                        egui::ScrollArea::vertical().id_salt("diag_scroll").show(ui, |ui| {
-                            egui::Grid::new("diag_grid").num_columns(4).striped(true).show(ui, |ui| {
-                                for d in &self.state.diagnostics.clone() {
-                                    let color = if d.is_error() { Color32::from_rgb(255, 80, 80) } else { Color32::from_rgb(255, 200, 60) };
-                                    ui.label(RichText::new(if d.is_error() { "✗" } else { "⚠" }).color(color));
-                                    let file_label = egui::Label::new(RichText::new(&d.file).monospace().small().color(Color32::from_rgb(100, 180, 255))).sense(egui::Sense::click());
-                                    if ui.add(file_label).clicked() {
-                                        let module = d.file.trim_end_matches(".c").to_string();
-                                        if let Some(project) = self.state.current_project().cloned() {
-                                            let src = project.root.join("src").join(&d.file);
-                                            if src.exists() {
-                                                self.state.module_detail_state = Default::default();
-                                                self.state.view = View::ModuleDetail { project, module_name: module };
-                                            }
-                                        }
-                                    }
-                                    ui.label(RichText::new(format!(":{}", d.line)).monospace().small().color(Color32::GRAY));
-                                    ui.label(RichText::new(&d.message).small());
-                                    ui.end_row();
-                                }
-                            });
-                        });
-                    } else {
-                        let clicked = views::build_panel::show(
-                            ui,
-                            &self.state.build_lines,
-                            &self.state.diagnostics,
-                            &mut self.build_auto_scroll,
-                        );
-                        if let Some((file, line_no)) = clicked {
-                            // file is typically "src/foo.c" — extract module name
-                            let module_name = std::path::Path::new(&file)
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .map(|s| s.to_string());
-                            if let Some(mod_name) = module_name {
-                                if let Some(project) = self.state.current_project().cloned() {
-                                    self.state.module_detail_state = Default::default();
-                                    self.state.module_detail_state.highlight_line = Some(line_no);
-                                    self.state.view = View::ModuleDetail { project, module_name: mod_name };
-                                }
-                            }
-                        }
-                    }
-                });
-        }
-
-        // Left sidebar — project list (respects workspace filter)
-        let archived_paths: Vec<std::path::PathBuf> = self.state.config.workspaces
-            .iter()
-            .find(|w| w.name == "__archived__")
-            .map(|w| w.paths.clone())
-            .unwrap_or_default();
-        SidePanel::left("sidebar")
-            .min_width(180.0)
-            .max_width(280.0)
-            .show(ctx, |ui| {
-                ui.label(egui::RichText::new("Projects").strong());
-                // Recent projects
-                if !self.state.recent_projects.is_empty() {
-                    ui.label(egui::RichText::new("Recent").small().color(egui::Color32::GRAY));
-                    let mut remove_recent: Option<usize> = None;
-                    for (ri, path) in self.state.recent_projects.clone().iter().enumerate() {
-                        let name = path.file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        ui.horizontal(|ui| {
-                            if ui.small_button(&name).on_hover_text(path.display().to_string()).clicked() {
-                                self.open_project(path.clone());
-                            }
-                            if ui.small_button("×").on_hover_text("Remove from recents").clicked() {
-                                remove_recent = Some(ri);
-                            }
-                        });
-                    }
-                    if let Some(ri) = remove_recent {
-                        self.state.recent_projects.remove(ri);
-                        crate::state::save_recent_projects(&self.state.recent_projects);
-                    }
-                    ui.separator();
-                }
-                ui.separator();
-                let projects = self.state.known_projects.clone();
-                let ws_filter = self.state.active_workspace.clone();
-                let show_archived = self.state.show_archived;
-                let ws_paths: Option<Vec<std::path::PathBuf>> = ws_filter.as_ref().and_then(|ws_name| {
-                    self.state.config.workspaces.iter().find(|w| &w.name == ws_name)
-                        .map(|w| w.paths.clone())
-                });
-
-                for path in &projects {
-                    let is_archived = archived_paths.contains(path);
-                    if show_archived && !is_archived { continue; }
-                    if !show_archived && is_archived { continue; }
-                    if let Some(ref wps) = ws_paths {
-                        if !wps.contains(path) { continue; }
-                    }
-
-                    let name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| path.display().to_string());
-                    let active = self.state.current_project().map(|p| &p.root == path).unwrap_or(false);
-                    if ui.selectable_label(active, &name).clicked() {
-                        self.open_project(path.clone());
-                    }
-                }
-            });
-
-        // Build panel hint (from git push/pull)
-        if self.state.build_panel_open_hint {
-            self.build_panel_open = true;
-            self.state.build_panel_open_hint = false;
-        }
-
-        // Error modal
-        if self.state.error_msg.is_some() {
-            egui::Window::new("Error")
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.label(self.state.error_msg.as_deref().unwrap_or(""));
-                    if ui.button("OK").clicked() {
-                        self.state.error_msg = None;
-                    }
-                });
-        }
-
-        // Tidy confirm modal
-        if self.state.show_tidy_confirm {
-            let candidates = self.state.tidy_candidates.clone();
-            egui::Window::new("Confirm Tidy")
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.label("The following unreachable functions will be removed:");
-                    for f in &candidates {
-                        ui.label(format!("  {f}"));
-                    }
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if ui.button("Remove").clicked() {
-                            self.state.show_tidy_confirm = false;
-                            if let Some(project) = self.state.current_project().cloned() {
-                                match analysis::tidy(&project.root, &candidates) {
-                                    Ok(log) => {
-                                        for line in &log {
-                                            self.state.build_lines.push(BuildLine {
-                                                text: line.clone(),
-                                                kind: LineKind::Info,
-                                            });
-                                        }
-                                        self.state.set_status("Tidy complete.");
-                                        if let View::ProjectDetail(ref mut p) = self.state.view {
-                                            let _ = p.refresh_modules();
-                                        }
-                                    }
-                                    Err(e) => self.state.set_error(e.to_string()),
-                                }
-                            }
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.state.show_tidy_confirm = false;
-                        }
-                    });
-                });
-        }
-
-        // Confirm remove module modal
-        if let Some((project, mod_name)) = self.state.confirm_remove_module.clone() {
-            let mut open = true;
-            egui::Window::new("Remove Module")
-                .open(&mut open)
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.label(format!("Delete module '{mod_name}'?"));
-                    ui.label(
-                        RichText::new(format!(
-                            "This removes src/{mod_name}.c and include/{mod_name}.h."
-                        ))
-                        .small()
-                        .color(Color32::GRAY),
-                    );
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(egui::Button::new("Delete").fill(Color32::from_rgb(160, 40, 40)))
-                            .clicked()
-                        {
-                            match module::remove_module(&project.root, &mod_name) {
-                                Ok(()) => {
-                                    self.state.set_status(format!("Removed module '{mod_name}'."));
-                                    if let View::ProjectDetail(ref mut p) = self.state.view {
-                                        let _ = p.refresh_modules();
-                                    }
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                            self.state.confirm_remove_module = None;
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.state.confirm_remove_module = None;
-                        }
-                    });
-                });
-            if !open {
-                self.state.confirm_remove_module = None;
-            }
-        }
-
-        // Save as template modal
-        if self.state.show_save_template_modal {
-            if let Some(project) = self.state.current_project().cloned() {
-                let mut open = true;
-                egui::Window::new("Save as Template")
-                    .open(&mut open)
-                    .collapsible(false)
-                    .resizable(false)
-                    .min_width(340.0)
-                    .show(ctx, |ui| {
-                        egui::Grid::new("save_tpl_grid").num_columns(2).show(ui, |ui| {
-                            ui.label("Name:");
-                            ui.text_edit_singleline(&mut self.state.save_template_name);
-                            ui.end_row();
-                            ui.label("Description:");
-                            ui.text_edit_singleline(&mut self.state.save_template_desc);
-                            ui.end_row();
-                        });
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            let valid = !self.state.save_template_name.trim().is_empty();
-                            if ui.add_enabled(valid, egui::Button::new("Save")).clicked() {
-                                let builder_state = MainBuilderState::load_from_main_c(&project.root);
-                                let tpl = UserTemplate {
-                                    name: self.state.save_template_name.trim().to_string(),
-                                    description: self.state.save_template_desc.trim().to_string(),
-                                    modules: project.modules.iter().map(|m| m.name.clone()).collect(),
-                                    blocks: builder_state.blocks,
-                                    globals: builder_state.globals,
-                                };
-                                match newc_core::user_template::save(&tpl) {
-                                    Ok(_) => self.state.set_status(format!("Template '{}' saved.", tpl.name)),
-                                    Err(e) => self.state.set_error(e.to_string()),
-                                }
-                                self.state.show_save_template_modal = false;
-                                self.state.save_template_name.clear();
-                                self.state.save_template_desc.clear();
-                            }
-                            if ui.button("Cancel").clicked() {
-                                self.state.show_save_template_modal = false;
-                            }
-                        });
-                    });
-                if !open {
-                    self.state.show_save_template_modal = false;
-                }
-            }
-        }
-
-        // Project metadata editor modal
-        if self.state.show_meta_editor {
-            if let Some(project) = self.state.current_project().cloned() {
-                let mut open = true;
-                egui::Window::new("Project Metadata")
-                    .open(&mut open)
-                    .collapsible(false)
-                    .resizable(false)
-                    .min_width(340.0)
-                    .show(ctx, |ui| {
-                        let draft = &mut self.state.meta_draft;
-                        egui::Grid::new("meta_grid").num_columns(2).min_col_width(100.0).show(ui, |ui| {
-                            ui.label("Course:");
-                            ui.text_edit_singleline(&mut draft.course);
-                            ui.end_row();
-                            ui.label("Assignment:");
-                            ui.text_edit_singleline(&mut draft.assignment);
-                            ui.end_row();
-                            ui.label("Due date:");
-                            ui.add(egui::TextEdit::singleline(&mut draft.due_date).hint_text("YYYY-MM-DD"));
-                            ui.end_row();
-                            ui.label("Max marks:");
-                            let mut max_str = draft.max_marks.map(|v| v.to_string()).unwrap_or_default();
-                            ui.text_edit_singleline(&mut max_str);
-                            draft.max_marks = max_str.trim().parse().ok();
-                            ui.end_row();
-                            ui.label("Received marks:");
-                            let mut rec_str = draft.received_marks.map(|v| v.to_string()).unwrap_or_default();
-                            ui.text_edit_singleline(&mut rec_str);
-                            draft.received_marks = rec_str.trim().parse().ok();
-                            ui.end_row();
-                            ui.label("Notes:");
-                            ui.text_edit_multiline(&mut draft.notes);
-                            ui.end_row();
-                        });
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            if ui.button("Save").clicked() {
-                                match meta::save(&project.root, &self.state.meta_draft) {
-                                    Ok(_) => self.state.set_status("Metadata saved."),
-                                    Err(e) => self.state.set_error(e.to_string()),
-                                }
-                                self.state.show_meta_editor = false;
-                            }
-                            if ui.button("Cancel").clicked() {
-                                self.state.show_meta_editor = false;
-                            }
-                        });
-                    });
-                if !open {
-                    self.state.show_meta_editor = false;
-                }
-            }
-        }
-
-        // Import from .c modal
-        if self.state.show_import {
-            egui::Window::new("Import from .c")
-                .resizable(true)
-                .min_width(500.0)
-                .show(ctx, |ui| {
-                    let action =
-                        views::import_c::show(ui, &mut self.state.import_state);
-                    match action {
-                        views::import_c::ImportAction::PickFile => {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("C source", &["c"])
-                                .pick_file()
-                            {
-                                let label = path.display().to_string();
-                                if let Ok(content) = std::fs::read_to_string(&path) {
-                                    let extracted = extract_function_implementations(&content);
-                                    let n = extracted.len();
-                                    self.state.import_state = ImportState {
-                                        extracted,
-                                        selected: vec![true; n],
-                                        target_module: path
-                                            .file_stem()
-                                            .map(|s| s.to_string_lossy().into_owned())
-                                            .unwrap_or_default(),
-                                        path_label: label,
-                                    };
-                                }
-                            }
-                        }
-                        views::import_c::ImportAction::Import(funcs) => {
-                            for func in &funcs {
-                                self.tools.lock().unwrap().function_lib.upsert(func.clone());
-                                let _ = FunctionLibrary::save_user_function(func);
-                            }
-                            self.state.set_status(format!("Imported {} function(s).", funcs.len()));
-                            self.state.show_import = false;
-                            self.state.import_state = ImportState::default();
-                        }
-                        views::import_c::ImportAction::Cancel => {
-                            self.state.show_import = false;
-                            self.state.import_state = ImportState::default();
-                        }
-                        views::import_c::ImportAction::None => {}
-                    }
-                });
-        }
-
-        // New group modal
-        if self.state.show_new_group {
-            egui::Window::new("New Function Group")
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    egui::Grid::new("new_group_grid").num_columns(2).show(ui, |ui| {
-                        ui.label("Name:");
-                        ui.text_edit_singleline(&mut self.state.new_group_name);
-                        ui.end_row();
-                        ui.label("Description:");
-                        ui.text_edit_singleline(&mut self.state.new_group_desc);
-                        ui.end_row();
-                    });
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        let valid = !self.state.new_group_name.trim().is_empty();
-                        if ui.add_enabled(valid, egui::Button::new("Create")).clicked() {
-                            let name = self.state.new_group_name.trim().to_string();
-                            let desc = self.state.new_group_desc.trim().to_string();
-                            let mut t = self.tools.lock().unwrap();
-                            if t.function_lib.create_group(&name, &desc) {
-                                let _ = t.function_lib.save_groups();
-                                t.library_state.active_group = Some(name.clone());
-                                drop(t);
-                                self.state.set_status(format!("Group '{name}' created."));
-                            } else {
-                                drop(t);
-                                self.state.set_error(format!("Group '{name}' already exists."));
-                            }
-                            self.state.show_new_group = false;
-                            self.state.new_group_name.clear();
-                            self.state.new_group_desc.clear();
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.state.show_new_group = false;
-                            self.state.new_group_name.clear();
-                        }
-                    });
-                });
-        }
-
-        // Group action modal (rename / delete)
-        if let Some(target) = self.state.group_action_target.clone() {
-            egui::Window::new(format!("Group: {target}"))
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.label(RichText::new("Rename").strong());
-                    ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.state.group_rename_input);
-                        let valid = !self.state.group_rename_input.trim().is_empty()
-                            && self.state.group_rename_input != target;
-                        if ui.add_enabled(valid, egui::Button::new("Rename")).clicked() {
-                            let new_name = self.state.group_rename_input.trim().to_string();
-                            let mut t = self.tools.lock().unwrap();
-                            if t.function_lib.rename_group(&target, &new_name) {
-                                let funcs: Vec<_> = t.function_lib
-                                    .by_module(&new_name)
-                                    .into_iter()
-                                    .cloned()
-                                    .collect();
-                                for f in &funcs {
-                                    let _ = FunctionLibrary::save_user_function(f);
-                                }
-                                let _ = t.function_lib.save_groups();
-                                t.library_state.active_group = Some(new_name.clone());
-                                drop(t);
-                                self.state.set_status(format!("Renamed to '{new_name}'."));
-                            } else {
-                                drop(t);
-                                self.state.set_error("Rename failed — name may already exist.".to_string());
-                            }
-                            self.state.group_action_target = None;
-                        }
-                    });
-                    ui.separator();
-                    ui.label(RichText::new("Delete group").strong());
-                    ui.checkbox(&mut self.state.delete_group_cascade, "Also delete all functions in this group");
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(egui::Button::new("Delete").fill(Color32::from_rgb(160, 40, 40)))
-                            .clicked()
-                        {
-                            let cascade = self.state.delete_group_cascade;
-                            {
-                                let mut t = self.tools.lock().unwrap();
-                                t.function_lib.delete_group(&target, cascade);
-                                let _ = t.function_lib.save_groups();
-                                t.library_state.active_group = None;
-                            }
-                            self.state.set_status(format!("Group '{target}' deleted."));
-                            self.state.group_action_target = None;
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.state.group_action_target = None;
-                        }
-                    });
-                });
-        }
-
-        // Quick search overlay
-        let qs_action = {
-            let t = self.tools.lock().unwrap();
-            let lib = t.function_lib.clone();
-            drop(t);
-            views::quick_search::show(
-                ctx,
-                &mut self.state.quick_search,
-                &lib,
-                &self.state.known_projects,
-            )
+        let opts = ScaffoldOptions {
+            name: name.clone(),
+            author: self.state.create_author.clone(),
+            git_init: self.state.create_git,
+            modules,
         };
-        match qs_action {
-            views::quick_search::QuickSearchAction::OpenFunction(name) => {
-                self.tools.lock().unwrap().library_state.selected = Some(name);
-                // Navigate to main panel if not already popped out
-                if !self.show_library_window {
-                    self.state.view = View::FunctionLibrary;
-                }
+
+        match create_project(&opts, &parent) {
+            Ok(_) => {
+                self.state.create_name.clear();
+                self.state.selected_template = None;
+                self.open_project(root);
             }
-            views::quick_search::QuickSearchAction::OpenProject(path) => {
-                self.open_project(path);
-            }
-            views::quick_search::QuickSearchAction::Close
-            | views::quick_search::QuickSearchAction::None => {}
-        }
-
-        // Central panel
-        CentralPanel::default().show(ctx, |ui| {
-            let view = self.state.view.clone();
-            match view {
-                View::Settings => {
-                    let action = views::settings::show(ui, &mut self.state.config_draft);
-                    if let views::settings::SettingsAction::Save(cfg) = action {
-                        self.state.config = cfg.clone();
-                        self.state.config_draft = cfg.clone();
-                        if let Err(e) = cfg.save() {
-                            self.state.set_error(e.to_string());
-                        } else {
-                            // Rescan with updated dirs
-                            let scan_paths = self.state.config.scan_paths();
-                            let found = Project::discover(&scan_paths);
-                            for p in found {
-                                if !self.state.known_projects.contains(&p) {
-                                    self.state.known_projects.push(p);
-                                }
-                            }
-                            self.state.set_status("Settings saved.");
-                        }
-                    }
-                }
-
-                View::CReference => {
-                    egui::TopBottomPanel::top("cref_popout_bar").show_inside(ui, |ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
-                                self.show_cref_window = true;
-                                self.state.view = View::Home;
-                            }
-                        });
-                    });
-                    views::cref::show(ui, &mut self.tools.lock().unwrap().cref_state);
-                }
-
-                View::ProjectNotes(ref project) => {
-                    let project = project.clone();
-                    ui.horizontal(|ui| {
-                        if ui.button("← Project").clicked() {
-                            if self.state.notes_dirty {
-                                let _ = notes::save(&project.root, &self.state.notes_content);
-                                self.state.notes_dirty = false;
-                            }
-                            self.state.view = View::ProjectDetail(project.clone());
-                        }
-                        ui.heading(format!("Notes — {}", project.name));
-                        if self.state.notes_dirty {
-                            if ui.button("Save").clicked() {
-                                let _ = notes::save(&project.root, &self.state.notes_content);
-                                self.state.notes_dirty = false;
-                                self.state.set_status("Notes saved.");
-                            }
-                        }
-                        ui.label(
-                            egui::RichText::new("(Ctrl+S to save)")
-                                .small()
-                                .color(egui::Color32::GRAY),
-                        );
-                    });
-                    ui.separator();
-
-                    // Ctrl+S save
-                    if ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl)
-                        && self.state.notes_dirty
-                    {
-                        let _ = notes::save(&project.root, &self.state.notes_content);
-                        self.state.notes_dirty = false;
-                        self.state.set_status("Notes saved.");
-                    }
-
-                    let before = self.state.notes_content.clone();
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.state.notes_content)
-                                .desired_rows(30)
-                                .desired_width(f32::INFINITY)
-                                .hint_text("Project notes, ideas, algorithm plans…"),
-                        );
-                    });
-                    if self.state.notes_content != before {
-                        self.state.notes_dirty = true;
-                    }
-                }
-
-                View::FunctionLibrary => {
-                    if self.state.show_import {
-                        return;
-                    }
-                    egui::TopBottomPanel::top("lib_popout_bar").show_inside(ui, |ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
-                                self.show_library_window = true;
-                                self.state.view = View::Home;
-                            }
-                        });
-                    });
-                    let lib_clone = self.tools.lock().unwrap().function_lib.clone();
-                    let action = {
-                        let mut t = self.tools.lock().unwrap();
-                        views::library::show(ui, &lib_clone, &mut t.library_state)
-                    };
-                    self.handle_library_action(action);
-                }
-
-                View::Snippets => {
-                    egui::TopBottomPanel::top("snip_popout_bar").show_inside(ui, |ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("Pop out").on_hover_text("Open in separate window").clicked() {
-                                self.show_snippets = true;
-                                self.state.view = View::Home;
-                            }
-                        });
-                    });
-                    views::snippets::show_contents(ui, &mut self.tools.lock().unwrap().snippets_state);
-                }
-
-                View::Home => {
-                    let config_clone = self.state.config.clone();
-                    let action = views::home::show(
-                        ui,
-                        &self.state.known_projects,
-                        self.state.is_first_run,
-                        &config_clone,
-                        &mut self.state.active_workspace,
-                        &mut self.state.show_archived,
-                        &mut self.state.workspace_input,
-                        &mut self.state.show_new_workspace,
-                    );
-                    if action.go_create {
-                        self.state.view = View::CreateProject;
-                    }
-                    if let Some(path) = action.open_project {
-                        self.open_project(path);
-                    }
-                    if let Some(i) = action.remove_project {
-                        self.state.known_projects.remove(i);
-                        save_known_projects(&self.state.known_projects);
-                    }
-                    if action.browse_for_project {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.open_project(path);
-                        }
-                    }
-                    if let Some(path) = action.archive_project {
-                        self.state.config.archive(path);
-                        let _ = self.state.config.save();
-                        self.state.config_draft = self.state.config.clone();
-                    }
-                    if let Some((path, ws_name)) = action.move_to_workspace {
-                        if ws_name == "__unarchive__" {
-                            self.state.config.unarchive(&path);
-                        } else {
-                            self.state.config.remove_from_all_workspaces(&path);
-                            self.state.config.add_to_workspace(&ws_name, path);
-                        }
-                        let _ = self.state.config.save();
-                        self.state.config_draft = self.state.config.clone();
-                    }
-                    if let Some(ws_name) = action.new_workspace {
-                        if self.state.config.add_workspace(&ws_name) {
-                            let _ = self.state.config.save();
-                            self.state.config_draft = self.state.config.clone();
-                            self.state.set_status(format!("Workspace '{ws_name}' created."));
-                        }
-                    }
-                }
-
-                View::CreateProject => {
-                    let action = views::create::show(
-                        ui,
-                        &mut self.state.create_name,
-                        &mut self.state.create_git,
-                        &mut self.state.create_author,
-                        &mut self.state.create_include_input,
-                        &mut self.state.create_include_math,
-                        &mut self.state.create_include_display,
-                        &mut self.state.create_include_array,
-                        &mut self.state.create_include_strings,
-                        &mut self.state.create_include_linked_list,
-                        &mut self.state.create_include_files,
-                        &mut self.state.create_include_test_utils,
-                        &mut self.state.func_search,
-                        &mut self.state.func_selected,
-                        &self.tools.lock().unwrap().function_lib.clone(),
-                        &mut false,
-                        &mut self.state.selected_template,
-                        &mut self.state.create_location,
-                    );
-                    match action {
-                        views::create::CreateAction::Create {
-                            name, git, author,
-                            include_input, include_math, include_display, include_array,
-                            include_strings, include_linked_list, include_files, include_test_utils,
-                            location,
-                        } => {
-                            let mut modules = Vec::new();
-                            if include_input { modules.push(DefaultModule::Input); }
-                            if include_math { modules.push(DefaultModule::Math); }
-                            if include_display { modules.push(DefaultModule::Display); }
-                            if include_array { modules.push(DefaultModule::Array); }
-                            if include_strings { modules.push(DefaultModule::Strings); }
-                            if include_linked_list { modules.push(DefaultModule::LinkedList); }
-                            if include_files { modules.push(DefaultModule::Files); }
-                            if include_test_utils { modules.push(DefaultModule::TestUtils); }
-
-                            // Remember selected template to seed composer after project created
-                            let template_idx = self.state.selected_template;
-
-                            let opts = ScaffoldOptions {
-                                name: name.clone(),
-                                git_init: git,
-                                author,
-                                modules,
-                            };
-                            match create_project(&opts, &location) {
-                                Ok(()) => {
-                                    let root = location.join(&name);
-                                    // Seed composer from template + write main.c to disk
-                                    if let Some(idx) = template_idx {
-                                        let templates = project_template::all_templates();
-                                        if let Some(t) = templates.get(idx) {
-                                            let builder_state = (t.builder)();
-                                            let date = chrono::Local::now().format("%d/%m/%Y").to_string();
-                                            let main_c = builder_state.preview(&opts.author, &date);
-                                            let _ = std::fs::write(root.join("src").join("main.c"), main_c);
-                                            self.state.main_builder = builder_state;
-                                            self.state.composer_undo.clear();
-                                            self.state.composer_redo.clear();
-                                        }
-                                    }
-                                    self.state.is_first_run = false;
-                                    self.open_project(root);
-                                    self.state.set_status(format!("Project '{name}' created."));
-                                    self.state.create_name.clear();
-                                    self.state.selected_template = None;
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::create::CreateAction::Cancel => {
-                            self.state.view = View::Home;
-                        }
-                        views::create::CreateAction::None => {}
-                    }
-                }
-
-                View::ProjectStats(ref project) => {
-                    let project = project.clone();
-                    if ui.button("← Project").clicked() {
-                        self.state.view = View::ProjectDetail(project.clone());
-                        return;
-                    }
-                    let stats = self.state.get_or_compute_stats().cloned();
-                    if let Some(s) = stats {
-                        views::stats::show(ui, &project, &s);
-                    }
-                }
-
-                View::ProjectDetail(ref project) => {
-                    let project = project.clone();
-                    let build_running = self.state.build_state == BuildState::Running;
-                    let meta_snapshot = self.state.meta_draft.clone();
-                    let action = views::project::show(ui, &project, build_running, &meta_snapshot);
-
-                    match action {
-                        views::project::ProjectAction::GoHome => {
-                            self.state.view = View::Home;
-                        }
-                        views::project::ProjectAction::OpenStats => {
-                            self.state.cached_stats = None;
-                            self.state.view = View::ProjectStats(project);
-                        }
-                        views::project::ProjectAction::AddModule => {
-                            self.state.add_module_name.clear();
-                            self.state.func_search.clear();
-                            self.state.func_selected.clear();
-                            self.state.view = View::AddModule { project: project.clone() };
-                        }
-                        views::project::ProjectAction::RemoveModule(_) => {}
-                        views::project::ProjectAction::ConfirmRemoveModule(name) => {
-                            self.state.confirm_remove_module = Some((project.clone(), name));
-                        }
-                        views::project::ProjectAction::SyncModule(name) => {
-                            match sync::sync_module(&project.root, &name) {
-                                Ok(()) => self.state.set_status(format!("Synced {name}.h")),
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::project::ProjectAction::SyncAll => {
-                            match sync::sync_all(&project.root) {
-                                Ok(msgs) => {
-                                    for m in &msgs {
-                                        self.state.build_lines.push(BuildLine {
-                                            text: m.clone(),
-                                            kind: LineKind::Info,
-                                        });
-                                    }
-                                    self.state.set_status("Sync complete.");
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::project::ProjectAction::Check => {
-                            match analysis::check(&project.root) {
-                                Ok(unreachable) => {
-                                    if unreachable.is_empty() {
-                                        self.state.build_lines.push(BuildLine {
-                                            text: "All module functions are reachable from main.".into(),
-                                            kind: LineKind::Info,
-                                        });
-                                    } else {
-                                        self.state.build_lines.push(BuildLine {
-                                            text: format!("{} unreachable function(s):", unreachable.len()),
-                                            kind: LineKind::Stderr,
-                                        });
-                                        for f in &unreachable {
-                                            self.state.build_lines.push(BuildLine {
-                                                text: format!("  {} ({})", f.name, f.source.display()),
-                                                kind: LineKind::Stderr,
-                                            });
-                                        }
-                                    }
-                                    self.build_panel_open = true;
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::project::ProjectAction::Tidy => {
-                            match analysis::check(&project.root) {
-                                Ok(unreachable) if unreachable.is_empty() => {
-                                    self.state.set_status("Nothing to tidy.");
-                                }
-                                Ok(unreachable) => {
-                                    self.state.tidy_candidates =
-                                        unreachable.iter().map(|f| f.name.clone()).collect();
-                                    self.state.show_tidy_confirm = true;
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::project::ProjectAction::RunMake(target) => {
-                            self.state.build_target_current = target.clone();
-                            self.state.build_state = BuildState::Running;
-                            self.build_panel_open = true;
-                            self.runner.run(&target, project.root.clone());
-                        }
-                        views::project::ProjectAction::OpenInEditor => {
-                            self.state.config.open_in_editor(&project.root);
-                        }
-                        views::project::ProjectAction::RefreshModules => {
-                            if let View::ProjectDetail(ref mut p) = self.state.view {
-                                let _ = p.refresh_modules();
-                            }
-                        }
-                        views::project::ProjectAction::OpenNotes => {
-                            self.state.notes_content = notes::load(&project.root);
-                            self.state.notes_dirty = false;
-                            self.state.view = View::ProjectNotes(project.clone());
-                        }
-                        views::project::ProjectAction::OpenModuleDetail(module_name) => {
-                            self.state.module_detail_state = Default::default();
-                            self.state.view = View::ModuleDetail {
-                                project: project.clone(),
-                                module_name,
-                            };
-                        }
-                        views::project::ProjectAction::OpenMainBuilder => {
-                            self.state.main_builder = MainBuilderState::load_from_main_c(&project.root);
-                            self.state.composer_undo.clear();
-                            self.state.composer_redo.clear();
-                            self.state.view = View::MainBuilder(project.clone());
-                        }
-                        views::project::ProjectAction::OpenGitPanel => {
-                            self.state.git_commit_msg.clear();
-                            self.state.view = View::GitPanel(project.clone());
-                        }
-                        views::project::ProjectAction::OpenBuildHistory => {
-                            self.state.view = View::BuildHistory(project.clone());
-                        }
-                        views::project::ProjectAction::OpenMetaEditor => {
-                            self.state.meta_draft = meta::load(&project.root);
-                            self.state.show_meta_editor = true;
-                        }
-                        views::project::ProjectAction::OpenUsageTracker => {
-                            self.state.usage_search.clear();
-                            self.state.view = View::UsageTracker(project.clone());
-                        }
-                        views::project::ProjectAction::OpenHealth => {
-                            self.state.health_computed = false;
-                            self.state.view = View::HealthDashboard(project.clone());
-                        }
-                        views::project::ProjectAction::OpenSearch => {
-                            self.state.search_query.clear();
-                            self.state.search_results.clear();
-                            self.state.view = View::ProjectSearch(project.clone());
-                        }
-                        views::project::ProjectAction::ExportReport => {
-                            let content = newc_core::report::generate(&project.root, &project.name);
-                            let default_name = format!("{}-report.md", project.name);
-                            let parent = project.root.parent()
-                                .map(|p| p.to_path_buf())
-                                .unwrap_or_else(|| std::path::PathBuf::from("."));
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_file_name(&default_name)
-                                .set_directory(&parent)
-                                .save_file()
-                            {
-                                match std::fs::write(&path, content) {
-                                    Ok(_) => self.state.set_status(format!("Report exported to {}", path.display())),
-                                    Err(e) => self.state.set_error(e.to_string()),
-                                }
-                            }
-                        }
-                        views::project::ProjectAction::OpenMakefile => {
-                            let makefile_path = project.root.join("Makefile");
-                            self.state.makefile_content = std::fs::read_to_string(&makefile_path)
-                                .unwrap_or_else(|_| "# Makefile not found".to_string());
-                            self.state.makefile_dirty = false;
-                            self.state.view = View::MakefileEditor(project.clone());
-                        }
-                        views::project::ProjectAction::SaveAsTemplate => {
-                            self.state.save_template_name = project.name.clone();
-                            self.state.save_template_desc.clear();
-                            self.state.show_save_template_modal = true;
-                        }
-                        views::project::ProjectAction::ExportZip => {
-                            let parent = project.root.parent()
-                                .map(|p| p.to_path_buf())
-                                .unwrap_or_else(|| std::path::PathBuf::from("."));
-                            let dest = if let Some(d) = rfd::FileDialog::new()
-                                .set_file_name(&format!("{}.zip", project.name))
-                                .set_directory(&parent)
-                                .save_file()
-                            { d.parent().map(|p| p.to_path_buf()).unwrap_or(parent) } else { return };
-                            match export::export_zip(&project.root, &project.name, &dest) {
-                                Ok(path) => self.state.set_status(format!("Exported to {}", path.display())),
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::project::ProjectAction::None => {}
-                    }
-                }
-
-                View::ModuleDetail { ref project, ref module_name } => {
-                    let project = project.clone();
-                    let module_name = module_name.clone();
-                    let src_path = project.root.join("src").join(format!("{module_name}.c"));
-                    let lib = self.tools.lock().unwrap().function_lib.clone();
-                    let action = views::module_detail::show(
-                        ui,
-                        &module_name,
-                        &src_path,
-                        &project.root,
-                        &mut self.state.module_detail_state,
-                        &lib,
-                    );
-                    match action {
-                        views::module_detail::ModuleDetailAction::GoBack => {
-                            self.state.view = View::ProjectDetail(project);
-                        }
-                        views::module_detail::ModuleDetailAction::SaveFunction { name, new_impl } => {
-                            match update_function_in_source(&src_path, &name, &new_impl) {
-                                Ok(()) => {
-                                    // Auto-sync header after every save
-                                    let sync_msg = match sync::sync_module(&project.root, &module_name) {
-                                        Ok(()) => format!("Saved {name} — header synced."),
-                                        Err(_)  => format!("Saved {name} (sync skipped)."),
-                                    };
-                                    self.state.set_status(sync_msg);
-                                    self.state.module_detail_state.proto_mismatch = None;
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::module_detail::ModuleDetailAction::DeleteFunction(name) => {
-                            match analysis::tidy(&project.root, &[name.clone()]) {
-                                Ok(_) => self.state.set_status(format!("Deleted {name}.")),
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::module_detail::ModuleDetailAction::AddFromLibrary => {
-                            self.state.func_search.clear();
-                            self.state.func_selected.clear();
-                            self.state.add_module_name = module_name.clone();
-                            self.state.view = View::AddModule { project };
-                        }
-                        views::module_detail::ModuleDetailAction::OpenHeaderEditor => {
-                            self.state.header_editor_state = Default::default();
-                            self.state.view = View::HeaderEditor { project, module_name };
-                        }
-                        views::module_detail::ModuleDetailAction::SyncNow => {
-                            match sync::sync_module(&project.root, &module_name) {
-                                Ok(()) => self.state.set_status(format!("Synced {module_name}.h")),
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::module_detail::ModuleDetailAction::ClangFormat => {
-                            let style = &self.state.config.clang_format_style.clone();
-                            match run_clang_format(&self.state.module_detail_state.edit_buf, style) {
-                                Ok(formatted) => {
-                                    self.state.module_detail_state.edit_buf = formatted;
-                                    self.state.set_status("Formatted with clang-format.");
-                                }
-                                Err(e) => self.state.set_error(format!("clang-format: {e}")),
-                            }
-                        }
-                        views::module_detail::ModuleDetailAction::AutoFixInclude(header_module) => {
-                            // Prepend #include "header.h" after last existing #include
-                            let include_line = format!("#include \"{header_module}.h\"\n");
-                            if let Ok(mut content) = std::fs::read_to_string(&src_path) {
-                                // Insert after last #include line
-                                let mut insert_pos = 0;
-                                for (i, line) in content.lines().enumerate() {
-                                    if line.trim().starts_with("#include") {
-                                        insert_pos = content.lines().take(i + 1).map(|l| l.len() + 1).sum();
-                                    }
-                                }
-                                content.insert_str(insert_pos, &include_line);
-                                let _ = std::fs::write(&src_path, content);
-                                self.state.set_status(format!("Added #include \"{header_module}.h\""));
-                            }
-                        }
-                        views::module_detail::ModuleDetailAction::None => {}
-                    }
-                }
-
-                View::HeaderEditor { ref project, ref module_name } => {
-                    let project = project.clone();
-                    let module_name = module_name.clone();
-                    let hdr_path = project.root.join("include").join(format!("{module_name}.h"));
-                    let action = views::header_editor::show(
-                        ui,
-                        &hdr_path,
-                        &module_name,
-                        &mut self.state.header_editor_state,
-                    );
-                    match action {
-                        views::header_editor::HeaderEditorAction::Save => {
-                            match header::write_ignore_block(&hdr_path, &self.state.header_editor_state.content) {
-                                Ok(()) => {
-                                    self.state.set_status("Header saved.");
-                                    self.state.view = View::ModuleDetail { project, module_name };
-                                    self.state.header_editor_state = Default::default();
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::header_editor::HeaderEditorAction::Close => {
-                            self.state.view = View::ModuleDetail { project, module_name };
-                            self.state.header_editor_state = Default::default();
-                        }
-                        views::header_editor::HeaderEditorAction::None => {}
-                    }
-                }
-
-                View::MainBuilder(ref project) => {
-                    let project = project.clone();
-                    let author = self.state.create_author.clone();
-                    let action = views::main_builder::show(
-                        ui,
-                        &project,
-                        &mut self.state.main_builder,
-                        &author,
-                        &mut self.state.composer_undo,
-                        &mut self.state.composer_redo,
-                    );
-                    match action {
-                        views::main_builder::BuilderAction::GoBack => {
-                            self.state.view = View::ProjectDetail(project);
-                        }
-                        views::main_builder::BuilderAction::WriteMainC => {
-                            let date = chrono::Local::now().format("%d/%m/%Y").to_string();
-                            let code = self.state.main_builder.preview(&author, &date);
-                            let main_c = project.root.join("src").join("main.c");
-                            match std::fs::write(&main_c, code) {
-                                Ok(()) => self.state.set_status("Written to src/main.c"),
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::main_builder::BuilderAction::None
-                        | views::main_builder::BuilderAction::Snapshot => {}
-                    }
-                }
-
-                View::GitPanel(_) => {
-                    views::git_panel::show(ctx, &mut self.state);
-                }
-
-                View::BuildHistory(_) => {
-                    views::build_history::show(ctx, &mut self.state);
-                }
-
-                View::UsageTracker(_) => {
-                    let lib = self.tools.lock().unwrap().function_lib.clone();
-                    views::usage_tracker::show(ctx, &mut self.state, &lib);
-                }
-
-                View::ProjectSearch(_) => {
-                    views::project_search::show(ctx, &mut self.state);
-                }
-
-                View::HealthDashboard(_) => {
-                    let lib = self.tools.lock().unwrap().function_lib.clone();
-                    views::health::show(ctx, &mut self.state, &lib);
-                }
-
-                View::MakefileEditor(ref project) => {
-                    let project = project.clone();
-                    ui.horizontal(|ui| {
-                        if ui.button("← Back").clicked() {
-                            if self.state.makefile_dirty {
-                                let _ = std::fs::write(
-                                    project.root.join("Makefile"),
-                                    &self.state.makefile_content,
-                                );
-                            }
-                            self.state.view = View::ProjectDetail(project.clone());
-                            return;
-                        }
-                        ui.heading(format!("Makefile — {}", project.name));
-                        if self.state.makefile_dirty {
-                            if ui.button("Save (Ctrl+S)").clicked()
-                                || ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl)
-                            {
-                                let _ = std::fs::write(
-                                    project.root.join("Makefile"),
-                                    &self.state.makefile_content,
-                                );
-                                self.state.makefile_dirty = false;
-                                self.state.set_status("Makefile saved.");
-                            }
-                        }
-                    });
-                    ui.separator();
-                    let before = self.state.makefile_content.clone();
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.state.makefile_content)
-                                .code_editor()
-                                .desired_rows(35)
-                                .desired_width(f32::INFINITY),
-                        );
-                    });
-                    if self.state.makefile_content != before {
-                        self.state.makefile_dirty = true;
-                    }
-                    // Ctrl+S
-                    if ui.input(|i| i.key_pressed(egui::Key::S) && i.modifiers.ctrl) && self.state.makefile_dirty {
-                        let _ = std::fs::write(project.root.join("Makefile"), &self.state.makefile_content);
-                        self.state.makefile_dirty = false;
-                        self.state.set_status("Makefile saved.");
-                    }
-                }
-
-                View::AddModule { ref project, .. } => {
-                    let project = project.clone();
-                    let lib = self.tools.lock().unwrap().function_lib.clone();
-                    let action = views::add_module::show(
-                        ui,
-                        &project,
-                        &mut self.state.add_module_name,
-                        &mut self.state.func_search,
-                        &mut self.state.func_selected,
-                        &lib,
-                    );
-                    match action {
-                        views::add_module::AddModuleAction::Create { name, selected_funcs } => {
-                            match module::add_module(&project.root, &name) {
-                                Ok(()) => {
-                                    if !selected_funcs.is_empty() {
-                                        inject_functions_into_module(
-                                            &project.root,
-                                            &name,
-                                            &selected_funcs,
-                                            &lib,
-                                        );
-                                    }
-                                    self.state.set_status(format!("Module '{name}' created."));
-                                    match Project::open(project.root.clone()) {
-                                        Ok(p) => self.state.view = View::ProjectDetail(p),
-                                        Err(e) => self.state.set_error(e.to_string()),
-                                    }
-                                }
-                                Err(e) => self.state.set_error(e.to_string()),
-                            }
-                        }
-                        views::add_module::AddModuleAction::Cancel => {
-                            self.state.view = View::ProjectDetail(project);
-                        }
-                        views::add_module::AddModuleAction::None => {}
-                    }
-                }
-            }
-        });
-    }
-}
-
-fn inject_functions_into_module(
-    root: &std::path::Path,
-    module_name: &str,
-    selected: &[String],
-    lib: &newc_core::function_lib::FunctionLibrary,
-) {
-    let resolved = lib.resolve_deps(selected);
-    let src_path = root.join("src").join(format!("{module_name}.c"));
-    let hdr_path = root.join("include").join(format!("{module_name}.h"));
-
-    let mut src_additions = String::new();
-    let mut hdr_additions = String::new();
-
-    for fname in &resolved {
-        if let Some(func) = lib.all().iter().find(|f| &f.name == fname) {
-            src_additions.push_str(&func.impl_code);
-            src_additions.push('\n');
-            hdr_additions.push_str(&func.header_code);
-            hdr_additions.push('\n');
+            Err(e) => self.state.set_error(e.to_string()),
         }
     }
 
-    if let Ok(mut content) = std::fs::read_to_string(&src_path) {
-        content.push_str(&src_additions);
-        let _ = std::fs::write(&src_path, content);
-    }
+    // ── Layout panels ──────────────────────────────────────────────────────────
 
-    if let Ok(content) = std::fs::read_to_string(&hdr_path) {
-        let new_content = content.replace("#endif", &format!("{hdr_additions}\n#endif"));
-        let _ = std::fs::write(&hdr_path, new_content);
-    }
-}
+    fn top_bar(&self) -> Element<'_, Message> {
+        let nav_btn = |label: &'static str, msg: Message| {
+            button(text(label)).on_press(msg)
+        };
 
-fn delete_user_function(name: &str, lib: &newc_core::function_lib::FunctionLibrary) {
-    let Some(dir) = dirs::config_dir().map(|d| d.join("newc").join("functions")) else {
-        return;
-    };
-    if !dir.exists() {
-        return;
-    }
-    let Ok(entries) = std::fs::read_dir(&dir) else { return };
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.extension().and_then(|x| x.to_str()) != Some("toml") {
-            continue;
-        }
-        let Ok(content) = std::fs::read_to_string(&path) else { continue };
-        if !content.contains(name) {
-            continue;
-        }
-        let module = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let remaining: Vec<_> = lib.by_module(&module).into_iter().cloned().collect();
-        if remaining.is_empty() {
-            let _ = std::fs::remove_file(&path);
+        let status_text = if let Some((s, _)) = &self.state.status {
+            text(s.as_str())
         } else {
-            for func in &remaining {
-                let _ = newc_core::function_lib::FunctionLibrary::save_user_function(func);
-            }
-        }
-        break;
+            text("")
+        };
+
+        let bar = row![
+            nav_btn("Home", Message::Navigate(View::Home)),
+            nav_btn("New", Message::Navigate(View::CreateProject)),
+            nav_btn("Library", Message::LibraryToggleOpen),
+            nav_btn("CRef", Message::CRefToggleOpen),
+            nav_btn("Snippets", Message::SnippetsToggleOpen),
+            nav_btn("Settings", Message::Navigate(View::Settings)),
+            Space::new().width(Length::Fill),
+            status_text,
+            button(text(if self.state.build_panel_open { "Hide Build" } else { "Build" }))
+                .on_press(Message::ToggleBuildPanel),
+        ]
+        .align_y(Alignment::Center)
+        .spacing(6)
+        .padding(8);
+
+        container(bar)
+            .width(Length::Fill)
+            .into()
     }
-}
 
-fn run_clang_format(code: &str, style: &str) -> anyhow::Result<String> {
-    use std::io::Write;
-    let mut child = std::process::Command::new("clang-format")
-        .args([&format!("-style={style}"), "-"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(code.as_bytes())?;
+    fn sidebar(&self) -> Element<'_, Message> {
+        let projects: Vec<Element<Message>> = self.state.known_projects
+            .iter()
+            .filter_map(|p| Project::open(p.clone()).ok())
+            .map(|p| {
+                let name = p.name.clone();
+                let root = p.root.clone();
+                button(text(name))
+                    .on_press(Message::OpenProject(root))
+                    .width(Length::Fill)
+                    .into()
+            })
+            .collect();
+
+        let list = if projects.is_empty() {
+            column![text("No projects").size(12)]
+        } else {
+            column(projects).spacing(2)
+        };
+
+        let sidebar_content = column![
+            text("Projects").size(13),
+            scrollable(list).height(Length::Fill),
+            button(text("Browse…")).on_press(Message::BrowseForProject),
+        ]
+        .spacing(8)
+        .padding(8);
+
+        container(sidebar_content)
+            .width(200)
+            .height(Length::Fill)
+            .into()
     }
-    let output = child.wait_with_output()?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    } else {
-        Err(anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr)))
-    }
-}
 
-fn setup_fonts(ctx: &egui::Context) {
-    // Candidate paths for a Unicode-capable sans font (proportional)
-    let sans_paths: &[&str] = &[
-        // Linux (Debian/Ubuntu/WSL2)
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        // Arch Linux
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        // Noto fallbacks
-        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        // macOS
-        "/System/Library/Fonts/Helvetica.ttc",
-        // Windows
-        "C:\\Windows\\Fonts\\segoeui.ttf",
-        "C:\\Windows\\Fonts\\arial.ttf",
-    ];
-    // Candidate paths for a Unicode-capable monospace font
-    let mono_paths: &[&str] = &[
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
-        "C:\\Windows\\Fonts\\consola.ttf",
-        "C:\\Windows\\Fonts\\cour.ttf",
-    ];
+    fn central_panel(&self) -> Element<'_, Message> {
+        let content: Element<Message> = match &self.state.view {
+            View::Home => views::home::view(&self.state),
+            View::CreateProject => views::create::view(&self.state),
+            View::Settings => views::settings::view(&self.state),
 
-    let mut fonts = egui::FontDefinitions::default();
+            View::ProjectDetail(p) => views::project::view(&self.state, p),
+            View::ProjectStats(p) => views::stats::view(&self.state, p),
+            View::ProjectNotes(_p) => text("Notes — porting in progress").into(),
+            View::MainBuilder(p) => views::main_builder::view(&self.state, p),
+            View::AddModule { project: p, .. } => views::add_module::view(&self.state, p),
+            View::GitPanel(p) => views::git_panel::view(&self.state, p),
+            View::BuildHistory(p) => views::build_history::view(&self.state, p),
+            View::UsageTracker(p) => views::usage_tracker::view(&self.state, p),
+            View::MakefileEditor(_p) => text("Makefile Editor — porting in progress").into(),
+            View::ProjectSearch(p) => views::project_search::view(&self.state, p),
+            View::HealthDashboard(p) => views::health::view(&self.state, p),
 
-    let try_load = |fonts: &mut egui::FontDefinitions, name: &str, paths: &[&str], families: &[egui::FontFamily]| {
-        for path in paths {
-            if let Ok(data) = std::fs::read(path) {
-                fonts.font_data.insert(name.to_owned(), std::sync::Arc::new(egui::FontData::from_owned(data)));
-                for family in families {
-                    if let Some(list) = fonts.families.get_mut(family) {
-                        list.push(name.to_owned());
-                    }
+            View::ModuleDetail { project: p, module_name } => {
+                if let Some(m) = p.modules.iter().find(|m| &m.name == module_name) {
+                    views::module_detail::view(&self.state, module_name, &m.source, &p.root)
+                } else {
+                    text("Module not found").into()
                 }
-                return;
             }
-        }
-    };
 
-    try_load(
-        &mut fonts,
-        "DejaVuSans",
-        sans_paths,
-        &[egui::FontFamily::Proportional],
-    );
-    try_load(
-        &mut fonts,
-        "DejaVuSansMono",
-        mono_paths,
-        &[egui::FontFamily::Monospace],
-    );
+            View::HeaderEditor { project: p, module_name } => {
+                let _ = (p, module_name);
+                views::header_editor::view(&self.state)
+            }
 
-    ctx.set_fonts(fonts);
+            View::FunctionLibrary => views::library::view(&self.state, &self.function_lib),
+            View::CReference => views::cref::view(&self.state),
+            View::Snippets => views::snippets::view(&self.state),
+        };
+
+        // Drawer overlays (library, cref, snippets)
+        // TODO: implement as side drawers in Phase 1 Step 6
+
+        container(
+            scrollable(content).height(Length::Fill)
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(12)
+        .into()
+    }
+
+    fn build_output_panel(&self) -> Element<'_, Message> {
+        use crate::build_runner::LineKind;
+
+        let lines: Vec<Element<Message>> = self.state.build_lines.iter().map(|line| {
+            let color = match line.kind {
+                LineKind::Stderr => Color::from_rgb(1.0, 0.4, 0.4),
+                LineKind::Info => Color::from_rgb(0.6, 0.8, 1.0),
+                LineKind::Done { exit_code: Some(0), .. } => Color::from_rgb(0.4, 1.0, 0.4),
+                LineKind::Done { .. } => Color::from_rgb(1.0, 0.4, 0.4),
+                _ => Color::WHITE,
+            };
+            text(line.text.as_str()).color(color).size(12).into()
+        }).collect();
+
+        let log = if lines.is_empty() {
+            column![text("No build output.").size(12)]
+        } else {
+            column(lines).spacing(2)
+        };
+
+        let controls = row![
+            button(text("Clear")).on_press(Message::BuildPanelClear),
+            button(text(if self.state.build_auto_scroll { "Auto-scroll ✓" } else { "Auto-scroll" }))
+                .on_press(Message::BuildAutoScrollToggle),
+            button(text("Kill")).on_press(Message::BuildKill),
+            Space::new().width(Length::Fill),
+            button(text("×")).on_press(Message::ToggleBuildPanel),
+        ]
+        .spacing(4)
+        .padding([4, 8]);
+
+        let panel = column![
+            controls,
+            scrollable(log).height(Length::Fixed(200.0)),
+        ];
+
+        container(panel)
+            .width(Length::Fill)
+            .into()
+    }
+
+    fn error_modal<'a>(&'a self, msg: &'a str) -> Element<'a, Message> {
+        column![
+            text("Error").size(16),
+            text(msg),
+            button(text("Dismiss")).on_press(Message::ErrorDismiss),
+        ]
+        .spacing(8)
+        .padding(16)
+        .into()
+    }
 }

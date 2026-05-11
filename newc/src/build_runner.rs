@@ -4,8 +4,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Instant;
 
-use crossbeam_channel::{bounded, Receiver, Sender};
-use egui::Context;
+use std::sync::mpsc::{self, Receiver, SyncSender};
 
 #[derive(Debug, Clone)]
 pub struct BuildLine {
@@ -28,15 +27,15 @@ pub enum BuildCommand {
 }
 
 pub struct BuildRunner {
-    pub cmd_tx: Sender<BuildCommand>,
+    pub cmd_tx: SyncSender<BuildCommand>,
     pub line_rx: Receiver<BuildLine>,
 }
 
 impl BuildRunner {
-    pub fn spawn(ctx: Context) -> Self {
-        let (cmd_tx, cmd_rx) = bounded::<BuildCommand>(8);
-        let (line_tx, line_rx) = bounded::<BuildLine>(512);
-        thread::spawn(move || runner_loop(cmd_rx, line_tx, ctx));
+    pub fn spawn() -> Self {
+        let (cmd_tx, cmd_rx) = mpsc::sync_channel::<BuildCommand>(8);
+        let (line_tx, line_rx) = mpsc::sync_channel::<BuildLine>(512);
+        thread::spawn(move || runner_loop(cmd_rx, line_tx));
         Self { cmd_tx, line_rx }
     }
 
@@ -60,7 +59,7 @@ impl BuildRunner {
     }
 }
 
-fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: Context) {
+fn runner_loop(cmd_rx: mpsc::Receiver<BuildCommand>, line_tx: SyncSender<BuildLine>) {
     for cmd in cmd_rx {
         match cmd {
             BuildCommand::Kill => {}
@@ -69,7 +68,6 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                     text: format!("$ make {target}"),
                     kind: LineKind::Info,
                 });
-                ctx.request_repaint();
 
                 let start = Instant::now();
 
@@ -99,9 +97,11 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                         }
                         let _ = line_tx.send(BuildLine {
                             text: String::new(),
-                            kind: LineKind::Done { exit_code: None, duration_ms: start.elapsed().as_millis() as u64 },
+                            kind: LineKind::Done {
+                                exit_code: None,
+                                duration_ms: start.elapsed().as_millis() as u64,
+                            },
                         });
-                        ctx.request_repaint();
                         continue;
                     }
                 };
@@ -110,23 +110,19 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                 let stderr = child.stderr.take().map(BufReader::new);
 
                 let tx_out = line_tx.clone();
-                let ctx_out = ctx.clone();
                 let stdout_thread = stdout.map(|r| {
                     thread::spawn(move || {
                         for line in r.lines().map_while(Result::ok) {
                             let _ = tx_out.send(BuildLine { text: line, kind: LineKind::Stdout });
-                            ctx_out.request_repaint();
                         }
                     })
                 });
 
                 let tx_err = line_tx.clone();
-                let ctx_err = ctx.clone();
                 let stderr_thread = stderr.map(|r| {
                     thread::spawn(move || {
                         for line in r.lines().map_while(Result::ok) {
                             let _ = tx_err.send(BuildLine { text: line, kind: LineKind::Stderr });
-                            ctx_err.request_repaint();
                         }
                     })
                 });
@@ -140,7 +136,6 @@ fn runner_loop(cmd_rx: Receiver<BuildCommand>, line_tx: Sender<BuildLine>, ctx: 
                     text: String::new(),
                     kind: LineKind::Done { exit_code, duration_ms },
                 });
-                ctx.request_repaint();
             }
         }
     }

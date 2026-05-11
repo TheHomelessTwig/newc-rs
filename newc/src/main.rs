@@ -55,32 +55,24 @@ fn launch_gui(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn is_wsl2() -> bool {
-    std::fs::read_to_string("/proc/version")
-        .map(|s| s.to_ascii_lowercase().contains("microsoft"))
-        .unwrap_or(false)
-}
-
 fn run_gui_inline(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
-    if is_wsl2() {
-        unsafe {
-            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-            std::env::set_var("GALLIUM_DRIVER", "llvmpipe");
-            std::env::remove_var("WAYLAND_DISPLAY");
-        }
-    }
+    use app::NewcApp;
+    use iced::window;
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("newc")
-            .with_inner_size([1100.0, 700.0])
-            .with_min_inner_size([800.0, 500.0]),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "newc",
-        options,
-        Box::new(move |cc| Ok(Box::new(app::NewcApp::new(cc, initial_path.clone())))),
+    iced::application(
+        move || NewcApp::new(initial_path.clone()),
+        NewcApp::update,
+        NewcApp::view,
     )
+    .title(NewcApp::title)
+    .theme(NewcApp::theme)
+    .subscription(NewcApp::subscription)
+    .window(window::Settings {
+        size: iced::Size::new(1100.0, 700.0),
+        min_size: Some(iced::Size::new(800.0, 500.0)),
+        position: window::Position::Default,
+        ..Default::default()
+    })
+    .run()
     .map_err(|e| anyhow::anyhow!("GUI error: {e}"))
 }

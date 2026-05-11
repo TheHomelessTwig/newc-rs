@@ -5,11 +5,13 @@ use newc_core::{
     config::AppConfig, diag::Diagnostic,
     grep::SearchResult, main_builder::MainBuilderState,
     meta::ProjectMeta, project::Project, stats::ProjectStats,
+    function_lib::FunctionTemplate,
 };
 use crate::views::header_editor::HeaderEditorState;
 use crate::views::import_c::ImportState;
 use crate::views::module_detail::ModuleDetailState;
 use crate::views::quick_search::QuickSearchState;
+use crate::views::library::LibraryState;
 use crate::build_runner::BuildLine;
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,209 @@ pub enum BuildState {
     Idle,
     Running,
     Done { exit_code: Option<i32> },
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    // Navigation
+    Navigate(View),
+
+    // Project management
+    OpenProject(PathBuf),
+    AddKnownProject(PathBuf),
+    BrowseForProject,
+    RefreshProject,
+
+    // Build
+    BuildStart(String),
+    BuildKill,
+    BuildLine(BuildLine),
+    ToggleBuildPanel,
+    BuildPanelClear,
+    BuildAutoScrollToggle,
+    DiagTabRaw(bool),
+
+    // Create project form
+    CreateName(String),
+    CreateAuthor(String),
+    CreateLocation(String),
+    CreateLocationBrowse,
+    CreateGitToggle(bool),
+    CreateInclude(String, bool),
+    CreateTemplate(usize),
+    CreateSubmit,
+
+    // Module actions
+    AddModuleName(String),
+    AddModuleSubmit,
+    RemoveModule(String),
+    ConfirmRemoveModule,
+    CancelRemoveModule,
+
+    // Quick search
+    QuickSearchToggle,
+    QuickSearchQuery(String),
+    QuickSearchCursor(usize),
+    QuickSearchSelect(usize),
+    QuickSearchClose,
+
+    // Settings
+    SettingsSave,
+    SettingsDiscard,
+    SettingsDraftEditor(String),
+    SettingsDraftTerminal(String),
+    SettingsDraftTheme(String),
+
+    // Library
+    LibraryAction(crate::views::library::LibraryAction),
+    LibraryToggleOpen,
+    CRefToggleOpen,
+    SnippetsToggleOpen,
+
+    // Library state mutations
+    LibrarySearch(String),
+    LibrarySelect(Option<String>),
+    LibraryGroupSelect(Option<String>),
+    LibraryEditMode(bool),
+    LibraryAddingNew(bool),
+    LibraryDraftField(LibraryField, String),
+    LibraryDraftParam(usize, ParamPart, String),
+    LibraryAddParam,
+    LibraryRemoveParam(usize),
+    LibraryDraftReturnType(String),
+    LibraryDraftOverrideSig(bool),
+    LibrarySave(FunctionTemplate),
+    LibraryDelete(String),
+    LibraryToggleStar(String),
+    LibraryGroupNew,
+    LibraryGroupDelete(String),
+
+    // CRef
+    CRefSearch(String),
+    CRefSelectHeader(Option<String>),
+    CRefSelectFunc(Option<&'static str>),
+
+    // Snippets
+    SnippetsCat(usize),
+    SnippetsSelect(Option<usize>),
+    SnippetsCopy(String),
+
+    // Git
+    GitCommitMsg(String),
+    GitStage(String),
+    GitUnstage(String),
+    GitCommit,
+    GitPull,
+    GitPush,
+    GitNewBranch(String),
+    GitCreateBranch,
+    GitCheckout(String),
+    GitDeleteBranch(String),
+    GitShowDiff(bool),
+    GitDiffStaged(bool),
+
+    // Notes
+    NotesContent(String),
+    NotesSave,
+
+    // Makefile editor
+    MakefileContent(String),
+    MakefileSave,
+
+    // Search
+    SearchQuery(String),
+    SearchSubmit,
+
+    // Usage tracker
+    UsageSearch(String),
+
+    // Module detail
+    ModuleSelectFunc(Option<String>),
+    ModuleEditMode(bool),
+    ModuleEditBuf(String),
+    ModuleSaveFunc { name: String, new_impl: String },
+    ModuleDeleteFunc(String),
+    ModuleRunCheck,
+    ModuleShowCallTree(bool),
+    ModuleAddFromLibrary,
+    ModuleSyncNow,
+    ModuleClangFormat,
+
+    // Header editor
+    HeaderContent(String),
+    HeaderSave,
+
+    // Import
+    ImportPickFile,
+    ImportExtracted(crate::views::import_c::ImportState),
+    ImportToggleFunc(usize),
+    ImportTargetModule(String),
+    ImportSubmit,
+
+    // Meta
+    MetaShowEditor(bool),
+    MetaCourse(String),
+    MetaVersion(String),
+    MetaSave,
+
+    // Save as template
+    ShowSaveTemplate(bool),
+    SaveTemplateName(String),
+    SaveTemplateDesc(String),
+    SaveTemplateSubmit,
+
+    // Tidy confirm
+    ShowTidyConfirm(bool),
+    TidyConfirm,
+
+    // Workspaces
+    WorkspaceSelect(Option<String>),
+    WorkspaceInput(String),
+    WorkspaceNew,
+    WorkspaceCancelNew,
+    ShowArchivedToggle,
+    MoveToWorkspace(PathBuf),
+
+    // UI modals
+    ErrorDismiss,
+    ShowShortcuts(bool),
+    ShowImport(bool),
+    ShowNewGroup(bool),
+    NewGroupName(String),
+    NewGroupDesc(String),
+    NewGroupSubmit,
+    GroupActionTarget(Option<String>),
+    GroupRenameInput(String),
+    GroupRenameSubmit,
+    GroupDeleteCascade(bool),
+    GroupDeleteSubmit,
+
+    // Update
+    UpdateCheck,
+    UpdateInstall(String),
+
+    // Build-panel diagnostics click
+    DiagJumpTo { module: String, line: usize },
+
+    None,
+}
+
+#[derive(Debug, Clone)]
+pub enum LibraryField {
+    Name,
+    Module,
+    Description,
+    Signature,
+    Header,
+    Impl,
+    Tags,
+    Notes,
+}
+
+#[derive(Debug, Clone)]
+pub enum ParamPart {
+    Type,
+    Name,
 }
 
 pub struct AppState {
@@ -74,6 +279,16 @@ pub struct AppState {
     // Import from .c
     pub import_state: ImportState,
     pub show_import: bool,
+    // Library state (formerly in SharedTools)
+    pub library_state: LibraryState,
+    pub show_library: bool,
+    pub show_cref: bool,
+    pub show_snippets: bool,
+    pub cref_search: String,
+    pub cref_selected_header: Option<String>,
+    pub cref_selected_func: Option<&'static str>,
+    pub snippets_cat: usize,
+    pub snippets_selected: Option<usize>,
     // New group form
     pub new_group_name: String,
     pub new_group_desc: String,
@@ -84,9 +299,6 @@ pub struct AppState {
     pub delete_group_cascade: bool,
     // Add module form
     pub add_module_name: String,
-    // Function picker
-    pub func_search: String,
-    pub func_selected: Vec<String>,
     // Quick search
     pub quick_search: QuickSearchState,
     // Confirm tidy modal
@@ -109,6 +321,9 @@ pub struct AppState {
     pub confirm_remove_module: Option<(Project, String)>,
     // Git panel
     pub git_commit_msg: String,
+    pub git_new_branch: String,
+    pub git_show_diff: bool,
+    pub git_diff_staged: bool,
     // Save-as-template modal
     pub show_save_template_modal: bool,
     pub save_template_name: String,
@@ -118,6 +333,9 @@ pub struct AppState {
     pub meta_draft: ProjectMeta,
     // Build target currently running (for history)
     pub build_target_current: String,
+    pub build_panel_open: bool,
+    pub build_auto_scroll: bool,
+    pub build_panel_open_hint: bool,
     // Workspaces
     pub active_workspace: Option<String>,
     pub show_archived: bool,
@@ -129,11 +347,6 @@ pub struct AppState {
     pub makefile_dirty: bool,
     // Usage tracker search
     pub usage_search: String,
-    // Git panel extras
-    pub git_new_branch: String,
-    pub git_show_diff: bool,
-    pub git_diff_staged: bool,
-    pub build_panel_open_hint: bool,
     // Project search
     pub search_query: String,
     pub search_results: Vec<SearchResult>,
@@ -186,6 +399,15 @@ impl AppState {
             selected_template: None,
             import_state: ImportState::default(),
             show_import: false,
+            library_state: LibraryState::default(),
+            show_library: false,
+            show_cref: false,
+            show_snippets: false,
+            cref_search: String::new(),
+            cref_selected_header: None,
+            cref_selected_func: None,
+            snippets_cat: 0,
+            snippets_selected: None,
             new_group_name: String::new(),
             new_group_desc: String::new(),
             show_new_group: false,
@@ -193,8 +415,6 @@ impl AppState {
             group_rename_input: String::new(),
             delete_group_cascade: false,
             add_module_name: String::new(),
-            func_search: String::new(),
-            func_selected: Vec::new(),
             quick_search: QuickSearchState::default(),
             show_tidy_confirm: false,
             tidy_candidates: Vec::new(),
@@ -207,12 +427,18 @@ impl AppState {
             is_first_run,
             confirm_remove_module: None,
             git_commit_msg: String::new(),
+            git_new_branch: String::new(),
+            git_show_diff: false,
+            git_diff_staged: false,
             show_save_template_modal: false,
             save_template_name: String::new(),
             save_template_desc: String::new(),
             show_meta_editor: false,
             meta_draft: ProjectMeta::default(),
             build_target_current: String::new(),
+            build_panel_open: true,
+            build_auto_scroll: true,
+            build_panel_open_hint: false,
             active_workspace: None,
             show_archived: false,
             workspace_input: String::new(),
@@ -221,10 +447,6 @@ impl AppState {
             makefile_content: String::new(),
             makefile_dirty: false,
             usage_search: String::new(),
-            git_new_branch: String::new(),
-            git_show_diff: false,
-            git_diff_staged: false,
-            build_panel_open_hint: false,
             search_query: String::new(),
             search_results: Vec::new(),
             diagnostics: Vec::new(),
