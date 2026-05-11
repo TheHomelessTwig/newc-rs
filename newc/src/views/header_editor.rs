@@ -1,3 +1,6 @@
+use iced::widget::{button, column, row, scrollable, text, Space};
+use iced::{Color, Length};
+
 #[derive(Default, Clone)]
 pub struct StructField {
     pub type_name: String,
@@ -12,33 +15,6 @@ pub struct StructBuilder {
     pub typedef: bool,
 }
 
-impl StructBuilder {
-    pub fn to_code(&self) -> String {
-        let mut out = String::new();
-        if self.typedef {
-            out.push_str(&format!("typedef struct {} {{\n", self.struct_name));
-        } else {
-            out.push_str(&format!("struct {} {{\n", self.struct_name));
-        }
-        for f in &self.fields {
-            if f.comment.is_empty() {
-                out.push_str(&format!("    {} {};\n", f.type_name, f.field_name));
-            } else {
-                out.push_str(&format!(
-                    "    {} {}; /* {} */\n",
-                    f.type_name, f.field_name, f.comment
-                ));
-            }
-        }
-        if self.typedef {
-            out.push_str(&format!("}} {};\n", self.struct_name));
-        } else {
-            out.push_str("};\n");
-        }
-        out
-    }
-}
-
 #[derive(Default, Clone)]
 pub struct HeaderEditorState {
     pub content: String,
@@ -50,7 +26,33 @@ pub struct HeaderEditorState {
 }
 
 pub fn view<'a>(
-    _state: &'a crate::state::AppState,
+    state: &'a crate::state::AppState,
 ) -> iced::Element<'a, crate::state::Message> {
-    iced::widget::text("Header Editor — porting in progress").into()
+    use crate::state::Message;
+
+    let ed = &state.header_editor_state;
+
+    column![
+        row![
+            text("Header Editor").size(18),
+            Space::new().width(Length::Fill),
+            button(text("Save")).on_press(Message::HeaderSave),
+            if ed.dirty {
+                button(text("Discard")).on_press(Message::Navigate(crate::state::View::Home))
+            } else {
+                button(text("Close")).on_press(Message::Navigate(crate::state::View::Home))
+            },
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center),
+        text("Editing SYNC_IGNORE block — structs, enums, defines, etc.")
+            .size(12)
+            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+        scrollable(
+            text(ed.content.as_str()).font(iced::Font::MONOSPACE).size(13)
+        ).height(Length::Fill),
+    ]
+    .spacing(8)
+    .padding(12)
+    .into()
 }

@@ -116,6 +116,7 @@ pub enum Message {
     LibrarySave(FunctionTemplate),
     LibraryDelete(String),
     LibraryToggleStar(String),
+    LibraryUpdateNotes { name: String, notes: String },
     LibraryGroupNew,
     LibraryGroupDelete(String),
 
@@ -299,6 +300,9 @@ pub struct AppState {
     pub delete_group_cascade: bool,
     // Add module form
     pub add_module_name: String,
+    // Function picker (used by add_module and create views)
+    pub func_search: String,
+    pub func_selected: Vec<String>,
     // Quick search
     pub quick_search: QuickSearchState,
     // Confirm tidy modal
@@ -415,6 +419,8 @@ impl AppState {
             group_rename_input: String::new(),
             delete_group_cascade: false,
             add_module_name: String::new(),
+            func_search: String::new(),
+            func_selected: Vec::new(),
             quick_search: QuickSearchState::default(),
             show_tidy_confirm: false,
             tidy_candidates: Vec::new(),

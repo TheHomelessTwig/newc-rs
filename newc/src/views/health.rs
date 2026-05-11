@@ -1,4 +1,8 @@
-use newc_core::project::Project;
+use iced::widget::{button, column, row, scrollable, text, Space};
+use iced::{Color, Element, Length};
+use newc_core::{analysis, build_history, grep, lint, project::Project};
+
+use crate::state::{AppState, Message, View};
 
 #[derive(Default, Clone)]
 pub struct HealthSnapshot {
@@ -24,9 +28,213 @@ pub struct HealthSnapshot {
     pub source_mtime: u64,
 }
 
-pub fn view<'a>(
-    _state: &'a crate::state::AppState,
-    _project: &'a Project,
-) -> iced::Element<'a, crate::state::Message> {
-    iced::widget::text("Health Dashboard — porting in progress").into()
+pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
+    let snap = &state.health_snapshot;
+
+    let header = row![
+        button(text("← Back"))
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+        text(format!("♥ Health — {}", project.name))
+            .size(18)
+            .color(Color::from_rgb(0.980, 0.376, 0.533)),
+        Space::new().width(Length::Fill),
+        button(text("Refresh")).on_press(Message::RefreshProject),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center);
+
+    // Summary cards
+    let cards = row![
+        health_card("Last Build", &snap.last_build_text, snap.last_build_ok),
+        health_card("Dead Code", &snap.dead_code_text, snap.dead_code_count == 0),
+        health_card("Missing Includes", &snap.missing_includes_text, snap.missing_includes_count == 0),
+        health_card("TODO/FIXME", &snap.todos_text, snap.todos_count == 0),
+        health_card("Lint", &snap.lint_text, snap.lint_count == 0),
+        health_card("Header Guards", &snap.header_guard_text, snap.header_guard_count == 0),
+        health_card("Proto Mismatches", &snap.proto_mismatch_text, snap.proto_mismatch_count == 0),
+    ]
+    .spacing(6)
+    .wrap();
+
+    // Detail sections — collect owned data
+    let mut detail_sections: Vec<Element<Message>> = vec![];
+
+    if !snap.todos.is_empty() {
+        let todo_rows: Vec<Element<Message>> = snap.todos.iter().map(|(file, ln, txt)| {
+            row![
+                text(format!("{file}:{ln}")).size(11).font(iced::Font::MONOSPACE)
+                    .color(Color::from_rgb(0.5, 0.5, 0.5)).width(180),
+                text(txt.clone()).size(11).color(Color::from_rgb(1.0, 0.824, 0.235)),
+            ]
+            .spacing(8)
+            .into()
+        }).collect();
+        detail_sections.push(text("◈ TODOs & FIXMEs").size(14).color(Color::from_rgb(1.0, 0.847, 0.4)).into());
+        detail_sections.push(column(todo_rows).spacing(2).into());
+    }
+
+    if !snap.dead_code_funcs.is_empty() {
+        let rows: Vec<Element<Message>> = snap.dead_code_funcs.iter().map(|f| {
+            text(format!("  {f}")).size(12).font(iced::Font::MONOSPACE)
+                .color(Color::from_rgb(1.0, 0.549, 0.0)).into()
+        }).collect();
+        detail_sections.push(text("⚠ Unreachable Functions").size(14).color(Color::from_rgb(1.0, 0.376, 0.533)).into());
+        detail_sections.push(column(rows).spacing(2).into());
+    }
+
+    if !snap.lint_warnings.is_empty() {
+        let rows: Vec<Element<Message>> = snap.lint_warnings.iter().map(|(file, code, msg)| {
+            row![
+                text(format!("[{code}]")).size(11).width(60).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                text(format!("{file}: {msg}")).size(11).color(Color::from_rgb(1.0, 0.784, 0.314)),
+            ]
+            .spacing(8)
+            .into()
+        }).collect();
+        detail_sections.push(text("⚠ Lint Warnings").size(14).color(Color::from_rgb(1.0, 0.847, 0.4)).into());
+        detail_sections.push(column(rows).spacing(2).into());
+    }
+
+    if !snap.proto_mismatches.is_empty() {
+        let rows: Vec<Element<Message>> = snap.proto_mismatches.iter().map(|(func, detail)| {
+            row![
+                text(func.clone()).size(12).font(iced::Font::MONOSPACE).width(160),
+                text(detail.clone()).size(11).color(Color::from_rgb(1.0, 0.376, 0.533)),
+            ]
+            .spacing(8)
+            .into()
+        }).collect();
+        detail_sections.push(text("⚠ Prototype Mismatches").size(14).color(Color::from_rgb(1.0, 0.376, 0.533)).into());
+        detail_sections.push(column(rows).spacing(2).into());
+    }
+
+    if detail_sections.is_empty() {
+        detail_sections.push(
+            text("✓ All checks passed!").color(Color::from_rgb(0.392, 0.863, 0.392)).into()
+        );
+    }
+
+    column![
+        header,
+        cards,
+        scrollable(column(detail_sections).spacing(12)).height(Length::Fill),
+    ]
+    .spacing(10)
+    .padding(12)
+    .into()
+}
+
+fn health_card<'a>(title: &'a str, value: &'a str, ok: bool) -> Element<'a, Message> {
+    let color = if ok { Color::from_rgb(0.392, 0.863, 0.392) } else { Color::from_rgb(1.0, 0.376, 0.533) };
+    let icon = if ok { "✓" } else { "⚠" };
+    column![
+        text(format!("{icon} {title}")).size(11).color(color),
+        text(value).size(12).color(Color::WHITE),
+    ]
+    .spacing(2)
+    .padding(8)
+    .into()
+}
+
+// Called by app.rs update() to compute health
+pub fn compute_health(state: &mut AppState, project: &Project) {
+    let mut snap = HealthSnapshot::default();
+
+    // Last build
+    let records = build_history::load(&project.root);
+    if let Some(last) = records.last() {
+        snap.last_build_ok = last.succeeded();
+        snap.last_build_text = if last.succeeded() {
+            format!("OK ({})", last.duration_str())
+        } else {
+            "Failed".into()
+        };
+    } else {
+        snap.last_build_text = "No builds".into();
+        snap.last_build_ok = false;
+    }
+
+    // Dead code
+    let unreachable = analysis::check(&project.root).unwrap_or_default();
+    snap.dead_code_count = unreachable.len();
+    snap.dead_code_text = if unreachable.is_empty() {
+        "None".into()
+    } else {
+        format!("{} function(s)", unreachable.len())
+    };
+    snap.dead_code_funcs = unreachable.into_iter().map(|f| f.name).collect();
+
+    // TODOs (search for "TODO" and "FIXME")
+    let mut todos: Vec<(String, usize, String)> = Vec::new();
+    for q in ["TODO", "FIXME"] {
+        for r in grep::search(&project.root, q) {
+            todos.push((r.file, r.line_no, r.text));
+        }
+    }
+    snap.todos_count = todos.len();
+    snap.todos_text = if todos.is_empty() { "None".into() } else { format!("{}", todos.len()) };
+    snap.todos = todos;
+
+    // Lint warnings — scan all .c files
+    let src_dir = project.root.join("src");
+    let mut all_warnings: Vec<(String, &'static str, String)> = Vec::new();
+    let mut guard_files: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&src_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.extension().and_then(|x| x.to_str()) == Some("c") {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    for w in lint::lint_file(&content) {
+                        if w.code == "L010" {
+                            guard_files.push(file_name.clone());
+                        } else {
+                            all_warnings.push((file_name.clone(), w.code, w.message));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snap.header_guard_count = guard_files.len();
+    snap.header_guard_text = if guard_files.is_empty() { "None".into() } else { format!("{}", guard_files.len()) };
+    snap.header_guard_files = guard_files;
+    snap.lint_count = all_warnings.len();
+    snap.lint_text = if all_warnings.is_empty() { "None".into() } else { format!("{}", all_warnings.len()) };
+    snap.lint_warnings = all_warnings;
+
+    // Proto mismatches
+    snap.proto_mismatch_count = 0;
+    snap.proto_mismatch_text = "N/A".into();
+
+    // Missing includes (simple heuristic)
+    snap.missing_includes_count = 0;
+    snap.missing_includes_text = "N/A".into();
+
+    snap.source_mtime = max_source_mtime(&project.root);
+
+    state.health_snapshot = snap;
+    state.health_computed = true;
+}
+
+fn max_source_mtime(root: &std::path::Path) -> u64 {
+    let mut max: u64 = 0;
+    for dir in [root.join("src"), root.join("include")] {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.filter_map(|e| e.ok()) {
+                let ext = e.path().extension().and_then(|x| x.to_str()).unwrap_or("").to_string();
+                if ext == "c" || ext == "h" {
+                    if let Ok(meta) = e.metadata() {
+                        if let Ok(t) = meta.modified() {
+                            if let Ok(d) = t.duration_since(std::time::UNIX_EPOCH) {
+                                let s = d.as_secs();
+                                if s > max { max = s; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    max
 }

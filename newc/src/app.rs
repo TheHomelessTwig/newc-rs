@@ -65,6 +65,11 @@ impl NewcApp {
 
         match message {
             Message::Navigate(view) => {
+                if let View::HealthDashboard(ref project) = view {
+                    if !self.state.health_computed {
+                        views::health::compute_health(&mut self.state, project);
+                    }
+                }
                 self.state.view = view;
             }
 
@@ -509,6 +514,186 @@ impl NewcApp {
                 }
             }
 
+            // Library state mutations
+            Message::LibrarySearch(s) => self.state.library_state.search = s,
+            Message::LibrarySelect(sel) => {
+                self.state.library_state.selected = sel;
+                self.state.library_state.edit_mode = false;
+                self.state.library_state.draft = None;
+            }
+            Message::LibraryGroupSelect(g) => {
+                self.state.library_state.active_group = g;
+                self.state.library_state.selected = None;
+            }
+            Message::LibraryEditMode(v) => {
+                self.state.library_state.edit_mode = v;
+                if !v { self.state.library_state.draft = None; }
+            }
+            Message::LibraryAddingNew(v) => {
+                self.state.library_state.adding_new = v;
+                if v {
+                    let mut draft = crate::views::library::LibraryState::new_draft();
+                    if let Some(g) = &self.state.library_state.active_group.clone() {
+                        draft.module = g.clone();
+                    }
+                    self.state.library_state.draft = Some(draft);
+                    self.state.library_state.selected = None;
+                    self.state.library_state.edit_mode = true;
+                }
+            }
+            Message::LibraryGroupNew => {
+                self.state.show_new_group = true;
+            }
+            Message::LibraryDraftField(field, value) => {
+                if let Some(draft) = &mut self.state.library_state.draft {
+                    use crate::state::LibraryField::*;
+                    match field {
+                        Name => draft.name = value,
+                        Module => draft.module = value,
+                        Description => draft.description = value,
+                        Signature => draft.signature = value,
+                        Header => draft.header_code = value,
+                        Impl => draft.impl_code = value,
+                        Tags => draft.tags = value.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                        Notes => draft.notes = value,
+                    }
+                }
+            }
+            Message::LibraryUpdateNotes { name, notes } => {
+                if let Some(f) = self.function_lib.get_mut(&name) {
+                    f.notes = notes.clone();
+                    let func = f.clone();
+                    let _ = FunctionLibrary::save_user_function(&func);
+                }
+            }
+
+            // Snippets
+            Message::SnippetsCat(i) => {
+                self.state.snippets_cat = i;
+                self.state.snippets_selected = None;
+            }
+            Message::SnippetsSelect(sel) => self.state.snippets_selected = sel,
+            Message::SnippetsCopy(code) => {
+                // Clipboard access via iced::clipboard::write
+                return iced::clipboard::write(code);
+            }
+
+            // Module detail
+            Message::ModuleSelectFunc(sel) => {
+                self.state.module_detail_state.selected_func = sel;
+                self.state.module_detail_state.edit_mode = false;
+            }
+            Message::ModuleEditMode(v) => {
+                if v {
+                    // load current function body into edit buffer
+                    if let Some(fname) = &self.state.module_detail_state.selected_func.clone() {
+                        if let View::ModuleDetail { project, module_name } = &self.state.view.clone() {
+                            if let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
+                                if let Ok(src) = std::fs::read_to_string(&m.source) {
+                                    let funcs = newc_core::sync::extract_function_implementations(&src);
+                                    if let Some(f) = funcs.iter().find(|f| &f.name == fname) {
+                                        self.state.module_detail_state.edit_buf = f.body.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                self.state.module_detail_state.edit_mode = v;
+            }
+            Message::ModuleSaveFunc { name, new_impl } => {
+                if let View::ModuleDetail { project, module_name } = &self.state.view.clone() {
+                    if let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
+                        let _ = newc_core::sync::update_function_in_source(&m.source, &name, &new_impl);
+                        self.state.module_detail_state.edit_mode = false;
+                        self.state.set_status(format!("Saved '{name}'."));
+                    }
+                }
+            }
+            Message::ModuleDeleteFunc(_name) => {
+                // Handled in future iteration — requires confirmation modal
+            }
+            Message::ModuleRunCheck => {
+                if let View::ModuleDetail { project, module_name: _ } = &self.state.view.clone() {
+                    let funcs = newc_core::analysis::check(&project.root).unwrap_or_default();
+                    self.state.module_detail_state.unreachable_funcs = funcs.into_iter().map(|f| f.name).collect();
+                    self.state.module_detail_state.check_ran = true;
+                }
+            }
+            Message::ModuleShowCallTree(v) => self.state.module_detail_state.show_call_tree = v,
+            Message::ModuleAddFromLibrary => { /* TODO */ }
+            Message::ModuleSyncNow => {
+                if let View::ModuleDetail { project, module_name } = &self.state.view.clone() {
+                    let _ = newc_core::sync::sync_module(&project.root, module_name);
+                    self.state.set_status(format!("Synced {module_name}.h"));
+                }
+            }
+            Message::ModuleClangFormat => { /* TODO */ }
+
+            // Header
+            Message::HeaderSave => {
+                if let View::HeaderEditor { project, module_name } = &self.state.view.clone() {
+                    if let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
+                        let _ = newc_core::header::write_ignore_block(&m.header, &self.state.header_editor_state.content);
+                        self.state.header_editor_state.dirty = false;
+                        self.state.set_status("Header saved.");
+                    }
+                }
+            }
+            Message::HeaderContent(s) => {
+                self.state.header_editor_state.content = s;
+                self.state.header_editor_state.dirty = true;
+            }
+
+            // Import
+            Message::ImportTargetModule(s) => self.state.import_state.target_module = s,
+            Message::ImportToggleFunc(i) => {
+                if i == usize::MAX {
+                    self.state.import_state.selected.iter_mut().for_each(|s| *s = true);
+                } else if i == usize::MAX - 1 {
+                    self.state.import_state.selected.iter_mut().for_each(|s| *s = false);
+                } else if let Some(s) = self.state.import_state.selected.get_mut(i) {
+                    *s = !*s;
+                }
+            }
+            Message::ImportSubmit => {
+                let funcs = crate::views::import_c::build_templates(&self.state.import_state);
+                for func in funcs {
+                    self.function_lib.upsert(func.clone());
+                    let _ = FunctionLibrary::save_user_function(&func);
+                }
+                self.state.show_import = false;
+                self.state.set_status("Functions imported.");
+            }
+            Message::ImportExtracted(s) => self.state.import_state = s,
+
+            // CRef
+            Message::CRefSearch(s) => {
+                self.state.cref_search = s;
+                self.state.cref_selected_func = None;
+            }
+            Message::CRefSelectHeader(h) => {
+                self.state.cref_selected_header = h;
+                self.state.cref_search.clear();
+                self.state.cref_selected_func = None;
+            }
+            Message::CRefSelectFunc(f) => self.state.cref_selected_func = f,
+
+            // Snippets state (already handled above)
+
+            // Git extras
+            Message::GitStage(path) => {
+                if let Some(p) = self.state.current_project() {
+                    let _ = newc_core::git::stage_file(&p.root.clone(), &path);
+                }
+            }
+            Message::GitUnstage(path) => {
+                if let Some(p) = self.state.current_project() {
+                    let _ = newc_core::git::unstage_file(&p.root.clone(), &path);
+                }
+            }
+
+            Message::None => {}
             _ => {}
         }
 
@@ -518,31 +703,55 @@ impl NewcApp {
     pub fn view(&self) -> Element<'_, Message> {
         let top_bar = self.top_bar();
         let sidebar = self.sidebar();
-        let central = self.central_panel();
-        let bottom = if self.state.build_panel_open {
-            Some(self.build_output_panel())
-        } else {
-            None
-        };
+        let mut central = self.central_panel();
 
-        let content = row![
-            sidebar,
-            central,
-        ]
-        .width(Length::Fill)
-        .height(Length::Fill);
+        // Overlay: error modal (shown on top of central content)
+        if let Some(err) = &self.state.error_msg {
+            let err_clone = err.clone();
+            central = container(
+                column![
+                    text("Error").size(16).color(Color::from_rgb(1.0, 0.376, 0.533)),
+                    text(err_clone),
+                    button(text("Dismiss")).on_press(Message::ErrorDismiss),
+                ]
+                .spacing(8)
+                .padding(20),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        }
+
+        // Overlay: shortcuts
+        if self.state.show_shortcuts {
+            central = container(
+                column![
+                    views::shortcuts::view(&self.state),
+                ]
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        }
+
+        // Overlay: quick search
+        if self.state.quick_search.open {
+            central = container(
+                views::quick_search::view(&self.state),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        }
+
+        let content = row![sidebar, central]
+            .width(Length::Fill)
+            .height(Length::Fill);
 
         let mut layout = column![top_bar, content];
 
-        if let Some(panel) = bottom {
-            layout = layout.push(panel);
-        }
-
-        // Error modal overlay
-        if let Some(err) = &self.state.error_msg {
-            let modal = self.error_modal(err);
-            // TODO: overlay support once iced modal widget available
-            let _ = modal;
+        if self.state.build_panel_open {
+            layout = layout.push(views::build_panel::view(&self.state));
         }
 
         container(layout)
