@@ -1,8 +1,12 @@
 pub mod home;
 pub mod create;
+pub mod makefile_editor;
+pub mod project_notes;
+pub mod onboarding;
 pub mod project;
 pub mod call_graph;
 pub mod dependency_graph;
+pub mod flow_canvas;
 pub mod add_module;
 pub mod build_history;
 pub mod build_panel;

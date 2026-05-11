@@ -2,7 +2,48 @@ use std::path::{Path, PathBuf};
 
 use iced::widget::{button, column, row, scrollable, text, Space};
 use iced::{Color, Element, Length};
-use newc_core::sync::{extract_function_implementations};
+use newc_core::sync::extract_function_implementations;
+use crate::highlight::highlight_c;
+use crate::theme as th;
+
+/// Renders C source with syntax highlighting as a scrollable block.
+/// Uses per-line row-of-text approach — avoids rich_text type issues and
+/// handles tab rendering correctly by expanding to 4 spaces.
+fn code_view<'a>(source: &str, font_size: f32) -> Element<'a, Message> {
+    let spans = highlight_c(source);
+
+    // Group into lines (our tokenizer emits "\n" as separate span after each line)
+    let mut lines: Vec<Vec<(String, Color)>> = vec![Vec::new()];
+    for span in spans {
+        if span.text == "\n" {
+            lines.push(Vec::new());
+        } else {
+            let t = span.text.replace('\t', "    ");
+            if let Some(last) = lines.last_mut() {
+                last.push((t, span.color));
+            }
+        }
+    }
+    // Remove trailing empty line
+    if lines.last().map(|l| l.is_empty()).unwrap_or(false) {
+        lines.pop();
+    }
+
+    let line_els: Vec<Element<'a, Message>> = lines.into_iter().map(|line| {
+        if line.is_empty() {
+            text(" ").size(font_size).font(iced::Font::MONOSPACE).into()
+        } else {
+            let tokens: Vec<Element<'a, Message>> = line.into_iter().map(|(t, c)| {
+                text(t).size(font_size).font(iced::Font::MONOSPACE).color(c).into()
+            }).collect();
+            row(tokens).spacing(0).into()
+        }
+    }).collect();
+
+    scrollable(column(line_els).spacing(0))
+        .height(Length::Fill)
+        .into()
+}
 
 use crate::state::{AppState, Message, View};
 
@@ -43,29 +84,52 @@ pub fn view<'a>(
         .unwrap_or(Message::Navigate(View::Home));
 
     let header = row![
-        button(text("← Project")).on_press(back_msg),
+        button(text("← Project").size(12))
+            .on_press(back_msg)
+            .style(th::btn_ghost),
         text(format!("◆ {}", module_name))
             .size(18)
-            .color(Color::from_rgb(0.663, 0.863, 0.463)),
+            .color(th::color::GREEN),
         text(src_path.display().to_string())
             .size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+            .color(th::color::TEXT_HINT),
         Space::new().width(Length::Fill),
-        button(text("Edit Header (.h)").size(11)).on_press(Message::None),
-        button(text("+ From Library").size(11)).on_press(Message::None),
+        button(text("Edit Header (.h)").size(11))
+            .on_press(
+                project.as_ref()
+                    .map(|p| Message::Navigate(View::HeaderEditor {
+                        project: p.clone(),
+                        module_name: module_name.to_string(),
+                    }))
+                    .unwrap_or(Message::None)
+            )
+            .style(th::btn_secondary),
+        button(text("+ From Library").size(11))
+            .on_press(Message::None)
+            .style(th::btn_secondary),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
     let toolbar = row![
-        button(text("✓ Check").size(12)).on_press(Message::ModuleRunCheck),
-        button(text("⟳ Sync").size(12)).on_press(Message::ModuleSyncNow),
-        button(text("clang-format").size(12)).on_press(Message::ModuleClangFormat),
+        button(text("✓ Check").size(12))
+            .on_press(Message::ModuleRunCheck)
+            .style(th::btn_secondary),
+        button(text("⟳ Sync").size(12))
+            .on_press(Message::ModuleSyncNow)
+            .style(th::btn_secondary),
+        button(text("clang-format").size(12))
+            .on_press(Message::ModuleClangFormat)
+            .style(th::btn_secondary),
         if mds.show_call_tree {
-            button(text("Hide call tree").size(12)).on_press(Message::ModuleShowCallTree(false))
+            button(text("Hide call tree").size(12))
+                .on_press(Message::ModuleShowCallTree(false))
+                .style(th::btn_nav_active)
         } else {
-            button(text("Call tree").size(12)).on_press(Message::ModuleShowCallTree(true))
+            button(text("Call tree").size(12))
+                .on_press(Message::ModuleShowCallTree(true))
+                .style(th::btn_secondary)
         },
     ]
     .spacing(6)
@@ -95,14 +159,16 @@ pub fn view<'a>(
     let fn_list: Vec<Element<Message>> = func_entries.iter().map(|fe| {
         let selected = mds.selected_func.as_deref() == Some(&fe.name);
         let color = if fe.is_unreachable {
-            Color::from_rgb(1.0, 0.376, 0.533)
+            th::color::ACCENT
         } else if selected {
-            Color::from_rgb(0.663, 0.863, 0.463)
+            th::color::GREEN
         } else {
-            Color::WHITE
+            th::color::TEXT
         };
+        let style = if selected { th::btn_nav_active } else { th::btn_nav_inactive };
         button(text(fe.name.clone()).size(12).color(color))
             .on_press(Message::ModuleSelectFunc(Some(fe.name.clone())))
+            .style(style)
             .width(Length::Fill)
             .into()
     }).collect();
@@ -165,11 +231,7 @@ pub fn view<'a>(
                 );
             }
 
-            col = col.push(
-                scrollable(
-                    text(f.body.clone()).font(iced::Font::MONOSPACE).size(13)
-                ).height(Length::Fill)
-            );
+            col = col.push(code_view(&f.body, 13.0));
 
             // Call tree
             if mds.show_call_tree && !mds.call_tree_lines.is_empty() {
@@ -185,12 +247,8 @@ pub fn view<'a>(
             text("Function not found.").into()
         }
     } else {
-        // No selection — show full source
-        scrollable(
-            text(src_content.clone()).font(iced::Font::MONOSPACE).size(12)
-        )
-        .height(Length::Fill)
-        .into()
+        // No selection — show full source with highlighting
+        code_view(&src_content, 12.0)
     };
 
     let mut layout = column![header, toolbar];

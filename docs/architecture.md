@@ -7,16 +7,16 @@
 ```
 newc-rs/
 ├── newc-core/   # pure logic — no GUI, no I/O framework
-└── newc/        # binary — CLI entry point + egui GUI
+└── newc/        # binary — CLI entry point + iced 0.14 GUI
 ```
 
-The strict separation means `newc-core` can be used as a library in other tools, tested without a display, and compiled for targets that cannot run a GUI.
+`newc-core` has zero GUI dependencies — it can be used as a library, tested without a display, and compiled for targets that cannot run a GUI.
 
 ---
 
 ## Crate: `newc-core`
 
-Pure Rust logic. No dependency on `egui`, `eframe`, or any GUI toolkit.
+Pure Rust logic. No dependency on `iced` or any GUI toolkit.
 
 ### Module map
 
@@ -44,7 +44,7 @@ Pure Rust logic. No dependency on `egui`, `eframe`, or any GUI toolkit.
 | `scaffold` | Project directory creation, Makefile generation, `DefaultModule` enum |
 | `stats` | LOC and function-count metrics |
 | `sync` | Prototype extraction and `.h` regeneration |
-| `templates` | C file content for all built-in modules (including test Makefile target) |
+| `templates` | C file content for all built-in modules |
 | `user_template` | User-defined template save/load |
 
 ### Key types
@@ -64,41 +64,24 @@ pub enum MainBlock {
 }
 ```
 
-All variants implement `to_c()` which returns the correctly-indented C code string. Nested blocks recurse via `indent_block()`.
+All variants implement `to_c()` returning correctly-indented C code. Nested blocks recurse via `indent_block()`.
 
-**`FunctionTemplate`** (`function_lib.rs`) — one entry in the function library:
+**`FunctionTemplate`** (`function_lib.rs`):
 
 ```rust
 pub struct FunctionTemplate {
     pub name: String,
     pub module: String,
     pub description: String,
-    pub signature: String,   // "int clamp(int value, int min, int max)"
-    pub header_code: String, // goes into .h
-    pub impl_code: String,   // goes into .c
-    pub requires: Vec<String>, // stdlib headers or names of other FunctionTemplates
+    pub signature: String,
+    pub header_code: String,
+    pub impl_code: String,
+    pub requires: Vec<String>,
     pub tags: Vec<String>,
     pub notes: String,
     pub starred: bool,
 }
 ```
-
-**`DefaultModule`** (`scaffold.rs`) — modules selectable at project creation time:
-
-```rust
-pub enum DefaultModule {
-    Input,
-    Math,
-    Display,
-    Array,
-    Strings,
-    LinkedList,
-    Files,
-    TestUtils,
-}
-```
-
-When `TestUtils` is selected, the generated `Makefile` includes a `test:` target that compiles `src/test_main.c` and runs the resulting binary.
 
 **`AppConfig`** (`config.rs`):
 
@@ -107,14 +90,9 @@ pub struct AppConfig {
     pub terminal: String,
     pub editor: String,
     pub scan_dirs: Vec<String>,
-    pub theme: String,             // "dark" | "light"
+    pub theme: String,
     pub clang_format_style: String,
     pub workspaces: Vec<Workspace>,
-}
-
-pub struct Workspace {
-    pub name: String,
-    pub paths: Vec<PathBuf>,
 }
 ```
 
@@ -122,64 +100,59 @@ pub struct Workspace {
 
 ## Crate: `newc`
 
-The binary. Depends on `newc-core`, `eframe`, `egui`, `clap`.
+The binary. Depends on `newc-core`, `iced` 0.14, `clap`.
 
-One binary is built: `newc` (`src/main.rs`) — handles both CLI and GUI.
+One binary: `newc` (`src/main.rs`) — handles both CLI and GUI.
 
 ### Entry point
 
-`main.rs` does:
-1. Parse CLI args via `clap` (`Cli::parse()`)
-2. Route to either `cli::run(cmd)` or `launch_gui(initial_path)`
-3. `launch_gui()` spawns `current_exe()` with the hidden `internal-gui [path]` subcommand as a detached child process; the parent exits immediately, freeing the terminal
-   - On Windows: `CREATE_NO_WINDOW` process creation flag suppresses the console window in the child, so only the GUI window appears
-4. The child process matches `Command::InternalGui { path }` → calls `run_gui_inline(path)`
-5. `run_gui_inline()`: detect WSL2, set `LIBGL_ALWAYS_SOFTWARE=1` if needed, start `eframe::run_native()`
+`main.rs`:
+1. Parse CLI args via `clap`
+2. Route to `cli::run(cmd)` or `launch_gui(initial_path)`
+3. `launch_gui()` spawns `current_exe()` with hidden `internal-gui [path]` subcommand as a detached child; parent exits immediately, freeing the terminal
+   - On Windows: `CREATE_NO_WINDOW` flag prevents a console window appearing alongside the GUI
+4. Child matches `Command::InternalGui { path }` → `run_gui_inline(path)`
+5. `run_gui_inline()`: detect WSL2 → configure Vulkan ICD → `iced::daemon(...).run()`
 
-### Shared state (`app.rs`)
+### WSL2 GPU detection
 
-Multi-viewport floating windows (Library, C Reference, Snippets) require `'static` closures for `ctx.show_viewport_deferred()`. These closures cannot borrow from `NewcApp` directly, so mutable state shared with them is held in `Arc<Mutex<SharedTools>>`:
+`configure_wsl2_gpu()` reads `/proc/version`. On WSL2:
+- If `/dev/dri` exists (GPU passthrough): prefer `virtio_icd.json` or `gfxstream_vk_icd.json`, fall back to LLVMpipe
+- If no GPU: set `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json` (LLVMpipe software Vulkan)
+- `WAYLAND_DISPLAY` is always unset to avoid WSLg socket instability
 
-```rust
-pub struct SharedTools {
-    pub function_lib: FunctionLibrary,
-    pub library_state: LibraryState,
-    pub cref_state: CrefState,
-    pub snippets_state: SnippetsState,
-    pub lib_action_queue: Vec<LibraryAction>,
-    pub close_library: bool,
-    pub close_cref: bool,
-    pub close_snippets: bool,
-}
-```
+### MVU architecture (`app.rs`)
 
-`NewcApp` holds `tools: Arc<Mutex<SharedTools>>`. Each viewport closure captures a clone of `Arc`. Communication back to the main thread uses the action queue and close flags, which are drained in `update()` after locking.
-
-### Event loop (`app.rs`)
-
-`NewcApp` implements `eframe::App`. Its `update()` is called every frame:
+`NewcApp` implements the iced MVU pattern via `iced::daemon()`:
 
 ```
-update()
-  ├── drain_build_output()        — move lines from channel → state.build_lines
-  │   └── on Done: append build_history, parse diagnostics, reset timer
-  ├── set_visuals()               — apply theme (dark/light) every frame
-  ├── handle_shortcuts()          — Ctrl+P, ?
-  ├── handle_library_action()     — process queued LibraryAction items from viewports
-  ├── viewport management         — open/close Library, CRef, Snippets OS windows
-  ├── TopBottomPanel (top bar)    — Home, New Project, Library, C Ref, Snippets, Settings
-  ├── TopBottomPanel (build panel)— streaming build output / clickable diagnostics table
-  ├── SidePanel (sidebar)         — filtered project list + recents
-  ├── modals (Windows)            — error, tidy confirm, remove confirm,
-  │                                 save template, meta editor, import, groups
-  ├── quick_search overlay
-  └── CentralPanel                — dispatch on state.view (match)
-                                    diagnostic click → navigate to ModuleDetail + highlight line
+iced::daemon(boot, update, view)
+  .title(title_for_window)
+  .theme(theme_for_window)
+  .subscription(subscription)
+  .run()
 ```
+
+`daemon()` is the multi-window entry point — it routes `view()` and `title()` by `window::Id`. No window is created automatically; the main window is opened in `new()` via `iced::window::open()`.
+
+### Multi-window
+
+Three panels (Library, CRef, Snippets) can be used as sidebar drawers or detached into floating OS windows:
+
+```
+state.library_window: Option<window::Id>
+state.cref_window:    Option<window::Id>
+state.snippets_window: Option<window::Id>
+```
+
+- **Drawer mode**: `show_library / show_cref / show_snippets` bool; rendered inline via `central_panel()`
+- **Window mode**: `OpenLibraryWindow` message → `iced::window::open()` → stores returned `Id`; `view_for_window()` routes that `Id` to the full-page view
+- **⊞ detach button**: appears in each panel's header when in drawer mode; fires the open message
+- `iced::window::close_events()` subscription clears the stored `Id` when the user closes a window
 
 ### State (`state.rs`)
 
-`AppState` is a flat struct holding all UI state. No reactive framework — the GUI reads directly from state each frame and writes mutations back.
+`AppState` is a flat struct — all UI state in one place. No reactive framework; the GUI reads from state each call to `view()` and writes mutations in `update()`.
 
 The `View` enum is the router:
 
@@ -203,177 +176,135 @@ pub enum View {
     MakefileEditor(Project),
     ProjectSearch(Project),
     HealthDashboard(Project),
+    CallGraph(Project),
+    DependencyGraph(Project),
+    FlowChart(Project),
     Settings,
+    Onboarding(usize),
 }
 ```
 
-`View` variants that carry a `Project` clone. When the user navigates, `app.rs` writes a new variant into `state.view`. The next frame, `CentralPanel::default()` matches on it and calls the appropriate view function.
+### Update function
 
-### Async build (`build_runner.rs`)
-
-Build output is async. `BuildRunner` owns a `std::process::Child` and a `crossbeam-channel` sender. A background thread reads stdout/stderr line-by-line and sends `BuildLine` values. `drain_build_output()` drains the channel each frame — keeping the GUI responsive regardless of build speed.
+`update(&mut self, message: Message) -> Task<Message>` handles all messages and returns a `Task` for async work (window open/close, file I/O results). Key flows:
 
 ```
-BuildRunner::spawn() → thread
-  loop:
-    read line from child stdout/stderr
-    channel.send(BuildLine { text, kind })
-
-update() each frame:
-  drain channel → state.build_lines
+update()
+  ├── BuildLine          — append to build_lines; on Done: parse diags, update history
+  ├── Navigate(view)     — set state.view; load content for the destination
+  ├── OpenProject(path)  — load Project, navigate to ProjectDetail
+  ├── BuildStart(target) — spawn make via BuildRunner
+  ├── OpenLibraryWindow  — iced::window::open() → store Id
+  ├── WindowClosed(id)   — clear matching window Id from state
+  ├── FileChanged(path)  — (stub) refresh affected module
+  └── … 100+ message variants
 ```
 
 ### View functions
 
-Each view is a free function in its own file:
+Each view is a pure function returning `Element<'_, Message>`:
 
 ```rust
-// Pattern for full-page views that need Context (for overlays/panels)
-pub fn show(ctx: &Context, state: &mut AppState, tools: &mut SharedTools)
-
-// Pattern for inline views rendered into the CentralPanel Ui
-pub fn show(ui: &mut Ui, ...) -> SomeAction
+// Typical signature
+pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message>
 ```
 
-Views that need to trigger app-level side effects return an action enum:
+Views do not perform I/O or mutation — they produce an element tree that iced diffs and renders. Side effects happen only in `update()`.
 
-```rust
-pub enum ProjectAction {
-    None,
-    GoHome,
-    RunMake(String),
-    OpenModuleDetail(String),
-    ExportReport,
-    // …
-}
-```
+`view_for_window(&self, window: Id)` routes by window Id:
+- Main window → `view_main()` (top bar + sidebar + central + status + toast overlay)
+- Library/CRef/Snippets windows → their respective full-page view functions
 
-`app.rs` matches on the returned action and performs the side effect (file I/O, navigation, spawning builds, etc.). This keeps all filesystem and subprocess calls in one place.
+### Async build (`build_runner.rs`)
 
-### Diagnostic click-through
-
-`build_panel::show()` returns `Option<(String, usize)>` — the source filename and line number when a diagnostic row is clicked. `app.rs` receives this, finds the matching module in the current project, and navigates to `View::ModuleDetail { … }`. `ModuleDetailState.highlight_line: Option<usize>` is set; the module detail view scrolls to and marks that line with a `▶` indicator.
+`BuildRunner` owns a background thread that reads `Child` stdout/stderr and sends `BuildLine` values via a channel. The `subscription()` polls via `iced::time::every()` — `PollBuildOutput` drains the channel into `state.build_lines` each tick.
 
 ### Syntax highlighter (`highlight.rs`)
 
-A hand-rolled C tokeniser that produces an `egui::text::LayoutJob`. No external crates. The tokeniser is linear (single pass, O(n)) and handles:
-- C keywords (blue)
-- Preprocessor directives (yellow-green)
-- String and character literals (orange)
-- Integer and float literals (light green)
-- Line comments (`//`) and block comment detection
-- Operators (light grey)
+Hand-rolled C tokeniser producing `Vec<Span>` (text + `iced::Color`). Single-pass, O(n). Handles:
+- Type keywords (`int`, `char`, `void`, …) — cyan
+- Flow keywords (`if`, `return`, `while`, …) — coral
+- Preprocessor directives — coral
+- String/char literals — yellow
+- Numeric literals — purple
+- Line comments (`//`) and block comments (`/* */`) — gray
+- Identifiers followed by `(` — green (function names)
+- Operators — coral
 
-It is used for read-only display in `module_detail.rs`. The edit buffer uses `TextEdit::code_editor()` which provides monospace font but no colouring — this is intentional (coloured TextEdit is not supported by egui without a custom widget).
+Used in `module_detail.rs` via `code_view()` which groups spans into lines and renders each line as a `row![]` of `text().color()` widgets (monospace, spacing 0).
+
+### Styling (`theme.rs`)
+
+Central styling module — all color constants, container styles, button styles, and typography helpers. Views import `use crate::theme as th` and use `th::btn_primary`, `th::color::ACCENT`, etc. rather than hardcoding colors.
+
+Palette: Monokai Pro dark (`BG_DEEP` #1A171C → `TEXT` #FCFCFA, accent coral `#FF6188`).
+
+### Toast overlay
+
+`view_main()` uses `widget::Stack` to overlay toasts bottom-right without blocking content:
+
+```rust
+Stack::new()
+    .push(main_col)           // full layout
+    .push(toast_overlay)      // positioned via container align + padding
+```
 
 ### Persistence
 
-All persistent data lives under `~/.config/newc/`:
+`~/.config/newc/`:
 
 | File | Contents |
 |---|---|
-| `config.toml` | `AppConfig` (settings, workspaces) |
-| `projects.toml` | List of known project paths |
-| `recents.toml` | Last 5 opened project paths |
-| `groups.toml` | User-defined function group names |
+| `config.toml` | `AppConfig` |
+| `projects.toml` | Known project paths |
 | `functions/<module>.toml` | User function overrides |
 | `templates/<name>.toml` | User-saved project templates |
 
-Per-project data lives in the project root:
+Per-project (in project root):
 
 | File | Contents |
 |---|---|
 | `.newc_meta.toml` | Course, assignment, due date, marks |
 | `.newc_builds.json` | Build history (last 100 records) |
-| `.newc_notes.md` | Project notes (plain text) |
+| `.newc_notes.md` | Project notes |
 
 ---
 
 ## Dead-code analysis (`analysis.rs`)
 
-Uses BFS from `main()` to determine which module functions are reachable:
+BFS from `main()`:
+1. Collect all function signatures from `src/*.c` via `sync::extract_signatures()`
+2. Load `src/main.c` body
+3. BFS: for each reachable function body, find calls to known names via simple `name(` substring match
+4. Everything not reached = unreachable
 
-1. Collect all function signatures from `src/*.c` (excluding `main.c`) via `sync::extract_signatures()`
-2. Load `src/main.c` body text
-3. BFS: starting from `main`, for each function body find calls to known function names via `is_called_in()` (simple substring match `name(`)
-4. Mark reachable; everything remaining is unreachable
-
-This is intentionally naive — it does not parse a full AST, so it will miss calls through function pointers. It is fast and correct for the typical university assignment pattern of direct calls.
+Intentionally naive — does not parse AST, misses function-pointer calls. Fast and correct for direct-call patterns typical in student projects.
 
 ---
 
 ## Prototype sync (`sync.rs`)
 
-`sync_module()` does:
-1. Read `src/<module>.c`; extract all function signatures via regex
-2. Read `include/<module>.h`; locate the `SYNC_IGNORE_START`/`SYNC_IGNORE_END` block (user-protected region for structs/typedefs)
-3. Overwrite the prototype section of the header with freshly-extracted signatures + `;`
-4. Leave the ignore block untouched
+`sync_module()`:
+1. Read `src/<module>.c`; extract function signatures via `extract_function_implementations()`
+2. Read `include/<module>.h`; locate `SYNC_IGNORE_START`/`SYNC_IGNORE_END` block
+3. Overwrite prototype section with freshly-extracted signatures + `;`
+4. Leave ignore block untouched
 
-`extract_function_implementations()` uses a line-state machine rather than regex to correctly handle multi-line signatures and nested braces.
+`extract_function_implementations()` uses a line-state machine to handle multi-line signatures and nested braces.
 
 ---
 
 ## Static linter (`lint.rs`)
 
-Text-based, no AST. Each rule is a simple pattern check on each source line:
-
-| Rule | Pattern |
-|---|---|
-| L001 | Line contains `gets(` (not preceded by a word char — avoids `fgets`) |
-| L002 | Line contains `strcpy(` but not `strncpy(` |
-| L003 | Line contains `scanf(` and `"%s"` |
-| L004 | `printf(` followed by a non-`"` character (not preceded by a word char — avoids `fprintf`/`snprintf`) |
-| L005 | `if`/`while` condition contains a single `=` |
-| L006 | Line contains `sprintf(` but not `snprintf(` |
-| L007 | `malloc`/`calloc`/`realloc` with no NULL check in next 4 lines |
-| L008 | Integer literal > 9 not in the common-constants allow-list |
-| L009 | `fopen(` with no `fclose(` in next 20 lines |
-| L010 | Header (`.h`) file missing `#ifndef` guard in first 5 non-blank lines |
-| L011 | `free(ptr)` not followed by `ptr = NULL` within 3 lines |
-| L012 | `strlen(` appears in a `while`/`for` loop condition |
-| L013 | `atoi(` or `atof(` usage (suggest `strtol`/`strtod`) |
-| L014 | `return &` with a non-static, non-global identifier (heuristic for returning local address) |
-| L015 | Pointer compared to non-zero integer literal (`== 1`, `== -1`, etc.) |
-
-L001 and L004 use a `prev_is_alpha` guard to avoid false positives from `fgets(` and `fprintf(`/`snprintf(` respectively.
-
-`lint_header()` is a separate function that applies only L010 to `.h` files. `lint_file()` applies L001–L009 and L011–L015 to `.c` files.
-
-Rules are applied per-file and per-function (in module detail view) giving immediate feedback without needing a build.
+Text-based, no AST. Per-line pattern checks. See README for rule descriptions (L001–L015).
 
 ---
 
 ## Function library (`function_lib.rs`)
 
-Built-in modules are embedded at compile time via `include_str!` from `assets/functions/*.toml`. The `BUILTIN_TOML_FILES` constant lists all built-in modules:
+Built-in modules embedded at compile time via `include_str!` from `assets/functions/*.toml`. User overrides loaded from `~/.config/newc/functions/` and merged.
 
-```rust
-const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
-    ("input",       include_str!("../../assets/functions/input.toml")),
-    ("math",        include_str!("../../assets/functions/math.toml")),
-    ("display",     include_str!("../../assets/functions/display.toml")),
-    ("array",       include_str!("../../assets/functions/array.toml")),
-    ("algorithms",  include_str!("../../assets/functions/algorithms.toml")),
-    ("strings",     include_str!("../../assets/functions/strings.toml")),
-    ("linked_list", include_str!("../../assets/functions/linked_list.toml")),
-    ("files",       include_str!("../../assets/functions/files.toml")),
-    ("test_utils",  include_str!("../../assets/functions/test_utils.toml")),
-];
-```
-
-`detect_requires(impl_code, lib)` scans implementation code for ~50 known stdlib patterns and all known library function names, returning a `Vec<String>` of inferred dependencies. This is used by the "Detect" button in the library editor.
-
----
-
-## Updater (`updater.rs`)
-
-`newc update` downloads the release asset from GitHub and replaces the running binary in-place:
-
-1. Fetch latest tag from the GitHub Releases API
-2. Compare against `CARGO_PKG_VERSION` via `semver_gt()`
-3. Download `newc-<platform>` asset → temp file → install to `current_exe()` path
-4. Attempt direct file copy; escalates to `sudo cp` if the destination is system-owned
+`detect_requires(impl_code, lib)` scans implementation code for stdlib patterns and library function names, returning inferred `requires` Vec.
 
 ---
 
@@ -381,15 +312,7 @@ const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
 
 | Platform | GUI | CLI | Notes |
 |---|---|---|---|
-| Linux (X11) | ✓ | ✓ | Full support |
-| Linux (Wayland) | ✓ | ✓ | Full support |
-| WSL2 | ✓ | ✓ | Auto-detects via `/proc/version`; forces Mesa software rendering |
-| macOS | ✓ | ✓ | Uses native window backend |
-| Windows | ✓ | ✓ | GUI spawned with `CREATE_NO_WINDOW` — no console alongside GUI; `where` replaces `which` |
-
-Platform-conditional compilation:
-- `eframe` features `wayland` and `x11` only compiled on Linux (`cfg(target_os = "linux")`)
-- `default_terminal()` returns platform-appropriate defaults
-- `open_in_editor()` uses AppleScript on macOS, `cmd /c start` on Windows, terminal-specific flags on Linux
-- `which()` uses `where` on Windows, `which` on Unix/macOS
-- WSL2 detection reads `/proc/version` — gracefully returns `false` on macOS/Windows where the file does not exist
+| Linux (X11/Wayland) | ✓ | ✓ | Full support |
+| WSL2 | ✓ | ✓ | Auto-detects; configures LLVMpipe Vulkan ICD |
+| macOS | ✓ | ✓ | Native window backend |
+| Windows | ✓ | ✓ | `CREATE_NO_WINDOW` prevents console alongside GUI |

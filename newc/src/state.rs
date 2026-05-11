@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
+use iced::widget::text_editor;
+use iced::window;
 
 use newc_core::{
     config::AppConfig, diag::Diagnostic,
@@ -36,7 +38,9 @@ pub enum View {
     HealthDashboard(Project),
     CallGraph(Project),
     DependencyGraph(Project),
+    FlowChart(Project),
     Settings,
+    Onboarding(usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,12 +154,34 @@ pub enum Message {
     GitDiffStaged(bool),
 
     // Notes
-    NotesContent(String),
+    NotesEdit(text_editor::Action),
     NotesSave,
 
     // Makefile editor
-    MakefileContent(String),
+    MakefileEdit(text_editor::Action),
     MakefileSave,
+
+    // Project actions (wired from project.rs dead buttons)
+    OpenInEditor,
+    ExportZip,
+    RunCheck,
+    SyncAll,
+    SyncModule(String),
+
+    // File watcher
+    FileChanged(PathBuf),
+
+    // Onboarding wizard
+    OnboardingNext,
+    OnboardingBack,
+    OnboardingToggleProject(usize),
+    OnboardingFinish,
+
+    // Multi-window management
+    OpenLibraryWindow,
+    OpenCRefWindow,
+    OpenSnippetsWindow,
+    WindowClosed(window::Id),
 
     // Search
     SearchQuery(String),
@@ -165,9 +191,15 @@ pub enum Message {
     UsageSearch(String),
 
     // Main builder block manipulation
+    ComposerAddBlock(newc_core::main_builder::MainBlock),
     ComposerBlockMoveUp(usize),
     ComposerBlockMoveDown(usize),
     ComposerBlockDelete(usize),
+    ComposerSelectBlock(usize),
+    ComposerEditField { idx: usize, field: String, value: String },
+    ComposerDragStart(usize),
+    ComposerDragDrop(usize),
+    ComposerDragEnd,
     ComposerUndo,
     ComposerRedo,
     ComposerWriteMainC,
@@ -240,7 +272,50 @@ pub enum Message {
     // Build-panel diagnostics click
     DiagJumpTo { module: String, line: usize },
 
+    // Subscription ticks
+    PollBuildOutput,
+    StatusTick,
+    ToastTick,
+    ToastDismiss(usize),
+
+    // Graph canvas interaction
+    GraphNodeSelect(String),
+    GraphPan { dx: f32, dy: f32 },
+    GraphZoom(f32),
+    GraphReset,
+    GraphExport,
+
     None,
+}
+
+#[derive(Debug, Clone)]
+pub struct Toast {
+    pub message: String,
+    pub kind: ToastKind,
+    pub elapsed_ms: u32,
+    pub duration_ms: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToastKind {
+    Success,
+    Error,
+    Info,
+}
+
+impl Toast {
+    pub fn success(msg: impl Into<String>) -> Self {
+        Self { message: msg.into(), kind: ToastKind::Success, elapsed_ms: 0, duration_ms: 3000 }
+    }
+    pub fn error(msg: impl Into<String>) -> Self {
+        Self { message: msg.into(), kind: ToastKind::Error, elapsed_ms: 0, duration_ms: 5000 }
+    }
+    pub fn info(msg: impl Into<String>) -> Self {
+        Self { message: msg.into(), kind: ToastKind::Info, elapsed_ms: 0, duration_ms: 2500 }
+    }
+    pub fn is_expired(&self) -> bool {
+        self.elapsed_ms >= self.duration_ms
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -289,6 +364,8 @@ pub struct AppState {
     pub main_builder: MainBuilderState,
     pub composer_undo: Vec<MainBuilderState>,
     pub composer_redo: Vec<MainBuilderState>,
+    pub composer_selected: Option<usize>,
+    pub composer_drag: Option<usize>,
     // Selected template index in Create view
     pub selected_template: Option<usize>,
     // Import from .c
@@ -329,12 +406,18 @@ pub struct AppState {
     // Settings draft (edited copy before save)
     pub config_draft: AppConfig,
     // Project notes (content loaded per-project)
-    pub notes_content: String,
+    pub notes_content: text_editor::Content,
     pub notes_dirty: bool,
     // Shortcuts modal
     pub show_shortcuts: bool,
     // First-run onboarding
     pub is_first_run: bool,
+    pub onboarding_found: Vec<(PathBuf, bool)>,
+    // Window IDs for multi-window
+    pub main_window: Option<window::Id>,
+    pub library_window: Option<window::Id>,
+    pub cref_window: Option<window::Id>,
+    pub snippets_window: Option<window::Id>,
     // Confirm module removal
     pub confirm_remove_module: Option<(Project, String)>,
     // Git panel
@@ -361,7 +444,7 @@ pub struct AppState {
     pub show_new_workspace: bool,
     pub move_to_workspace_project: Option<PathBuf>,
     // Makefile editor
-    pub makefile_content: String,
+    pub makefile_content: text_editor::Content,
     pub makefile_dirty: bool,
     // Usage tracker search
     pub usage_search: String,
@@ -376,6 +459,13 @@ pub struct AppState {
     pub health_snapshot: crate::views::health::HealthSnapshot,
     // Recent projects (last 5)
     pub recent_projects: Vec<PathBuf>,
+    // Toast notifications
+    pub toasts: Vec<Toast>,
+    // Graph canvas state
+    pub graph_selected: Option<String>,
+    pub graph_pan_x: f32,
+    pub graph_pan_y: f32,
+    pub graph_zoom: f32,
 }
 
 impl AppState {
@@ -383,10 +473,9 @@ impl AppState {
         let author = newc_core::scaffold::detect_author();
         let config = AppConfig::load();
         let config_draft = config.clone();
-        let config_dir_exists = dirs::config_dir()
-            .map(|d| d.join("newc").exists())
+        let is_first_run = dirs::config_dir()
+            .map(|d| !d.join("newc").join(".onboarded").exists())
             .unwrap_or(false);
-        let is_first_run = !config_dir_exists;
         let known_projects = load_known_projects();
         let active_theme = config.theme.clone();
         Self {
@@ -416,6 +505,8 @@ impl AppState {
             main_builder: MainBuilderState::default(),
             composer_undo: Vec::new(),
             composer_redo: Vec::new(),
+            composer_selected: None,
+            composer_drag: None,
             selected_template: None,
             import_state: ImportState::default(),
             show_import: false,
@@ -443,10 +534,15 @@ impl AppState {
             error_msg: None,
             cached_stats: None,
             config_draft,
-            notes_content: String::new(),
+            notes_content: text_editor::Content::new(),
             notes_dirty: false,
             show_shortcuts: false,
             is_first_run,
+            onboarding_found: Vec::new(),
+            main_window: None,
+            library_window: None,
+            cref_window: None,
+            snippets_window: None,
             confirm_remove_module: None,
             git_commit_msg: String::new(),
             git_new_branch: String::new(),
@@ -466,7 +562,7 @@ impl AppState {
             workspace_input: String::new(),
             show_new_workspace: false,
             move_to_workspace_project: None,
-            makefile_content: String::new(),
+            makefile_content: text_editor::Content::new(),
             makefile_dirty: false,
             usage_search: String::new(),
             search_query: String::new(),
@@ -476,7 +572,16 @@ impl AppState {
             health_computed: false,
             health_snapshot: crate::views::health::HealthSnapshot::default(),
             recent_projects: load_recent_projects(),
+            toasts: Vec::new(),
+            graph_selected: None,
+            graph_pan_x: 0.0,
+            graph_pan_y: 0.0,
+            graph_zoom: 1.0,
         }
+    }
+
+    pub fn push_toast(&mut self, toast: Toast) {
+        self.toasts.push(toast);
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
@@ -500,7 +605,8 @@ impl AppState {
             | View::ProjectSearch(p)
             | View::HealthDashboard(p)
             | View::CallGraph(p)
-            | View::DependencyGraph(p) => Some(p),
+            | View::DependencyGraph(p)
+            | View::FlowChart(p) => Some(p),
             View::ModuleDetail { project, .. }
             | View::HeaderEditor { project, .. }
             | View::AddModule { project, .. } => Some(project),

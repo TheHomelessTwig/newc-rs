@@ -2,7 +2,7 @@
 
 ## Pre-built binaries (recommended)
 
-No Rust installation required. Download the binary for your platform from [GitHub Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest):
+No Rust installation required. Download from [GitHub Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest):
 
 | Platform | File |
 |---|---|
@@ -17,8 +17,6 @@ curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/n
     -o /tmp/newc && chmod +x /tmp/newc && sudo mv /tmp/newc /usr/local/bin/newc
 ```
 
-Update at any time with `newc update`.
-
 ---
 
 ## Build from source — Requirements
@@ -26,8 +24,8 @@ Update at any time with `newc update`.
 | Tool | Version | Notes |
 |---|---|---|
 | Rust | stable | Install via [rustup](https://rustup.rs/) |
-| gcc or clang | any recent | For compiling the C projects newc manages |
-| make | any | Required for the generated Makefile targets |
+| gcc or clang | any recent | For compiling C projects newc manages |
+| make | any | Required for generated Makefile targets |
 | git | 2.x | Optional; required for git panel features |
 | clang-format | any | Optional; required for "Format" button in editor |
 
@@ -39,25 +37,22 @@ Update at any time with `newc update`.
 
 ```bash
 sudo apt update
-sudo apt install build-essential git clang-format curl
+sudo apt install build-essential git clang-format curl \
+                 libvulkan-dev vulkan-tools mesa-vulkan-drivers
 
-# Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
-# Build
 git clone https://github.com/TheHomelessTwig/newc-rs.git
 cd newc-rs
 cargo build --release
-
-# Install
 sudo cp target/release/newc /usr/local/bin/newc
 ```
 
 ### Arch Linux
 
 ```bash
-sudo pacman -S base-devel git clang rustup
+sudo pacman -S base-devel git clang rustup vulkan-icd-loader mesa
 
 rustup toolchain install stable
 rustup default stable
@@ -71,7 +66,7 @@ sudo cp target/release/newc /usr/local/bin/newc
 ### Fedora / RHEL
 
 ```bash
-sudo dnf install gcc gcc-c++ make git clang-tools-extra curl
+sudo dnf install gcc gcc-c++ make git clang-tools-extra curl vulkan-loader mesa-vulkan-drivers
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
@@ -82,47 +77,54 @@ cargo build --release
 sudo cp target/release/newc /usr/local/bin/newc
 ```
 
-### WSL2 (Windows Subsystem for Linux)
+---
 
-The GUI auto-detects WSL2 by reading `/proc/version`. When Microsoft's kernel string is detected, it sets:
+## WSL2 (Windows Subsystem for Linux)
 
-```
-LIBGL_ALWAYS_SOFTWARE=1
-GALLIUM_DRIVER=llvmpipe
-```
+The GUI auto-detects WSL2 by reading `/proc/version`. When detected, it automatically selects the best available Vulkan ICD:
 
-This forces Mesa's software renderer and avoids the crash caused by WSL2's incomplete EGL/Zink stack.
+- **With GPU passthrough** (`/dev/dri` present): prefers `virtio_icd.json` or `gfxstream_vk_icd.json`
+- **Without GPU** (most WSL2 setups): uses LLVMpipe software Vulkan (`lvp_icd.json`)
 
-**Additional requirement:** Install a Mesa software driver if not already present:
+`WAYLAND_DISPLAY` is always unset to avoid WSLg socket instability; the app runs under XWayland/X11.
+
+**No manual configuration is needed** — the ICD selection is fully automatic.
+
+### Required packages
 
 ```bash
 # Ubuntu/Debian WSL2
-sudo apt install libgl1-mesa-dri
+sudo apt install mesa-vulkan-drivers libvulkan1 vulkan-tools
 
 # Arch WSL2
-sudo pacman -S mesa
+sudo pacman -S mesa vulkan-icd-loader vulkan-mesa-layers
 ```
 
-The app also forces X11 mode on WSL2 by unsetting `WAYLAND_DISPLAY` before starting the window — this avoids broken-pipe errors from WSLg's unreliable Wayland socket. No manual configuration is needed.
+Build steps are the same as the Linux distribution above.
 
-You may also need an X server or Wayland compositor. With WSLg (Windows 11), this is provided automatically. On Windows 10, install [VcXsrv](https://sourceforge.net/projects/vcxsrv/) and set `DISPLAY=:0`.
+### Troubleshooting WSL2
 
-Build steps are the same as the distribution-specific instructions above.
+If the GUI fails to start, test Vulkan manually:
+
+```bash
+vulkaninfo --summary
+```
+
+If Vulkan is unavailable, force software GL as a last resort:
+
+```bash
+WGPU_BACKEND=gl LIBGL_ALWAYS_SOFTWARE=1 newc gui
+```
 
 ---
 
 ## macOS
 
 ```bash
-# Install Xcode command line tools
 xcode-select --install
 
-# Install Homebrew if not present
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install dependencies
-brew install llvm          # provides clang-format
-brew install rustup-init
+brew install llvm rustup-init
 rustup-init
 source "$HOME/.cargo/env"
 
@@ -132,9 +134,7 @@ cargo build --release
 cp target/release/newc /usr/local/bin/newc
 ```
 
-The GUI uses macOS's native window backend via eframe. No additional display server is required.
-
-The "Open in Editor" feature uses AppleScript to open a new Terminal window.
+macOS uses the native Metal backend via iced/wgpu. No additional display server is required.
 
 ---
 
@@ -143,7 +143,7 @@ The "Open in Editor" feature uses AppleScript to open a new Terminal window.
 ### Prerequisites
 
 1. Install [Rust](https://www.rust-lang.org/tools/install) (rustup-init.exe)
-2. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (MSVC toolchain) or [MinGW-w64](https://www.mingw-w64.org/) (GNU toolchain)
+2. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (MSVC toolchain)
 3. Install [Git for Windows](https://git-scm.com/download/win)
 4. Optional: Install [LLVM](https://releases.llvm.org/download.html) for `clang-format`
 
@@ -155,54 +155,23 @@ cd newc-rs
 cargo build --release
 ```
 
-The binary is at `target\release\newc.exe`. Add it to your PATH.
+Binary at `target\release\newc.exe`. Add to PATH.
 
-When `newc` opens the GUI on Windows, it spawns itself with `CREATE_NO_WINDOW` so no console window appears alongside the GUI window.
+When `newc` opens the GUI on Windows it spawns itself with `CREATE_NO_WINDOW` — no console appears alongside the GUI.
 
-### Notes
-
-- `which` is replaced by `where` automatically via `cfg(target_os = "windows")`
-- The "Open in Editor" feature uses `cmd /c start <terminal>` 
-- `make` is not included with Windows — install [GnuWin32 make](http://gnuwin32.sourceforge.net/packages/make.htm) or use WSL2 instead
-- Windows Terminal (`wt`) is the default terminal for the "Open in Editor" feature
-
----
-
-## Cross-compilation
-
-Cross-compilation is not officially supported. The GUI depends on platform-native window system bindings (X11/Wayland/AppKit/Win32) which complicate cross-compilation significantly.
-
-For Linux→Linux cross-compilation (e.g. for a different architecture), the standard `cargo` cross-compilation workflow applies. Ensure the target toolchain and window system libraries are available.
-
----
-
-## Feature flags
-
-The `newc` crate exposes no user-facing feature flags. Platform-specific features are selected automatically:
-
-```toml
-# Base features (all platforms)
-eframe = { features = ["glow", "persistence"] }
-
-# Linux only
-eframe = { features = ["wayland", "x11"] }
-```
-
-The `glow` backend (OpenGL via `glow` crate) is used instead of `wgpu` because `glow` works correctly under Mesa software rendering in WSL2.
+`make` is not included with Windows — install [GnuWin32 make](http://gnuwin32.sourceforge.net/packages/make.htm) or use WSL2.
 
 ---
 
 ## Troubleshooting
 
-### GUI window does not appear
+### GUI window does not appear (WSL2 without WSLg)
 
-- **WSL2 without WSLg**: Set `DISPLAY=:0` and ensure an X server is running
-- **Wayland session**: Try `WAYLAND_DISPLAY=` unset to force X11 fallback
-- **Mesa missing**: Install `libgl1-mesa-dri` (Debian/Ubuntu) or `mesa` (Arch)
+Set `DISPLAY=:0` and ensure an X server is running (e.g. [VcXsrv](https://sourceforge.net/projects/vcxsrv/) on Windows 10).
 
-### `cargo build` fails with linker errors on Linux
+### `cargo build` fails with linker errors (Linux)
 
-Install the X11 and Wayland development libraries:
+Install display system development libraries:
 
 ```bash
 # Ubuntu/Debian
@@ -213,16 +182,22 @@ sudo apt install libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-d
 sudo pacman -S libx11 libxrandr libxi libxcursor libxinerama wayland libxkbcommon
 ```
 
-### `cargo build` fails with linker errors on macOS
+### `cargo build` fails with linker errors (macOS)
 
-Ensure Xcode command line tools are installed:
 ```bash
 xcode-select --install
 ```
 
 ### GUI crashes immediately on WSL2
 
-Ensure Mesa software rendering is enabled. The app sets these environment variables automatically when WSL2 is detected, but they can be set manually if needed:
+Check which Vulkan ICD is being selected:
+
 ```bash
-LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe newc
+VK_LOADER_DEBUG=all newc gui 2>&1 | grep "ICD"
+```
+
+Force LLVMpipe manually if auto-detection fails:
+
+```bash
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json newc gui
 ```

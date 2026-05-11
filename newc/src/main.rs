@@ -4,6 +4,7 @@ mod highlight;
 mod state;
 mod build_runner;
 mod updater;
+mod theme;
 pub mod views;
 
 use clap::Parser;
@@ -27,15 +28,11 @@ fn main() -> anyhow::Result<()> {
             });
             launch_gui(initial)
         }
-        // Spawned by launch_gui: run the GUI in-process, no console window.
         Some(Command::InternalGui { path }) => run_gui_inline(path),
         Some(cmd) => cli::run(cmd),
     }
 }
 
-/// Spawn this same binary with `--internal-gui [path]` as a detached process,
-/// freeing the terminal immediately. On Windows, `CREATE_NO_WINDOW` suppresses
-/// the console window in the child so only the GUI window appears.
 fn launch_gui(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let mut cmd = std::process::Command::new(&exe);
@@ -61,33 +58,60 @@ fn is_wsl2() -> bool {
         .unwrap_or(false)
 }
 
-fn run_gui_inline(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
-    use app::NewcApp;
-    use iced::window;
 
-    // Under WSL2, force the wgpu GL backend to avoid Vulkan/Zink failures
-    if is_wsl2() {
-        unsafe {
+fn configure_wsl2_gpu() {
+    unsafe { std::env::remove_var("WAYLAND_DISPLAY"); }
+
+    let icd_dir = std::path::Path::new("/usr/share/vulkan/icd.d");
+    let has_gpu = std::path::Path::new("/dev/dri").is_dir();
+    let chosen = if has_gpu {
+        ["virtio_icd.json", "gfxstream_vk_icd.json"]
+            .iter()
+            .map(|f| icd_dir.join(f))
+            .find(|p| p.exists())
+            .or_else(|| {
+                let lvp = icd_dir.join("lvp_icd.json");
+                lvp.exists().then_some(lvp)
+            })
+    } else {
+        let lvp = icd_dir.join("lvp_icd.json");
+        lvp.exists().then_some(lvp)
+    };
+
+    unsafe {
+        if let Some(icd) = chosen {
+            std::env::set_var("VK_ICD_FILENAMES", icd);
+            std::env::remove_var("WGPU_BACKEND");
+            std::env::remove_var("LIBGL_ALWAYS_SOFTWARE");
+            std::env::remove_var("GALLIUM_DRIVER");
+            std::env::remove_var("MESA_LOADER_DRIVER_OVERRIDE");
+        } else {
             if std::env::var("WGPU_BACKEND").is_err() {
                 std::env::set_var("WGPU_BACKEND", "gl");
             }
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("MESA_LOADER_DRIVER_OVERRIDE", "softpipe");
         }
     }
+}
 
-    iced::application(
+fn run_gui_inline(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
+    use app::NewcApp;
+
+    if is_wsl2() {
+        configure_wsl2_gpu();
+    }
+
+    // iced::daemon opens no window automatically — NewcApp::new() opens the main window
+    // via window::open() and returns the task.
+    iced::daemon(
         move || NewcApp::new(initial_path.clone()),
         NewcApp::update,
-        NewcApp::view,
+        NewcApp::view_for_window,
     )
-    .title(NewcApp::title)
-    .theme(NewcApp::theme)
+    .title(NewcApp::title_for_window)
+    .theme(NewcApp::theme_for_window)
     .subscription(NewcApp::subscription)
-    .window(window::Settings {
-        size: iced::Size::new(1100.0, 700.0),
-        min_size: Some(iced::Size::new(800.0, 500.0)),
-        position: window::Position::Default,
-        ..Default::default()
-    })
     .run()
     .map_err(|e| anyhow::anyhow!("GUI error: {e}"))
 }

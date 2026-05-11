@@ -1,6 +1,7 @@
 use iced::widget::{button, column, row, scrollable, text, text_input, Space};
 use iced::{Color, Element, Length};
 use newc_core::function_lib::{FunctionLibrary, FunctionTemplate};
+use newc_core::main_builder::MainBlock;
 
 use crate::state::{AppState, LibraryField, Message};
 
@@ -67,7 +68,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     let ls = &state.library_state;
 
     // ── Top toolbar ───────────────────────────────────────────────────────────
-    let toolbar = row![
+    let mut toolbar = row![
         text("Function Library").size(18),
         text_input("Search…", &ls.search)
             .on_input(Message::LibrarySearch)
@@ -79,6 +80,13 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
+    if state.library_window.is_none() {
+        toolbar = toolbar.push(
+            button(text("⊞").size(12))
+                .on_press(Message::OpenLibraryWindow)
+                .style(crate::theme::btn_ghost),
+        );
+    }
 
     // ── Groups sidebar ────────────────────────────────────────────────────────
     let _all_sel = ls.active_group.is_none();
@@ -139,11 +147,12 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     };
 
     // Collect owned data
-    struct FuncItem { name: String, starred: bool, selected: bool }
+    struct FuncItem { name: String, starred: bool, selected: bool, signature: String }
     let mut func_items: Vec<FuncItem> = candidates.iter().map(|f| FuncItem {
         name: f.name.clone(),
         starred: f.starred,
         selected: ls.selected.as_deref() == Some(&f.name),
+        signature: f.signature.clone(),
     }).collect();
     func_items.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -152,11 +161,25 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
         let star = if fi.starred { "★" } else { "☆" };
         let name = fi.name.clone();
         let name2 = fi.name.clone();
+        let name3 = fi.name.clone();
+        let args = extract_param_names(&fi.signature);
+        let display_name = if name2.len() > 22 {
+            format!("{}…", &name2[..21])
+        } else {
+            name2.clone()
+        };
         row![
             button(text(star).size(11)).on_press(Message::LibraryToggleStar(name)),
-            button(text(name2.clone()).size(12).color(color))
+            button(text(display_name).size(12).color(color))
                 .on_press(Message::LibrarySelect(Some(name2)))
                 .width(Length::Fill),
+            button(text("→").size(10))
+                .on_press(Message::ComposerAddBlock(MainBlock::FunctionCall {
+                    func_name: name3,
+                    args,
+                    assign_to: String::new(),
+                    comment: String::new(),
+                })),
         ]
         .spacing(2)
         .into()
@@ -324,6 +347,22 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
     ]
     .spacing(8)
     .into()
+}
+
+fn extract_param_names(sig: &str) -> Vec<String> {
+    let open = sig.find('(').unwrap_or(sig.len());
+    let close = sig.rfind(')').unwrap_or(sig.len());
+    if open >= close { return Vec::new(); }
+    let params = &sig[open + 1..close];
+    if params.trim() == "void" || params.trim().is_empty() { return Vec::new(); }
+    params.split(',').filter_map(|p| {
+        let p = p.trim();
+        let name = p.split_whitespace().last()?;
+        let name = name.trim_start_matches('*');
+        let name = name.split('[').next().unwrap_or(name);
+        if name.is_empty() || name == "void" { None }
+        else { Some(name.to_string()) }
+    }).collect()
 }
 
 fn parse_sig(sig: &str) -> (String, Vec<(String, String)>) {

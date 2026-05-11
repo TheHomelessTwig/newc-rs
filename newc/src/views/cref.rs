@@ -98,7 +98,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
             .into()
     };
 
-    let search_bar = row![
+    let mut search_bar = row![
         text("C Reference").size(18),
         text_input("Search…", search)
             .on_input(Message::CRefSearch)
@@ -111,6 +111,13 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
+    if state.cref_window.is_none() {
+        search_bar = search_bar.push(
+            button(text("⊞").size(12))
+                .on_press(Message::OpenCRefWindow)
+                .style(crate::theme::btn_ghost),
+        );
+    }
 
     column![
         search_bar,

@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
+use notify::Watcher;
 
 use iced::{Element, Subscription, Task, Theme};
-use iced::widget::{column, row, text, button, container, scrollable, Space};
-use iced::{Alignment, Length, Color};
+use iced::widget::{column, row, text, button, container, scrollable, Space, Stack};
+use iced::{Alignment, Background, Border, Length, Color};
+use crate::theme as th;
 use newc_core::{
     function_lib::FunctionLibrary,
     build_history::{self, BuildRecord},
@@ -38,6 +40,15 @@ impl NewcApp {
             }
         }
 
+        // Open the main window (daemon mode has no automatic window)
+        let (main_id, open_task) = iced::window::open(iced::window::Settings {
+            size: iced::Size::new(1200.0, 780.0),
+            min_size: Some(iced::Size::new(900.0, 550.0)),
+            position: iced::window::Position::Default,
+            ..Default::default()
+        });
+        state.main_window = Some(main_id);
+
         let runner = BuildRunner::spawn();
         let function_lib = FunctionLibrary::load();
 
@@ -45,18 +56,28 @@ impl NewcApp {
 
         if let Some(path) = initial_path {
             app.open_project(path);
+        } else if app.state.is_first_run {
+            app.state.view = View::Onboarding(0);
+            app.state.onboarding_found = scan_for_onboarding_projects();
         }
 
-        (app, Task::none())
+        (app, open_task.discard())
     }
 
-    pub fn title(&self) -> String {
+    pub fn title_for_window(&self, window: iced::window::Id) -> String {
+        if Some(window) == self.state.library_window { return "Function Library — newc".into(); }
+        if Some(window) == self.state.cref_window    { return "C Reference — newc".into(); }
+        if Some(window) == self.state.snippets_window { return "Snippets — newc".into(); }
         match &self.state.view {
             View::ProjectDetail(p) | View::ProjectStats(p) | View::ModuleDetail { project: p, .. } => {
                 format!("newc — {}", p.name)
             }
             _ => String::from("newc"),
         }
+    }
+
+    pub fn theme_for_window(&self, _window: iced::window::Id) -> Theme {
+        theme_from_name(&self.state.active_theme)
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -73,12 +94,25 @@ impl NewcApp {
                         }
                     }
                     View::MainBuilder(project) => {
-                        // Load existing main.c into composer
                         self.state.main_builder =
                             newc_core::main_builder::MainBuilderState::load_from_main_c(&project.root);
+                        self.state.composer_selected = None;
                         if self.state.create_author.is_empty() {
                             self.state.create_author = newc_core::scaffold::detect_author();
                         }
+                    }
+                    View::CallGraph(_) | View::DependencyGraph(_) | View::FlowChart(_) => {
+                        self.state.graph_pan_x = 0.0;
+                        self.state.graph_pan_y = 0.0;
+                        self.state.graph_zoom = 1.0;
+                        self.state.graph_selected = None;
+                    }
+                    View::MakefileEditor(project) => {
+                        let raw = std::fs::read_to_string(project.root.join("Makefile"))
+                            .unwrap_or_default();
+                        self.state.makefile_content =
+                            iced::widget::text_editor::Content::with_text(&raw);
+                        self.state.makefile_dirty = false;
                     }
                     _ => {}
                 }
@@ -319,21 +353,23 @@ impl NewcApp {
 
             Message::NotesSave => {
                 if let Some(project) = self.state.current_project() {
-                    let _ = notes::save(&project.root, &self.state.notes_content);
+                    let _ = notes::save(&project.root, &self.state.notes_content.text());
                     self.state.notes_dirty = false;
                     self.state.set_status("Notes saved.");
                 }
             }
 
-            Message::NotesContent(s) => {
-                self.state.notes_content = s;
-                self.state.notes_dirty = true;
+            Message::NotesEdit(action) => {
+                self.state.notes_content.perform(action);
+                if let Some(project) = self.state.current_project() {
+                    let _ = notes::save(&project.root, &self.state.notes_content.text());
+                }
             }
 
             Message::MakefileSave => {
                 if let Some(project) = self.state.current_project() {
                     let path = project.root.join("Makefile");
-                    if let Err(e) = std::fs::write(&path, &self.state.makefile_content) {
+                    if let Err(e) = std::fs::write(&path, self.state.makefile_content.text()) {
                         self.state.set_error(e.to_string());
                     } else {
                         self.state.makefile_dirty = false;
@@ -342,9 +378,152 @@ impl NewcApp {
                 }
             }
 
-            Message::MakefileContent(s) => {
-                self.state.makefile_content = s;
+            Message::MakefileEdit(action) => {
+                self.state.makefile_content.perform(action);
                 self.state.makefile_dirty = true;
+            }
+
+            Message::OpenInEditor => {
+                if let Some(project) = self.state.current_project() {
+                    let root = project.root.clone();
+                    match std::process::Command::new("xdg-open").arg(&root).spawn() {
+                        Ok(_) => self.state.push_toast(crate::state::Toast::info("Opened in file manager.")),
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(format!("xdg-open: {e}"))),
+                    }
+                }
+            }
+
+            Message::ExportZip => {
+                if let Some(project) = self.state.current_project() {
+                    let root = project.root.clone();
+                    let name = project.name.clone();
+                    let downloads = dirs::download_dir()
+                        .or_else(|| dirs::home_dir().map(|h| h.join("Downloads")))
+                        .unwrap_or_else(|| std::path::PathBuf::from("."));
+                    match newc_core::export::export_zip(&root, &name, &downloads) {
+                        Ok(path) => self.state.push_toast(crate::state::Toast::success(
+                            format!("Exported → {}", path.display())
+                        )),
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
+            }
+
+            Message::RunCheck => {
+                if let Some(project) = self.state.current_project() {
+                    match newc_core::analysis::check(&project.root) {
+                        Ok(funcs) if funcs.is_empty() => {
+                            self.state.push_toast(crate::state::Toast::success("No unreachable functions."));
+                        }
+                        Ok(funcs) => {
+                            let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
+                            self.state.push_toast(crate::state::Toast::info(
+                                format!("Unreachable: {}", names.join(", "))
+                            ));
+                        }
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
+            }
+
+            Message::SyncAll => {
+                if let Some(project) = self.state.current_project() {
+                    match newc_core::sync::sync_all(&project.root) {
+                        Ok(synced) if synced.is_empty() => {
+                            self.state.push_toast(crate::state::Toast::info("Nothing to sync."));
+                        }
+                        Ok(synced) => {
+                            self.state.push_toast(crate::state::Toast::success(
+                                format!("Synced: {}", synced.join(", "))
+                            ));
+                        }
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
+            }
+
+            Message::SyncModule(name) => {
+                if let Some(project) = self.state.current_project() {
+                    match newc_core::sync::sync_module(&project.root, &name) {
+                        Ok(_) => self.state.push_toast(crate::state::Toast::success(format!("Synced {name}.h"))),
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
+            }
+
+            Message::FileChanged(_path) => {
+                // Debounce: just trigger a project refresh
+                return self.update(Message::RefreshProject);
+            }
+
+            Message::OnboardingToggleProject(i) => {
+                if let Some(entry) = self.state.onboarding_found.get_mut(i) {
+                    entry.1 = !entry.1;
+                }
+            }
+
+            Message::OnboardingNext => {
+                if let View::Onboarding(step) = self.state.view {
+                    self.state.view = View::Onboarding(step + 1);
+                }
+            }
+
+            Message::OnboardingBack => {
+                if let View::Onboarding(step) = self.state.view {
+                    if step > 0 {
+                        self.state.view = View::Onboarding(step - 1);
+                    }
+                }
+            }
+
+            Message::OnboardingFinish => {
+                // Import selected projects
+                let selected: Vec<std::path::PathBuf> = self.state.onboarding_found.iter()
+                    .filter(|(_, sel)| *sel)
+                    .map(|(p, _)| p.clone())
+                    .collect();
+                for path in selected {
+                    if !self.state.known_projects.contains(&path) {
+                        self.state.known_projects.push(path);
+                    }
+                }
+                crate::state::save_known_projects(&self.state.known_projects);
+                // Save author name into config
+                self.state.config.save().ok();
+                // Write .onboarded marker
+                if let Some(dir) = dirs::config_dir().map(|d| d.join("newc")) {
+                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = std::fs::write(dir.join(".onboarded"), "");
+                }
+                self.state.is_first_run = false;
+                self.state.view = View::Home;
+            }
+
+            Message::ComposerDragStart(i) => {
+                self.state.composer_drag = if self.state.composer_drag == Some(i) {
+                    None // toggle off
+                } else {
+                    Some(i)
+                };
+            }
+
+            Message::ComposerDragDrop(j) => {
+                if let Some(i) = self.state.composer_drag.take() {
+                    let len = self.state.main_builder.blocks.len();
+                    if i != j && i < len && j <= len {
+                        let snap = self.state.main_builder.clone();
+                        let block = self.state.main_builder.blocks.remove(i);
+                        let target = if j > i { j - 1 } else { j };
+                        self.state.main_builder.blocks.insert(target, block);
+                        self.state.composer_undo.push(snap);
+                        self.state.composer_undo.truncate(50);
+                        self.state.composer_redo.clear();
+                    }
+                }
+            }
+
+            Message::ComposerDragEnd => {
+                self.state.composer_drag = None;
             }
 
             Message::GitCommitMsg(s) => self.state.git_commit_msg = s,
@@ -601,6 +780,13 @@ impl NewcApp {
             }
 
             // Main builder
+            Message::ComposerAddBlock(block) => {
+                let snap = self.state.main_builder.clone();
+                self.state.main_builder.blocks.push(block);
+                self.state.composer_undo.push(snap);
+                self.state.composer_undo.truncate(50);
+                self.state.composer_redo.clear();
+            }
             Message::ComposerUndo => {
                 if let Some(prev) = self.state.composer_undo.pop() {
                     let cur = std::mem::replace(&mut self.state.main_builder, prev);
@@ -638,6 +824,65 @@ impl NewcApp {
                 if i < self.state.main_builder.blocks.len() {
                     let snap = self.state.main_builder.clone();
                     self.state.main_builder.blocks.remove(i);
+                    if self.state.composer_selected == Some(i) {
+                        self.state.composer_selected = None;
+                    }
+                    self.state.composer_undo.push(snap);
+                    self.state.composer_undo.truncate(50);
+                    self.state.composer_redo.clear();
+                }
+            }
+            Message::ComposerSelectBlock(idx) => {
+                self.state.composer_selected = if self.state.composer_selected == Some(idx) {
+                    None
+                } else {
+                    Some(idx)
+                };
+            }
+            Message::ComposerEditField { idx, field, value } => {
+                use newc_core::main_builder::MainBlock;
+                if idx < self.state.main_builder.blocks.len() {
+                    let snap = self.state.main_builder.clone();
+                    match &mut self.state.main_builder.blocks[idx] {
+                        MainBlock::VarDecl { type_name, name, init, .. } => match field.as_str() {
+                            "type" => *type_name = value,
+                            "name" => *name = value,
+                            "init" => *init = value,
+                            _ => {}
+                        },
+                        MainBlock::FunctionCall { func_name, args, assign_to, comment } => {
+                            match field.as_str() {
+                                "func_name" => *func_name = value,
+                                "args" => {
+                                    *args = if value.trim().is_empty() {
+                                        Vec::new()
+                                    } else {
+                                        value.split(',').map(|s| s.trim().to_string()).collect()
+                                    };
+                                }
+                                "assign_to" => *assign_to = value,
+                                "comment" => *comment = value,
+                                _ => {}
+                            }
+                        }
+                        MainBlock::IfBlock { condition, .. } => {
+                            if field == "condition" { *condition = value; }
+                        }
+                        MainBlock::WhileLoop { condition, .. } => {
+                            if field == "condition" { *condition = value; }
+                        }
+                        MainBlock::ForLoop { init, condition, increment, .. } => {
+                            match field.as_str() {
+                                "init" => *init = value,
+                                "condition" => *condition = value,
+                                "increment" => *increment = value,
+                                _ => {}
+                            }
+                        }
+                        MainBlock::Comment(c) => *c = value,
+                        MainBlock::RawCode(c) => *c = value,
+                        MainBlock::BlankLine => {}
+                    }
                     self.state.composer_undo.push(snap);
                     self.state.composer_undo.truncate(50);
                     self.state.composer_redo.clear();
@@ -771,6 +1016,118 @@ impl NewcApp {
                 }
             }
 
+            // Subscription ticks
+            Message::PollBuildOutput => {
+                // drain_build_output() already called at top of update()
+            }
+            Message::StatusTick => {
+                if let Some((_, t)) = &self.state.status {
+                    if t.elapsed().as_secs() >= 4 {
+                        self.state.status = None;
+                    }
+                }
+            }
+            Message::ToastTick => {
+                for toast in &mut self.state.toasts {
+                    toast.elapsed_ms = toast.elapsed_ms.saturating_add(100);
+                }
+                self.state.toasts.retain(|t| !t.is_expired());
+            }
+            Message::ToastDismiss(i) => {
+                if i < self.state.toasts.len() {
+                    self.state.toasts.remove(i);
+                }
+            }
+
+            // Graph canvas
+            Message::GraphNodeSelect(name) => self.state.graph_selected = Some(name),
+            Message::GraphPan { dx, dy } => {
+                self.state.graph_pan_x += dx;
+                self.state.graph_pan_y += dy;
+            }
+            Message::GraphZoom(delta) => {
+                self.state.graph_zoom = (self.state.graph_zoom + delta).clamp(0.2, 4.0);
+            }
+            Message::GraphReset => {
+                self.state.graph_pan_x = 0.0;
+                self.state.graph_pan_y = 0.0;
+                self.state.graph_zoom = 1.0;
+                self.state.graph_selected = None;
+            }
+            Message::GraphExport => {
+                let result = match &self.state.view {
+                    View::CallGraph(p) => {
+                        let svg = views::call_graph::export_svg(p);
+                        let path = p.root.join(format!("{}_call_graph.svg", p.name));
+                        std::fs::write(&path, svg).map(|_| path)
+                    }
+                    View::DependencyGraph(p) => {
+                        let svg = views::dependency_graph::export_svg(p);
+                        let path = p.root.join(format!("{}_dep_graph.svg", p.name));
+                        std::fs::write(&path, svg).map(|_| path)
+                    }
+                    _ => {
+                        self.state.push_toast(crate::state::Toast::info("Export only available in graph views."));
+                        return Task::none();
+                    }
+                };
+                match result {
+                    Ok(path) => self.state.push_toast(crate::state::Toast::success(
+                        format!("SVG → {}", path.display())
+                    )),
+                    Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                }
+            }
+
+            // Multi-window: Library / CRef / Snippets
+            Message::OpenLibraryWindow => {
+                if let Some(id) = self.state.library_window {
+                    return iced::window::gain_focus(id);
+                }
+                let (id, task) = iced::window::open(iced::window::Settings {
+                    size: iced::Size::new(720.0, 880.0),
+                    min_size: Some(iced::Size::new(500.0, 400.0)),
+                    position: iced::window::Position::Default,
+                    ..Default::default()
+                });
+                self.state.library_window = Some(id);
+                self.state.show_library = false; // close drawer if open
+                return task.discard();
+            }
+            Message::OpenCRefWindow => {
+                if let Some(id) = self.state.cref_window {
+                    return iced::window::gain_focus(id);
+                }
+                let (id, task) = iced::window::open(iced::window::Settings {
+                    size: iced::Size::new(700.0, 860.0),
+                    min_size: Some(iced::Size::new(500.0, 400.0)),
+                    position: iced::window::Position::Default,
+                    ..Default::default()
+                });
+                self.state.cref_window = Some(id);
+                self.state.show_cref = false;
+                return task.discard();
+            }
+            Message::OpenSnippetsWindow => {
+                if let Some(id) = self.state.snippets_window {
+                    return iced::window::gain_focus(id);
+                }
+                let (id, task) = iced::window::open(iced::window::Settings {
+                    size: iced::Size::new(700.0, 860.0),
+                    min_size: Some(iced::Size::new(500.0, 400.0)),
+                    position: iced::window::Position::Default,
+                    ..Default::default()
+                });
+                self.state.snippets_window = Some(id);
+                self.state.show_snippets = false;
+                return task.discard();
+            }
+            Message::WindowClosed(id) => {
+                if self.state.library_window == Some(id) { self.state.library_window = None; }
+                if self.state.cref_window    == Some(id) { self.state.cref_window    = None; }
+                if self.state.snippets_window== Some(id) { self.state.snippets_window= None; }
+            }
+
             Message::None => {}
             _ => {}
         }
@@ -778,7 +1135,23 @@ impl NewcApp {
         Task::none()
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
+    pub fn view_for_window(&self, window: iced::window::Id) -> Element<'_, Message> {
+        if Some(window) == self.state.library_window {
+            return container(views::library::view(&self.state, &self.function_lib))
+                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+        }
+        if Some(window) == self.state.cref_window {
+            return container(views::cref::view(&self.state))
+                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+        }
+        if Some(window) == self.state.snippets_window {
+            return container(views::snippets::view(&self.state))
+                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+        }
+        self.view_main()
+    }
+
+    fn view_main(&self) -> Element<'_, Message> {
         let top_bar = self.top_bar();
         let sidebar = self.sidebar();
         let mut central = self.central_panel();
@@ -826,29 +1199,120 @@ impl NewcApp {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let mut layout = column![top_bar, content];
-
+        let status_bar = self.status_bar();
+        let mut items: Vec<Element<Message>> = vec![top_bar, content.into(), status_bar];
         if self.state.build_panel_open {
-            layout = layout.push(views::build_panel::view(&self.state));
+            items.push(views::build_panel::view(&self.state));
         }
 
-        container(layout)
-            .width(Length::Fill)
+        let main_col: Element<Message> = iced::widget::Column::with_children(items)
             .height(Length::Fill)
+            .width(Length::Fill)
+            .into();
+
+        // Toast overlay — stack above the main layout, bottom-right aligned
+        if self.state.toasts.is_empty() {
+            return main_col;
+        }
+
+        let toast_widgets: Vec<Element<Message>> = self.state.toasts.iter().enumerate()
+            .rev() // newest on bottom
+            .map(|(i, t)| {
+                container(
+                    row![
+                        text(t.message.clone()).size(12).color(th::color::TEXT),
+                        Space::new().width(Length::Fill),
+                        button(text("×").size(10).color(th::color::TEXT_DIM))
+                            .style(th::btn_ghost)
+                            .on_press(Message::ToastDismiss(i)),
+                    ]
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                )
+                .style(|_| th::toast_style(&t.kind))
+                .padding([8, 12])
+                .max_width(300)
+                .into()
+            })
+            .collect();
+
+        let toast_overlay: Element<Message> = container(
+            column(toast_widgets).spacing(6)
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_x(iced::alignment::Horizontal::Right)
+        .align_y(iced::alignment::Vertical::Bottom)
+        .padding(iced::Padding { top: 0.0, right: 16.0, bottom: 52.0, left: 0.0 })
+        .into();
+
+        Stack::new()
+            .push(main_col)
+            .push(toast_overlay)
             .into()
     }
 
-    pub fn theme(&self) -> Theme {
-        theme_from_name(&self.state.active_theme)
-    }
-
     pub fn subscription(&self) -> Subscription<Message> {
-        // Status message auto-clear: tick every second, clear if > 4 seconds old
+        let mut subs: Vec<Subscription<Message>> = Vec::new();
+
+        // Live build output: poll runner every 50ms while building
+        if matches!(self.state.build_state, BuildState::Running) {
+            subs.push(
+                iced::time::every(Duration::from_millis(50))
+                    .map(|_| Message::PollBuildOutput),
+            );
+        }
+
+        // Status auto-clear: tick every second
         if self.state.status.is_some() {
-            iced::time::every(Duration::from_secs(1))
-                .map(|_| Message::None)
-        } else {
+            subs.push(
+                iced::time::every(Duration::from_secs(1))
+                    .map(|_| Message::StatusTick),
+            );
+        }
+
+        // Toast auto-dismiss: tick every 100ms when toasts active
+        if !self.state.toasts.is_empty() {
+            subs.push(
+                iced::time::every(Duration::from_millis(100))
+                    .map(|_| Message::ToastTick),
+            );
+        }
+
+        // File watcher — watch current project root for external changes
+        if let Some(root) = self.state.current_project().map(|p| p.root.clone()) {
+            subs.push(Subscription::run_with(root, file_watch_stream));
+        }
+
+        // Window close events — clear window ID from state
+        subs.push(iced::window::close_events().map(Message::WindowClosed));
+
+        // Global keyboard shortcuts
+        subs.push(iced::event::listen_with(|event, _status, _window| {
+            if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) = event {
+                match (modifiers.control(), modifiers.shift(), key.as_ref()) {
+                    (true, _, iced::keyboard::Key::Character("b")) => Some(Message::BuildStart("all".into())),
+                    (true, _, iced::keyboard::Key::Character("r")) => Some(Message::RefreshProject),
+                    (true, true, iced::keyboard::Key::Character("z")) => Some(Message::ComposerRedo),
+                    (true, false, iced::keyboard::Key::Character("z")) => Some(Message::ComposerUndo),
+                    (true, _, iced::keyboard::Key::Character("y")) => Some(Message::ComposerRedo),
+                    (true, false, iced::keyboard::Key::Character("p")) => Some(Message::QuickSearchToggle),
+                    _ => {
+                        if let iced::keyboard::Key::Character(c) = key.as_ref() {
+                            if c == "?" { return Some(Message::ShowShortcuts(true)); }
+                        }
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        }));
+
+        if subs.is_empty() {
             Subscription::none()
+        } else {
+            Subscription::batch(subs)
         }
     }
 }
@@ -900,7 +1364,8 @@ impl NewcApp {
                 self.state.cached_stats = None;
                 self.state.health_computed = false;
                 self.state.meta_draft = meta::load(&p.root);
-                self.state.notes_content = notes::load(&p.root);
+                self.state.notes_content =
+                    iced::widget::text_editor::Content::with_text(&notes::load(&p.root));
                 self.state.notes_dirty = false;
                 self.state.view = View::ProjectDetail(p);
             }
@@ -948,69 +1413,167 @@ impl NewcApp {
     // ── Layout panels ──────────────────────────────────────────────────────────
 
     fn top_bar(&self) -> Element<'_, Message> {
-        let nav_btn = |label: &'static str, msg: Message| {
-            button(text(label)).on_press(msg)
+        // Nav button: highlighted if current view matches
+        let is_home     = matches!(self.state.view, View::Home);
+        let is_create   = matches!(self.state.view, View::CreateProject);
+        let is_lib      = matches!(self.state.view, View::FunctionLibrary) || self.state.show_library;
+        let is_cref     = matches!(self.state.view, View::CReference) || self.state.show_cref;
+        let is_snip     = matches!(self.state.view, View::Snippets) || self.state.show_snippets;
+        let is_settings = matches!(self.state.view, View::Settings);
+
+        let nav = |label: &'static str, active: bool, msg: Message| -> Element<'_, Message> {
+            button(text(label).size(13))
+                .style(if active { th::btn_nav_active } else { th::btn_nav_inactive })
+                .on_press(msg)
+                .into()
         };
 
-        let status_text = if let Some((s, _)) = &self.state.status {
-            text(s.as_str())
-        } else {
-            text("")
+        let build_label = match &self.state.build_state {
+            BuildState::Idle => if self.state.build_panel_open { "▼ Build" } else { "▶ Build" },
+            BuildState::Running => "⟳ Building",
+            BuildState::Done { exit_code: Some(0) } => "✓ Build",
+            BuildState::Done { .. } => "✗ Build",
+        };
+        let build_color = match &self.state.build_state {
+            BuildState::Running => th::color::YELLOW,
+            BuildState::Done { exit_code: Some(0) } => th::color::GREEN,
+            BuildState::Done { .. } => th::color::ACCENT,
+            _ => th::color::TEXT_DIM,
         };
 
         let bar = row![
-            nav_btn("Home", Message::Navigate(View::Home)),
-            nav_btn("New", Message::Navigate(View::CreateProject)),
-            nav_btn("Library", Message::Navigate(View::FunctionLibrary)),
-            nav_btn("CRef", Message::Navigate(View::CReference)),
-            nav_btn("Snippets", Message::Navigate(View::Snippets)),
-            nav_btn("Settings", Message::Navigate(View::Settings)),
+            text("newc").size(15).color(th::color::ACCENT),
+            Space::new().width(8),
+            nav("Home",     is_home,     Message::Navigate(View::Home)),
+            nav("New",      is_create,   Message::Navigate(View::CreateProject)),
+            nav("Library",  is_lib,      Message::LibraryToggleOpen),
+            nav("CRef",     is_cref,     Message::CRefToggleOpen),
+            nav("Snippets", is_snip,     Message::SnippetsToggleOpen),
+            nav("Settings", is_settings, Message::Navigate(View::Settings)),
             Space::new().width(Length::Fill),
-            status_text,
-            button(text(if self.state.build_panel_open { "Hide Build" } else { "Build" }))
+            button(text(build_label).size(12).color(build_color))
+                .style(th::btn_secondary)
                 .on_press(Message::ToggleBuildPanel),
         ]
         .align_y(Alignment::Center)
-        .spacing(6)
-        .padding(8);
+        .spacing(4)
+        .padding([6, 10]);
 
-        container(bar)
+        column![
+            container(bar).width(Length::Fill).style(th::deep_style),
+            th::separator(),
+        ]
+        .spacing(0)
+        .into()
+    }
+
+    fn status_bar(&self) -> Element<'_, Message> {
+        use newc_core::git;
+
+        let project_name = self.state.current_project()
+            .map(|p| p.name.as_str())
+            .unwrap_or("—");
+
+        let git_branch = self.state.current_project()
+            .map(|p| git::current_branch(&p.root))
+            .unwrap_or_default();
+        let branch_str = if git_branch.is_empty() { String::new() } else { format!(" ⎇ {git_branch}") };
+
+        let status_msg = if let Some((s, _)) = &self.state.status { s.as_str() } else { "" };
+
+        column![
+            th::separator(),
+            container(
+                row![
+                    text(format!("◆ {project_name}{branch_str}")).size(11).color(th::color::GREEN),
+                    Space::new().width(Length::Fill),
+                    text(status_msg).size(11).color(th::color::TEXT_DIM),
+                    text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(10).color(th::color::TEXT_HINT),
+                ]
+                .spacing(12)
+                .align_y(Alignment::Center)
+                .padding([4, 10])
+            )
             .width(Length::Fill)
-            .into()
+            .style(th::deep_style),
+        ]
+        .spacing(0)
+        .into()
     }
 
     fn sidebar(&self) -> Element<'_, Message> {
+        let is_current = |root: &std::path::PathBuf| {
+            self.state.current_project().map(|p| &p.root == root).unwrap_or(false)
+        };
+
         let projects: Vec<Element<Message>> = self.state.known_projects
             .iter()
-            .filter_map(|p| Project::open(p.clone()).ok())
-            .map(|p| {
-                let name = p.name.clone();
-                let root = p.root.clone();
-                button(text(name))
+            .filter_map(|p| Some((p.clone(), Project::open(p.clone()).ok()?)))
+            .map(|(root, p)| {
+                let active = is_current(&root);
+                let name = if p.name.len() > 18 {
+                    format!("{}…", &p.name[..17])
+                } else {
+                    p.name.clone()
+                };
+                let path_short = root.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                let _ = path_short; // used below
+                container(
+                    button(
+                        column![
+                            text(name).size(12).color(if active { th::color::ACCENT } else { th::color::TEXT }),
+                            text(root.to_string_lossy().as_ref().to_string()).size(10).color(th::color::TEXT_HINT),
+                        ]
+                        .spacing(1)
+                    )
+                    .style(if active { th::btn_nav_active } else { th::btn_ghost })
                     .on_press(Message::OpenProject(root))
                     .width(Length::Fill)
-                    .into()
+                )
+                .width(Length::Fill)
+                .into()
             })
             .collect();
 
         let list = if projects.is_empty() {
-            column![text("No projects").size(12)]
+            column![th::hint_text("No projects yet")]
         } else {
-            column(projects).spacing(2)
+            column(projects).spacing(1)
         };
 
         let sidebar_content = column![
-            text("Projects").size(13),
+            row![
+                th::section_title("Projects"),
+                Space::new().width(Length::Fill),
+                button(text("+").size(13))
+                    .style(th::btn_ghost)
+                    .on_press(Message::Navigate(View::CreateProject)),
+            ]
+            .align_y(Alignment::Center),
             scrollable(list).height(Length::Fill),
-            button(text("Browse…")).on_press(Message::BrowseForProject),
+            button(text("Browse…").size(12))
+                .style(th::btn_secondary)
+                .on_press(Message::BrowseForProject)
+                .width(Length::Fill),
         ]
         .spacing(8)
-        .padding(8);
+        .padding([8, 6]);
 
-        container(sidebar_content)
-            .width(200)
-            .height(Length::Fill)
-            .into()
+        row![
+            container(sidebar_content)
+                .width(210)
+                .height(Length::Fill)
+                .style(th::panel_style),
+            container(iced::widget::Space::new().width(1).height(Length::Fill))
+                .style(|_| iced::widget::container::Style {
+                    background: Some(Background::Color(th::color::BORDER_DIM)),
+                    ..Default::default()
+                }),
+        ]
+        .into()
     }
 
     fn central_panel(&self) -> Element<'_, Message> {
@@ -1021,13 +1584,13 @@ impl NewcApp {
 
             View::ProjectDetail(p) => views::project::view(&self.state, p),
             View::ProjectStats(p) => views::stats::view(&self.state, p),
-            View::ProjectNotes(_p) => text("Notes — porting in progress").into(),
+            View::ProjectNotes(p) => views::project_notes::view(&self.state, p),
             View::MainBuilder(p) => views::main_builder::view(&self.state, p),
             View::AddModule { project: p, .. } => views::add_module::view(&self.state, p),
             View::GitPanel(p) => views::git_panel::view(&self.state, p),
             View::BuildHistory(p) => views::build_history::view(&self.state, p),
             View::UsageTracker(p) => views::usage_tracker::view(&self.state, p),
-            View::MakefileEditor(_p) => text("Makefile Editor — porting in progress").into(),
+            View::MakefileEditor(p) => views::makefile_editor::view(&self.state, p),
             View::ProjectSearch(p) => views::project_search::view(&self.state, p),
             View::HealthDashboard(p) => views::health::view(&self.state, p),
 
@@ -1049,20 +1612,73 @@ impl NewcApp {
             View::Snippets => views::snippets::view(&self.state),
             View::CallGraph(p) => views::call_graph::view(&self.state, p),
             View::DependencyGraph(p) => views::dependency_graph::view(&self.state, p),
+            View::FlowChart(p) => views::flow_canvas::view(&self.state, p),
+            View::Onboarding(step) => views::onboarding::view(&self.state, *step),
         };
 
-        // Drawer overlays (library, cref, snippets)
-        // TODO: implement as side drawers in Phase 1 Step 6
+        // Side drawers (Library / CRef / Snippets) overlay on the right
+        let drawer_panel: Option<Element<Message>> = if self.state.show_library {
+            Some(views::library::view(&self.state, &self.function_lib))
+        } else if self.state.show_cref {
+            Some(views::cref::view(&self.state))
+        } else if self.state.show_snippets {
+            Some(views::snippets::view(&self.state))
+        } else {
+            None
+        };
 
-        container(
-            scrollable(content).height(Length::Fill)
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .padding(12)
-        .into()
+        let inner: Element<Message> = if let Some(drawer) = drawer_panel {
+            let close_btn_lib = button(text("✕ Library").size(11))
+                .on_press(Message::LibraryToggleOpen);
+            let close_btn_cref = button(text("✕ CRef").size(11))
+                .on_press(Message::CRefToggleOpen);
+            let close_btn_snip = button(text("✕ Snippets").size(11))
+                .on_press(Message::SnippetsToggleOpen);
+            let close_btn: Element<Message> = if self.state.show_library { close_btn_lib.into() }
+                else if self.state.show_cref { close_btn_cref.into() }
+                else { close_btn_snip.into() };
+
+            let drawer_container = container(
+                column![
+                    row![
+                        close_btn,
+                        Space::new().width(Length::Fill),
+                    ]
+                    .padding([4, 8]),
+                    drawer,
+                ]
+                .spacing(0)
+            )
+            .width(Length::FillPortion(2))
+            .height(Length::Fill)
+            .style(|_| iced::widget::container::Style {
+                background: Some(Background::Color(Color::from_rgb8(0x24, 0x21, 0x26))),
+                border: Border {
+                    color: Color::from_rgb8(0x3D, 0x3A, 0x3F),
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+                ..Default::default()
+            });
+
+            row![
+                container(content).width(Length::FillPortion(3)).height(Length::Fill),
+                drawer_container,
+            ]
+            .height(Length::Fill)
+            .into()
+        } else {
+            content
+        };
+
+        container(inner)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(8)
+            .into()
     }
 
+    #[allow(dead_code)]
     fn build_output_panel(&self) -> Element<'_, Message> {
         use crate::build_runner::LineKind;
 
@@ -1104,6 +1720,7 @@ impl NewcApp {
             .into()
     }
 
+    #[allow(dead_code)]
     fn error_modal<'a>(&'a self, msg: &'a str) -> Element<'a, Message> {
         column![
             text("Error").size(16),
@@ -1114,6 +1731,22 @@ impl NewcApp {
         .padding(16)
         .into()
     }
+}
+
+pub fn monokai_pro_theme() -> Theme {
+    use iced::theme::{self, Palette};
+    use std::sync::Arc;
+    Theme::Custom(Arc::new(theme::Custom::new(
+        "Monokai Pro".to_string(),
+        Palette {
+            background: Color::from_rgb8(0x2D, 0x2A, 0x2E),
+            text:       Color::from_rgb8(0xFC, 0xFC, 0xFA),
+            primary:    Color::from_rgb8(0xFF, 0x61, 0x88),
+            success:    Color::from_rgb8(0xA9, 0xDC, 0x76),
+            warning:    Color::from_rgb8(0xFF, 0xD8, 0x66),
+            danger:     Color::from_rgb8(0xFF, 0x61, 0x88),
+        },
+    )))
 }
 
 pub fn theme_from_name(name: &str) -> Theme {
@@ -1139,8 +1772,62 @@ pub fn theme_from_name(name: &str) -> Theme {
         "nightfly" => Theme::Nightfly,
         "oxocarbon" => Theme::Oxocarbon,
         "ferra" => Theme::Ferra,
-        _ => Theme::Dark, // default "dark" + any unknown
+        "monokai_pro" => monokai_pro_theme(),
+        _ => Theme::Dark,
     }
+}
+
+fn file_watch_stream(root: &PathBuf) -> futures::stream::BoxStream<'static, Message> {
+    let root = root.clone();
+    let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
+
+    struct WatchState {
+        _watcher: Option<notify::RecommendedWatcher>,
+        rx: std::sync::mpsc::Receiver<PathBuf>,
+    }
+
+    let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(ev) = res {
+            for path in ev.paths {
+                let _ = tx.send(path);
+            }
+        }
+    });
+
+    let state = WatchState {
+        _watcher: watcher.ok().and_then(|mut w| {
+            w.watch(&root, notify::RecursiveMode::NonRecursive).ok()?;
+            Some(w)
+        }),
+        rx,
+    };
+
+    Box::pin(futures::stream::unfold(state, |state| async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Ok(path) = state.rx.try_recv() {
+                return Some((Message::FileChanged(path), state));
+            }
+        }
+    }))
+}
+
+fn scan_for_onboarding_projects() -> Vec<(std::path::PathBuf, bool)> {
+    let mut found = Vec::new();
+    let Some(home) = dirs::home_dir() else { return found };
+    for dir in &["projects", "uni", "Uni", "school", "Documents", "code", "src"] {
+        let base = home.join(dir);
+        if !base.is_dir() { continue; }
+        if let Ok(entries) = std::fs::read_dir(&base) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() && newc_core::project::Project::is_newc_project(&p) {
+                    found.push((p, true));
+                }
+            }
+        }
+    }
+    found
 }
 
 pub const ALL_THEMES: &[(&str, &str)] = &[
@@ -1163,7 +1850,8 @@ pub const ALL_THEMES: &[(&str, &str)] = &[
     ("kanagawa_dragon", "Kanagawa Dragon"),
     ("kanagawa_lotus", "Kanagawa Lotus"),
     ("moonfly", "Moonfly"),
-    ("nightfly", "Nightfly (≈Monokai)"),
+    ("nightfly", "Nightfly"),
     ("oxocarbon", "Oxocarbon"),
     ("ferra", "Ferra"),
+    ("monokai_pro", "Monokai Pro ✦"),
 ];

@@ -142,8 +142,23 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
         text("Select a snippet").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
     };
 
+    let header_row: Element<Message> = if state.snippets_window.is_none() {
+        row![
+            text("C Snippets").size(18),
+            iced::widget::Space::new().width(iced::Length::Fill),
+            button(text("⊞").size(12))
+                .on_press(Message::OpenSnippetsWindow)
+                .style(crate::theme::btn_ghost),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
+        .into()
+    } else {
+        text("C Snippets").size(18).into()
+    };
+
     column![
-        text("C Snippets").size(18),
+        header_row,
         cat_row,
         row![
             scrollable(column(snippet_btns).spacing(6)).width(220).height(Length::Fill),

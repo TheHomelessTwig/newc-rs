@@ -1,62 +1,74 @@
-use iced::widget::{button, column, row, text, text_input, Space};
-use iced::{Color, Element};
+use iced::widget::{button, column, container, row, text, text_input, Space};
+use iced::Element;
 
 use crate::app::ALL_THEMES;
 use crate::state::{AppState, Message};
+use crate::theme as th;
+
+fn form_row<'a>(label: &'a str, control: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+    row![
+        text(label).size(12).color(th::color::TEXT_DIM).width(150),
+        control.into(),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let cfg = &state.config_draft;
     let current_theme = &state.active_theme;
 
-    // ── Editor / Terminal ──────────────────────────────────────────────────────
-    let fields = column![
-        text("Settings").size(20),
-        row![
-            text("Terminal:").width(140),
-            text_input("e.g. kitty", &cfg.terminal)
-                .on_input(Message::SettingsDraftTerminal)
-                .width(280),
+    // ── Editor & Terminal ──────────────────────────────────────────────────────
+    let editor_section = container(
+        column![
+            th::section_title("Editor & Terminal"),
+            form_row(
+                "Terminal",
+                text_input("e.g. kitty", &cfg.terminal)
+                    .on_input(Message::SettingsDraftTerminal)
+                    .style(th::input_style)
+                    .width(280),
+            ),
+            form_row(
+                "Editor",
+                text_input("e.g. nvim", &cfg.editor)
+                    .on_input(Message::SettingsDraftEditor)
+                    .style(th::input_style)
+                    .width(280),
+            ),
+            th::hint_text("Terminal + editor are used by the 'Open in Editor' button."),
         ]
         .spacing(8)
-        .align_y(iced::Alignment::Center),
-        row![
-            text("Editor:").width(140),
-            text_input("e.g. nvim", &cfg.editor)
-                .on_input(Message::SettingsDraftEditor)
-                .width(280),
-        ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center),
-    ]
-    .spacing(10);
+        .padding(12),
+    )
+    .style(th::section_style);
 
     // ── Theme picker ──────────────────────────────────────────────────────────
     let theme_btns: Vec<Element<Message>> = ALL_THEMES.iter().map(|(key, label)| {
         let is_active = current_theme == *key;
-        let color = if is_active {
-            Color::from_rgb(0.663, 0.863, 0.463)
+        let style = if is_active { th::btn_nav_active } else { th::btn_nav_inactive };
+        let label_str = if is_active {
+            format!("✓ {}", label)
         } else {
-            Color::WHITE
+            format!("  {}", label)
         };
-        button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+        button(text(label_str).size(12))
             .on_press(Message::ThemeSelect(key.to_string()))
+            .style(style)
             .width(180)
             .into()
     }).collect();
 
-    // Lay them out in 3 columns
     let col1: Vec<Element<Message>> = theme_btns.into_iter()
-        .enumerate()
-        .filter(|(i, _)| i % 3 == 0)
-        .map(|(_, e)| e)
-        .collect();
+        .enumerate().filter(|(i, _)| i % 3 == 0).map(|(_, e)| e).collect();
     let col2: Vec<Element<Message>> = ALL_THEMES.iter().enumerate()
         .filter(|(i, _)| i % 3 == 1)
         .map(|(_, (key, label))| {
             let is_active = current_theme == *key;
-            let color = if is_active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
-            button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+            button(text(if is_active { format!("✓ {}", label) } else { format!("  {}", label) }).size(12))
                 .on_press(Message::ThemeSelect(key.to_string()))
+                .style(if is_active { th::btn_nav_active } else { th::btn_nav_inactive })
                 .width(180)
                 .into()
         }).collect();
@@ -64,54 +76,81 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         .filter(|(i, _)| i % 3 == 2)
         .map(|(_, (key, label))| {
             let is_active = current_theme == *key;
-            let color = if is_active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
-            button(text(format!("{}{}", if is_active { "✓ " } else { "  " }, label)).size(12).color(color))
+            button(text(if is_active { format!("✓ {}", label) } else { format!("  {}", label) }).size(12))
                 .on_press(Message::ThemeSelect(key.to_string()))
+                .style(if is_active { th::btn_nav_active } else { th::btn_nav_inactive })
                 .width(180)
                 .into()
         }).collect();
 
-    let theme_grid = row![
-        column(col1).spacing(4),
-        column(col2).spacing(4),
-        column(col3).spacing(4),
-    ]
-    .spacing(8);
+    let appearance_section = container(
+        column![
+            th::section_title("Appearance"),
+            th::hint_text("Nightfly is the closest built-in theme to Monokai Pro."),
+            row![
+                column(col1).spacing(4),
+                column(col2).spacing(4),
+                column(col3).spacing(4),
+            ]
+            .spacing(8),
+        ]
+        .spacing(8)
+        .padding(12),
+    )
+    .style(th::section_style);
 
     // ── clang-format style ────────────────────────────────────────────────────
     let clang_styles = ["file", "LLVM", "Google", "Chromium", "GNU", "Microsoft"];
     let clang_btns: Vec<Element<Message>> = clang_styles.iter().map(|s| {
         let active = cfg.clang_format_style == *s;
-        let color = if active { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
-        button(text(*s).size(12).color(color))
+        button(text(*s).size(12))
             .on_press(Message::SettingsDraftClangStyle(s.to_string()))
+            .style(if active { th::btn_nav_active } else { th::btn_nav_inactive })
             .into()
     }).collect();
 
-    // ── Save / Discard ────────────────────────────────────────────────────────
-    column![
-        fields,
-        Space::new().height(8),
-        text("Theme (applied immediately):").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text("Note: Nightfly is the closest built-in theme to Monokai Pro.")
-            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
-        theme_grid,
-        Space::new().height(8),
-        text("clang-format style:").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        row(clang_btns).spacing(4).wrap(),
-        Space::new().height(8),
-        row![
-            button(text("Save")).on_press(Message::SettingsSave),
-            button(text("Discard")).on_press(Message::SettingsDiscard),
+    let format_section = container(
+        column![
+            th::section_title("Code Formatting"),
+            row(clang_btns).spacing(4).wrap(),
         ]
-        .spacing(8),
-        Space::new().height(8),
-        text("Terminal + editor are used by the 'Open in Editor' button.")
-            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
-        text("Scan dirs: edit ~/.config/newc/config.toml directly.")
-            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        .spacing(8)
+        .padding(12),
+    )
+    .style(th::section_style);
+
+    // ── Scan paths note ───────────────────────────────────────────────────────
+    let paths_section = container(
+        column![
+            th::section_title("Scan Paths"),
+            th::hint_text("Edit ~/.config/newc/config.toml directly to add scan directories."),
+        ]
+        .spacing(6)
+        .padding(12),
+    )
+    .style(th::section_style);
+
+    // ── Save / Discard ────────────────────────────────────────────────────────
+    let actions = row![
+        button(text("Save").size(12))
+            .on_press(Message::SettingsSave)
+            .style(th::btn_primary),
+        button(text("Discard").size(12))
+            .on_press(Message::SettingsDiscard)
+            .style(th::btn_secondary),
     ]
-    .spacing(8)
+    .spacing(8);
+
+    column![
+        row![th::heading("Settings"), Space::new().width(iced::Length::Fill)].spacing(8),
+        th::separator(),
+        editor_section,
+        appearance_section,
+        format_section,
+        paths_section,
+        actions,
+    ]
+    .spacing(10)
     .padding(16)
     .into()
 }
