@@ -1,9 +1,13 @@
-use iced::widget::{button, checkbox, column, row, text, text_input, Space};
-use iced::{Color, Element};
+//! New-project creation form — name, author, location, git init, template, and default modules.
+
+use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
+use iced::Element;
 use newc_core::{module::is_valid_c_ident, project_template};
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
+/// Renders the "New Project" creation form.
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let name = &state.create_name;
     let name_valid = name.trim().is_empty() || is_valid_c_ident(name.trim());
@@ -18,12 +22,14 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         text("Template:").width(90).into(),
         button(text("Blank"))
             .on_press(Message::CreateTemplate(usize::MAX))
+            .style(th::btn_secondary)
             .into(),
     ];
     for (i, t) in templates.iter().enumerate() {
         tmpl_btns.push(
             button(text(t.name).size(12))
                 .on_press(Message::CreateTemplate(i))
+                .style(th::btn_secondary)
                 .into(),
         );
     }
@@ -50,7 +56,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         col = col.push(
             text("Must be a valid C identifier (letters, digits, underscores; no spaces)")
                 .size(12)
-                .color(Color::from_rgb(1.0, 0.3, 0.3)),
+                .color(th::color::ACCENT),
         );
     }
 
@@ -72,7 +78,8 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                     .on_input(Message::CreateLocation)
                     .width(240),
                 button(text("Browse…").size(12))
-                    .on_press(Message::CreateLocationBrowse),
+                    .on_press(Message::CreateLocationBrowse)
+                    .style(th::btn_secondary),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
@@ -91,7 +98,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         col = col.push(
             text("Location path does not exist.")
                 .size(12)
-                .color(Color::from_rgb(1.0, 0.3, 0.3)),
+                .color(th::color::ACCENT),
         );
     }
 
@@ -120,18 +127,18 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     col = col.push(module_checks);
 
     // ── Buttons ───────────────────────────────────────────────────────────────
-    let mut create_btn = button(text("Create"));
+    let mut create_btn = button(text("Create")).style(th::btn_primary);
     if can_create {
         create_btn = create_btn.on_press(Message::CreateSubmit);
     }
 
-    col.push(Space::new().height(8))
+    let content = col.push(Space::new().height(8))
        .push(
            row![
                create_btn,
-               button(text("Cancel")).on_press(Message::Navigate(View::Home)),
+               button(text("Cancel")).on_press(Message::Navigate(View::Home)).style(th::btn_ghost),
            ]
            .spacing(8),
-       )
-       .into()
+       );
+    scrollable(content).height(iced::Length::Fill).into()
 }

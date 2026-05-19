@@ -1,23 +1,41 @@
+//! Source-code statistics for newc projects.
+//!
+//! Counts functions, lines of code (LOC), and raw source lines per module.
+//! LOC excludes blank lines and comment-only lines.
+
 use std::path::Path;
 
 use crate::sync::extract_signatures;
 
+/// Aggregate statistics for an entire project.
 #[derive(Debug, Clone, Default)]
 pub struct ProjectStats {
+    /// Total number of functions across all modules (excludes `main()`).
     pub total_functions: usize,
+    /// Total LOC across all source files including `main.c`.
     pub total_loc: usize,
+    /// Total raw source lines including `main.c`.
     pub total_source_lines: usize,
+    /// Per-module breakdown, sorted descending by function count.
     pub module_stats: Vec<ModuleStats>,
 }
 
+/// Statistics for a single module (one `.c` file, excluding `main.c`).
 #[derive(Debug, Clone)]
 pub struct ModuleStats {
+    /// Module name (stem of the `.c` filename).
     pub name: String,
+    /// Number of functions defined in the module.
     pub functions: usize,
+    /// Lines of code (non-blank, non-comment lines).
     pub loc: usize,
+    /// Total raw line count including comments and blank lines.
     pub source_lines: usize,
 }
 
+/// Compute statistics for the project at `root`.
+///
+/// Returns a zeroed [`ProjectStats`] if `src/` cannot be read.
 pub fn compute(root: &Path) -> ProjectStats {
     let src_dir = root.join("src");
     let Ok(entries) = std::fs::read_dir(&src_dir) else {

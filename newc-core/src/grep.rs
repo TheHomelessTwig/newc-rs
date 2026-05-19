@@ -1,19 +1,42 @@
-use std::path::Path;
+//! Regex-based text search across a project's C source and header files.
 
+use std::path::Path;
+use regex::RegexBuilder;
+
+/// A single line that matched a search query.
 #[derive(Debug, Clone)]
 pub struct SearchResult {
+    /// Filename (basename only) of the matching file.
     pub file: String,
+    /// 1-based line number of the match.
     pub line_no: usize,
+    /// Trimmed text of the matching line.
     pub text: String,
-    /// Module name if the file is a known .c source file (not main.c)
+    /// Module name if the file is a known `.c` source file (not `main.c`).
     pub module: Option<String>,
 }
 
+/// Search `src/` and `include/` for `query`.
+///
+/// If `query` is a valid regex it is used as-is (case-insensitive); invalid
+/// regex is automatically escaped and treated as a literal substring.
+/// Returns an empty vec for an empty query.
 pub fn search(root: &Path, query: &str) -> Vec<SearchResult> {
     if query.is_empty() {
         return Vec::new();
     }
-    let q = query.to_lowercase();
+
+    // Build regex: try query as regex, fall back to literal escape.
+    let pattern = RegexBuilder::new(query)
+        .case_insensitive(true)
+        .build()
+        .unwrap_or_else(|_| {
+            RegexBuilder::new(&regex::escape(query))
+                .case_insensitive(true)
+                .build()
+                .expect("escaped literal always valid")
+        });
+
     let mut results = Vec::new();
 
     let search_dirs = [root.join("src"), root.join("include")];
@@ -43,7 +66,7 @@ pub fn search(root: &Path, query: &str) -> Vec<SearchResult> {
             };
 
             for (i, line) in content.lines().enumerate() {
-                if line.to_lowercase().contains(&q) {
+                if pattern.is_match(line) {
                     results.push(SearchResult {
                         file: file_name.clone(),
                         line_no: i + 1,

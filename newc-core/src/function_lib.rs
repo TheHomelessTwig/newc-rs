@@ -1,33 +1,50 @@
+//! Built-in and user-defined C function template library.
+//!
+//! Built-in functions are embedded at compile time from `assets/functions/*.toml`.
+//! Users can add their own functions under `~/.config/newc/functions/` and create
+//! custom groups via `~/.config/newc/groups.toml`.
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
+/// A reusable C function template that can be inserted into a project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionTemplate {
+    /// C function name (also used as the unique key).
     pub name: String,
+    /// Library group this function belongs to (e.g. `"input"`, `"math"`).
     pub module: String,
     pub description: String,
+    /// Full C function signature, e.g. `"int read_int(void)"`.
     pub signature: String,
+    /// Declarations and typedefs to insert into the module's `.h` file.
     pub header_code: String,
+    /// Complete C function definition to insert into the module's `.c` file.
     pub impl_code: String,
+    /// Names of other [`FunctionTemplate`]s that must also be inserted.
     #[serde(default)]
     pub requires: Vec<String>,
+    /// Searchable keyword tags.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Free-form usage notes shown in the GUI.
     #[serde(default)]
     pub notes: String,
+    /// Whether the user has starred this function for quick access.
     #[serde(default)]
     pub starred: bool,
 }
 
+/// A named category that groups related [`FunctionTemplate`]s in the library browser.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FunctionGroup {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    /// true = built-in group (input/math/display/array), cannot be deleted
+    /// `true` for built-in groups (`input`, `math`, `display`, `array`, …); these cannot be deleted.
     #[serde(default)]
     pub builtin: bool,
 }
@@ -43,13 +60,23 @@ struct GroupsFile {
     pub groups: Vec<FunctionGroup>,
 }
 
+/// In-memory library of all available [`FunctionTemplate`]s and their [`FunctionGroup`]s.
+///
+/// Built-in templates are loaded from embedded TOML assets; user templates are merged
+/// from `~/.config/newc/functions/*.toml`.
 #[derive(Debug, Default, Clone)]
 pub struct FunctionLibrary {
     functions: Vec<FunctionTemplate>,
+    /// All groups, built-in first then user-defined.
     pub groups: Vec<FunctionGroup>,
 }
 
 impl FunctionLibrary {
+    /// Load the library from built-in assets and user overrides.
+    ///
+    /// User functions at `~/.config/newc/functions/<module>.toml` override built-in
+    /// functions with the same name. User groups from `~/.config/newc/groups.toml`
+    /// are merged after the built-in groups.
     pub fn load() -> Self {
         let mut lib = Self::default();
 
@@ -124,6 +151,9 @@ impl FunctionLibrary {
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
+    /// Create a new user-defined group.
+    ///
+    /// Returns `false` if a group with that name already exists.
     pub fn create_group(&mut self, name: impl Into<String>, description: impl Into<String>) -> bool {
         let name = name.into();
         if self.groups.iter().any(|g| g.name == name) {
@@ -133,6 +163,9 @@ impl FunctionLibrary {
         true
     }
 
+    /// Rename a user-defined group and update the `module` field on all its functions.
+    ///
+    /// Returns `false` if the group is built-in, not found, or the new name is already taken.
     pub fn rename_group(&mut self, old: &str, new: impl Into<String>) -> bool {
         let new = new.into();
         if self.groups.iter().any(|g| g.name == new) {
@@ -163,6 +196,10 @@ impl FunctionLibrary {
         true
     }
 
+    /// Persist user-defined groups to `~/.config/newc/groups.toml`.
+    ///
+    /// # Errors
+    /// Returns an error if serialisation or the write fails.
     pub fn save_groups(&self) -> Result<()> {
         let Some(path) = groups_path() else { return Ok(()) };
         if let Some(parent) = path.parent() {
@@ -178,20 +215,24 @@ impl FunctionLibrary {
         Ok(())
     }
 
+    /// Return the names of all groups in display order.
     pub fn group_names(&self) -> Vec<String> {
         self.groups.iter().map(|g| g.name.clone()).collect()
     }
 
     // ── Functions ─────────────────────────────────────────────────────────────
 
+    /// Return a slice of every function template in the library.
     pub fn all(&self) -> &[FunctionTemplate] {
         &self.functions
     }
 
+    /// Return all functions belonging to the given module/group name.
     pub fn by_module(&self, module: &str) -> Vec<&FunctionTemplate> {
         self.functions.iter().filter(|f| f.module == module).collect()
     }
 
+    /// Search by name, description, tags, and module (case-insensitive substring).
     pub fn search(&self, query: &str) -> Vec<&FunctionTemplate> {
         let q = query.to_lowercase();
         self.functions
@@ -205,6 +246,7 @@ impl FunctionLibrary {
             .collect()
     }
 
+    /// Return a sorted, deduplicated list of module names present in the library.
     pub fn modules(&self) -> Vec<String> {
         let mut mods: Vec<String> =
             self.functions.iter().map(|f| f.module.clone()).collect();
@@ -213,6 +255,9 @@ impl FunctionLibrary {
         mods
     }
 
+    /// Insert or replace a function template (matched by name).
+    ///
+    /// Automatically registers a new group if `func.module` is not yet known.
     pub fn upsert(&mut self, func: FunctionTemplate) {
         // Auto-register group if new
         if !self.groups.iter().any(|g| g.name == func.module) {
@@ -226,14 +271,19 @@ impl FunctionLibrary {
         self.functions.push(func);
     }
 
+    /// Remove a function template by name. No-ops if not found.
     pub fn remove(&mut self, name: &str) {
         self.functions.retain(|f| f.name != name);
     }
 
+    /// Return a mutable reference to the function template with the given name.
     pub fn get_mut(&mut self, name: &str) -> Option<&mut FunctionTemplate> {
         self.functions.iter_mut().find(|f| f.name == name)
     }
 
+    /// Expand `selected` function names to include all transitive `requires` dependencies.
+    ///
+    /// The returned list is in insertion order (root functions first, dependencies appended).
     pub fn resolve_deps(&self, selected: &[String]) -> Vec<String> {
         let mut resolved: Vec<String> = selected.to_vec();
         let mut i = 0;
@@ -251,6 +301,12 @@ impl FunctionLibrary {
         resolved
     }
 
+    /// Persist a user-defined function template to `~/.config/newc/functions/<module>.toml`.
+    ///
+    /// Existing functions with the same name in that file are replaced.
+    ///
+    /// # Errors
+    /// Returns an error if the directory cannot be created or the file cannot be written.
     pub fn save_user_function(func: &FunctionTemplate) -> Result<()> {
         let Some(dir) = user_functions_dir() else { return Ok(()) };
         std::fs::create_dir_all(&dir)?;

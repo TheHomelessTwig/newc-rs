@@ -1,7 +1,19 @@
+//! Markdown report generator for a newc project.
+//!
+//! Produces a summary document combining project metadata, statistics,
+//! a function inventory per module, build history, and project notes.
+
 use std::path::Path;
 
 use crate::{build_history, meta, notes, stats};
 
+/// Generate a Markdown report for the project at `root`.
+///
+/// Sections included: project info (if any metadata exists), statistics table,
+/// per-module function list, last 10 build records, and project notes.
+///
+/// # Returns
+/// A Markdown string ready to display or save to disk.
 pub fn generate(root: &Path, project_name: &str) -> String {
     let mut md = String::new();
 

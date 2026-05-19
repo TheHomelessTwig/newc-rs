@@ -1,16 +1,21 @@
+//! Git panel — branch switcher, staged/unstaged file list, commit form, and recent log.
+
 use iced::widget::{button, column, row, scrollable, text, text_input, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 use newc_core::{git, project::Project};
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
+/// Renders the Git panel screen for the given project.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let header = row![
         button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+            .style(th::btn_ghost),
         text(format!("◆ Git — {}", project.name))
             .size(18)
-            .color(Color::from_rgb(0.663, 0.863, 0.463)),
+            .color(th::color::GREEN),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -20,8 +25,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     if !is_repo {
         return column![
             header,
-            text("No git repository found.").color(Color::from_rgb(1.0, 0.847, 0.4)),
-            button(text("Init repository")).on_press(Message::None),
+            text("No git repository found.").color(th::color::YELLOW),
+            button(text("Init repository")).on_press(Message::GitInit).style(th::btn_primary),
         ]
         .spacing(10)
         .padding(16)
@@ -32,7 +37,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let branches = git::branches(&project.root);
     let cur_branch = git::current_branch(&project.root);
     let mut branch_btns: Vec<Element<Message>> = vec![
-        text(format!("⎇ {}", cur_branch)).color(Color::from_rgb(0.314, 0.784, 0.471)).into(),
+        text(format!("⎇ {}", cur_branch)).color(th::color::GREEN).into(),
     ];
     for b in &branches {
         let b = b.clone();
@@ -49,7 +54,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         text_input("New branch…", &state.git_new_branch)
             .on_input(Message::GitNewBranch)
             .width(180),
-        button(text("Create").size(12)).on_press(Message::GitCreateBranch),
+        button(text("Create").size(12)).on_press(Message::GitCreateBranch).style(th::btn_secondary),
     ]
     .spacing(6)
     .align_y(iced::Alignment::Center);
@@ -58,14 +63,14 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let status_block: Element<Message> = if let Some(status) = git::status(&project.root) {
         column![
             row![
-                text("Branch:").color(Color::WHITE),
-                text(status.branch.clone()).color(Color::from_rgb(0.314, 0.784, 0.471)).font(iced::Font::MONOSPACE),
+                text("Branch:").color(th::color::TEXT),
+                text(status.branch.clone()).color(th::color::GREEN).font(iced::Font::MONOSPACE),
                 text(format!("staged: {}  unstaged: {}  untracked: {}",
                     status.staged, status.unstaged, status.untracked))
-                    .size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                    .size(12).color(th::color::TEXT_DIM),
                 Space::new().width(Length::Fill),
-                button(text("Pull")).on_press(Message::GitPull),
-                button(text("Push")).on_press(Message::GitPush),
+                button(text("Pull")).on_press(Message::GitPull).style(th::btn_secondary),
+                button(text("Push")).on_press(Message::GitPush).style(th::btn_secondary),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
@@ -74,7 +79,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         .padding(8)
         .into()
     } else {
-        text("Unable to get git status").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+        text("Unable to get git status").color(th::color::TEXT_DIM).into()
     };
 
     // Staged / unstaged files
@@ -82,13 +87,13 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let (staged_files, unstaged_files): (Vec<_>, Vec<_>) = changed.iter().partition(|f| f.staged);
 
     let staged_section: Element<Message> = if staged_files.is_empty() {
-        text("Nothing staged.").size(12).color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+        text("Nothing staged.").size(12).color(th::color::TEXT_DIM).into()
     } else {
         let rows: Vec<Element<Message>> = staged_files.iter().map(|f| {
             let path_str = f.path.clone();
             row![
-                text(f.path.clone()).size(12).font(iced::Font::MONOSPACE).color(Color::from_rgb(0.663, 0.863, 0.463)),
-                button(text("Unstage").size(10)).on_press(Message::GitUnstage(path_str)),
+                text(f.path.clone()).size(12).font(iced::Font::MONOSPACE).color(th::color::GREEN),
+                button(text("Unstage").size(10)).on_press(Message::GitUnstage(path_str)).style(th::btn_ghost),
             ]
             .spacing(8)
             .into()
@@ -97,13 +102,13 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     };
 
     let unstaged_section: Element<Message> = if unstaged_files.is_empty() {
-        text("No changes.").size(12).color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+        text("No changes.").size(12).color(th::color::TEXT_DIM).into()
     } else {
         let rows: Vec<Element<Message>> = unstaged_files.iter().map(|f| {
             let path_str = f.path.clone();
             row![
-                text(f.path.clone()).size(12).font(iced::Font::MONOSPACE).color(Color::from_rgb(1.0, 0.847, 0.4)),
-                button(text("Stage").size(10)).on_press(Message::GitStage(path_str)),
+                text(f.path.clone()).size(12).font(iced::Font::MONOSPACE).color(th::color::YELLOW),
+                button(text("Stage").size(10)).on_press(Message::GitStage(path_str)).style(th::btn_secondary),
             ]
             .spacing(8)
             .into()
@@ -117,7 +122,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .on_input(Message::GitCommitMsg)
             .on_submit(Message::GitCommit)
             .width(320),
-        button(text("Commit")).on_press(Message::GitCommit),
+        button(text("Commit")).on_press(Message::GitCommit).style(th::btn_primary),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -127,8 +132,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let log_rows: Vec<Element<Message>> = log_entries.iter().map(|entry| {
         row![
             text(entry.hash.clone()).size(11).font(iced::Font::MONOSPACE)
-                .color(Color::from_rgb(1.0, 0.847, 0.4)).width(70),
-            text(entry.author.clone()).size(11).width(120).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                .color(th::color::YELLOW).width(70),
+            text(entry.author.clone()).size(11).width(120).color(th::color::TEXT_DIM),
             text(entry.message.clone()).size(11),
         ]
         .spacing(8)
@@ -140,12 +145,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         branch_row,
         new_branch_row,
         status_block,
-        text("Staged").size(13).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Staged").size(13).color(th::color::CYAN),
         staged_section,
-        text("Unstaged").size(13).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Unstaged").size(13).color(th::color::CYAN),
         unstaged_section,
         commit_row,
-        text("Recent commits").size(13).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Recent commits").size(13).color(th::color::CYAN),
         scrollable(column(log_rows).spacing(2)).height(200),
     ]
     .spacing(8)

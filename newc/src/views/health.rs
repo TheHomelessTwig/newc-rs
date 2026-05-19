@@ -1,9 +1,13 @@
+//! Project health dashboard — summary cards and detail lists for build status, dead code, lint, and more.
+
 use iced::widget::{button, column, row, scrollable, text, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 use newc_core::{analysis, build_history, grep, lint, project::Project};
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
+/// Cached health check results for a project, recomputed on demand.
 #[derive(Default, Clone)]
 pub struct HealthSnapshot {
     pub last_build_ok: bool,
@@ -15,9 +19,11 @@ pub struct HealthSnapshot {
     pub missing_includes_text: String,
     pub todos_count: usize,
     pub todos_text: String,
+    /// Each entry is `(file, line_number, text)`.
     pub todos: Vec<(String, usize, String)>,
     pub lint_count: usize,
     pub lint_text: String,
+    /// Each entry is `(file, lint_code, message)`.
     pub lint_warnings: Vec<(String, &'static str, String)>,
     pub header_guard_count: usize,
     pub header_guard_text: String,
@@ -25,20 +31,23 @@ pub struct HealthSnapshot {
     pub proto_mismatch_count: usize,
     pub proto_mismatch_text: String,
     pub proto_mismatches: Vec<(String, String)>,
+    /// Unix timestamp of the most recently modified source file, used to detect staleness.
     pub source_mtime: u64,
 }
 
+/// Renders the health dashboard screen with summary cards and expandable detail sections.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let snap = &state.health_snapshot;
 
     let header = row![
         button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+            .style(th::btn_ghost),
         text(format!("♥ Health — {}", project.name))
             .size(18)
-            .color(Color::from_rgb(0.980, 0.376, 0.533)),
+            .color(th::color::ACCENT),
         Space::new().width(Length::Fill),
-        button(text("Refresh")).on_press(Message::RefreshProject),
+        button(text("Refresh")).on_press(Message::RefreshProject).style(th::btn_secondary),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -63,35 +72,35 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let todo_rows: Vec<Element<Message>> = snap.todos.iter().map(|(file, ln, txt)| {
             row![
                 text(format!("{file}:{ln}")).size(11).font(iced::Font::MONOSPACE)
-                    .color(Color::from_rgb(0.5, 0.5, 0.5)).width(180),
-                text(txt.clone()).size(11).color(Color::from_rgb(1.0, 0.824, 0.235)),
+                    .color(th::color::TEXT_DIM).width(180),
+                text(txt.clone()).size(11).color(th::color::YELLOW),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("◈ TODOs & FIXMEs").size(14).color(Color::from_rgb(1.0, 0.847, 0.4)).into());
+        detail_sections.push(text("◈ TODOs & FIXMEs").size(14).color(th::color::YELLOW).into());
         detail_sections.push(column(todo_rows).spacing(2).into());
     }
 
     if !snap.dead_code_funcs.is_empty() {
         let rows: Vec<Element<Message>> = snap.dead_code_funcs.iter().map(|f| {
             text(format!("  {f}")).size(12).font(iced::Font::MONOSPACE)
-                .color(Color::from_rgb(1.0, 0.549, 0.0)).into()
+                .color(th::color::ORANGE).into()
         }).collect();
-        detail_sections.push(text("⚠ Unreachable Functions").size(14).color(Color::from_rgb(1.0, 0.376, 0.533)).into());
+        detail_sections.push(text("⚠ Unreachable Functions").size(14).color(th::color::ACCENT).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
     if !snap.lint_warnings.is_empty() {
         let rows: Vec<Element<Message>> = snap.lint_warnings.iter().map(|(file, code, msg)| {
             row![
-                text(format!("[{code}]")).size(11).width(60).color(Color::from_rgb(0.5, 0.5, 0.5)),
-                text(format!("{file}: {msg}")).size(11).color(Color::from_rgb(1.0, 0.784, 0.314)),
+                text(format!("[{code}]")).size(11).width(60).color(th::color::TEXT_DIM),
+                text(format!("{file}: {msg}")).size(11).color(th::color::ORANGE),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("⚠ Lint Warnings").size(14).color(Color::from_rgb(1.0, 0.847, 0.4)).into());
+        detail_sections.push(text("⚠ Lint Warnings").size(14).color(th::color::YELLOW).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
@@ -99,18 +108,18 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let rows: Vec<Element<Message>> = snap.proto_mismatches.iter().map(|(func, detail)| {
             row![
                 text(func.clone()).size(12).font(iced::Font::MONOSPACE).width(160),
-                text(detail.clone()).size(11).color(Color::from_rgb(1.0, 0.376, 0.533)),
+                text(detail.clone()).size(11).color(th::color::ACCENT),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("⚠ Prototype Mismatches").size(14).color(Color::from_rgb(1.0, 0.376, 0.533)).into());
+        detail_sections.push(text("⚠ Prototype Mismatches").size(14).color(th::color::ACCENT).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
     if detail_sections.is_empty() {
         detail_sections.push(
-            text("✓ All checks passed!").color(Color::from_rgb(0.392, 0.863, 0.392)).into()
+            text("✓ All checks passed!").color(th::color::GREEN).into()
         );
     }
 
@@ -125,14 +134,18 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 }
 
 fn health_card<'a>(title: &'a str, value: &'a str, ok: bool) -> Element<'a, Message> {
-    let color = if ok { Color::from_rgb(0.392, 0.863, 0.392) } else { Color::from_rgb(1.0, 0.376, 0.533) };
+    use iced::widget::container;
+    let color = if ok { th::color::GREEN } else { th::color::ACCENT };
     let icon = if ok { "✓" } else { "⚠" };
-    column![
-        text(format!("{icon} {title}")).size(11).color(color),
-        text(value).size(12).color(Color::WHITE),
-    ]
-    .spacing(2)
-    .padding(8)
+    container(
+        column![
+            text(format!("{icon} {title}")).size(11).color(color),
+            text(value).size(12).color(th::color::TEXT),
+        ]
+        .spacing(2)
+        .padding(8),
+    )
+    .style(th::section_style)
     .into()
 }
 

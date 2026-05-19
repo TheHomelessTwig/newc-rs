@@ -1,21 +1,35 @@
-use iced::widget::{button, column, row, scrollable, text, text_input, Space};
+//! Function library browser — grouped function list, detail/edit panel, and composer integration.
+
+use iced::widget::{button, column, pane_grid, row, scrollable, text, text_input, Space};
 use iced::{Color, Element, Length};
 use newc_core::function_lib::{FunctionLibrary, FunctionTemplate};
 use newc_core::main_builder::MainBlock;
 
+use crate::highlight::code_view;
 use crate::state::{AppState, LibraryField, Message};
 
+/// Identifies which pane of the Library resizable pane-grid is being rendered.
+#[derive(Clone, Copy)]
+pub enum LibraryPane { Groups, Functions, Detail }
+
+/// Persistent UI state for the function library view.
 #[derive(Default, Clone)]
 pub struct LibraryState {
+    /// Name of the currently selected function, if any.
     pub selected: Option<String>,
     pub search: String,
     pub edit_mode: bool,
+    /// In-progress edits to a function template (new or existing).
     pub draft: Option<FunctionTemplate>,
+    /// True when the "New Function" form is open.
     pub adding_new: bool,
+    /// Currently active group filter; `None` = show all.
     pub active_group: Option<String>,
     pub rename_input: String,
+    /// Parameter list parsed from the draft signature for the param builder UI.
     pub draft_params: Vec<(String, String)>,
     pub draft_return_type: String,
+    /// When true the signature field is edited directly, bypassing the param builder.
     pub draft_override_sig: bool,
     pub draft_params_ready: bool,
 }
@@ -51,6 +65,7 @@ impl LibraryState {
     }
 }
 
+/// Actions that can be produced by the library view (currently unused; kept for future use).
 #[derive(Debug, Clone)]
 pub enum LibraryAction {
     None,
@@ -64,6 +79,7 @@ pub enum LibraryAction {
     DeleteGroup { name: String, cascade: bool },
 }
 
+/// Renders the function library screen with group sidebar, function list, and detail/edit panel.
 pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Message> {
     let ls = &state.library_state;
 
@@ -213,7 +229,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
         }
     } else if let Some(sel) = &ls.selected {
         if let Some(f) = lib.all().iter().find(|f| &f.name == sel) {
-            view_func(f)
+            view_func(f, state.pending_library_insert_module.as_deref())
         } else {
             text("Function not found.").into()
         }
@@ -221,32 +237,54 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
         text("Select a function").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
     };
 
+    let groups_cell = std::cell::RefCell::new(Some(group_panel.into()));
+    let fns_cell = std::cell::RefCell::new(Some(fn_panel.into()));
+    let detail_cell = std::cell::RefCell::new(Some(scrollable(detail).height(Length::Fill).into()));
+
+    let grid: Element<Message> = pane_grid::PaneGrid::new(&state.library_panes, |_, pane, _| {
+        let body: Element<Message> = match pane {
+            LibraryPane::Groups => groups_cell.borrow_mut().take().unwrap(),
+            LibraryPane::Functions => fns_cell.borrow_mut().take().unwrap(),
+            LibraryPane::Detail => detail_cell.borrow_mut().take().unwrap(),
+        };
+        pane_grid::Content::new(body)
+    })
+    .on_resize(8, Message::LibraryPaneResized)
+    .spacing(4)
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into();
+
     column![
         toolbar,
-        row![
-            group_panel,
-            fn_panel,
-            scrollable(detail).height(Length::Fill),
-        ]
-        .spacing(8)
-        .height(Length::Fill),
+        grid,
     ]
     .spacing(8)
     .padding(12)
     .into()
 }
 
-fn view_func(f: &FunctionTemplate) -> Element<'_, Message> {
+fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>) -> Element<'a, Message> {
+    let insert_btn: Option<Element<Message>> = pending_module.map(|m| {
+        button(text(format!("→ Insert into {m}")).size(12))
+            .on_press(Message::LibraryInsertToModule)
+            .into()
+    });
+    let mut header_row = row![
+        text(f.name.clone()).size(16),
+        text(format!("({})", f.module)).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        Space::new().width(Length::Fill),
+        button(text("Edit").size(12)).on_press(Message::LibraryEditMode(true)),
+        button(text("Delete").size(12)).on_press(Message::LibraryDelete(f.name.clone())),
+    ]
+    .spacing(6)
+    .align_y(iced::Alignment::Center);
+    if let Some(btn) = insert_btn {
+        header_row = header_row.push(btn);
+    }
+
     column![
-        row![
-            text(f.name.clone()).size(16),
-            text(format!("({})", f.module)).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
-            Space::new().width(Length::Fill),
-            button(text("Edit").size(12)).on_press(Message::LibraryEditMode(true)),
-            button(text("Delete").size(12)).on_press(Message::LibraryDelete(f.name.clone())),
-        ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center),
+        header_row,
         text(f.description.clone()).color(Color::from_rgb(0.85, 0.85, 0.85)),
         {
             let tags_str = f.tags.join(", ");
@@ -258,9 +296,9 @@ fn view_func(f: &FunctionTemplate) -> Element<'_, Message> {
             el
         },
         text("Prototype").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text(f.header_code.clone()).font(iced::Font::MONOSPACE).size(12),
+        code_view(&f.header_code, 12.0, None, None),
         text("Implementation").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text(f.impl_code.clone()).font(iced::Font::MONOSPACE).size(12),
+        code_view(&f.impl_code, 12.0, None, None),
         {
             let req_str = f.requires.join(", ");
             let el: Element<Message> = if !req_str.is_empty() {
@@ -334,9 +372,9 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
         ]
         .spacing(8).align_y(iced::Alignment::Center),
         text("Header (.h):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text(header_val.clone()).font(iced::Font::MONOSPACE).size(12),
+        code_view(&header_val, 12.0, None, None),
         text("Implementation (.c):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text(impl_val.clone()).font(iced::Font::MONOSPACE).size(12),
+        code_view(&impl_val, 12.0, None, None),
         text("(Full code editor integration coming in next iteration)")
             .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
         row![

@@ -1,3 +1,9 @@
+//! Dead-code detection and removal for C projects.
+//!
+//! Performs BFS reachability analysis starting from `main()` to find functions
+//! in module `.c` files that are never called, and can surgically remove them
+//! from both the source and the corresponding header.
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -5,12 +11,20 @@ use std::path::{Path, PathBuf};
 use crate::error::{NewcError, Result};
 use crate::sync::extract_signatures;
 
+/// A module function that cannot be reached from `main()`.
 #[derive(Debug, Clone)]
 pub struct UnreachableFunc {
+    /// Fully-qualified C function name.
     pub name: String,
+    /// Path to the `.c` file that contains the definition.
     pub source: PathBuf,
 }
 
+/// Return all module functions that are unreachable from `main()`.
+///
+/// # Errors
+/// Returns [`NewcError::NoModules`] if the project has no module source files,
+/// or an IO error if any source file cannot be read.
 pub fn check(root: &Path) -> Result<Vec<UnreachableFunc>> {
     let func_map = collect_module_functions(root)?;
     if func_map.is_empty() {
@@ -26,6 +40,16 @@ pub fn check(root: &Path) -> Result<Vec<UnreachableFunc>> {
     Ok(unreachable)
 }
 
+/// Remove the specified functions from their source files and headers.
+///
+/// Also deletes any module that becomes empty (no remaining functions) and
+/// removes the corresponding `#include` line from every `.c` file in the project.
+///
+/// # Returns
+/// A log of actions taken, one entry per removal or deleted module.
+///
+/// # Errors
+/// Propagates IO errors from reading or writing source files.
 pub fn tidy(root: &Path, to_remove: &[String]) -> Result<Vec<String>> {
     let func_map = collect_module_functions(root)?;
     let mut log = Vec::new();
@@ -222,6 +246,13 @@ fn extract_func_name(sig: &str) -> Option<String> {
     }
 }
 
+/// Public wrapper around the internal function-removal routine.
+///
+/// Strips the block comment immediately preceding `fname`, its signature, and
+/// its entire body from `src`. No-ops gracefully if `fname` is not found.
+///
+/// # Errors
+/// Returns an IO error if `src` cannot be read or written.
 pub fn remove_function_from_source_pub(src: &Path, fname: &str) -> Result<()> {
     remove_function_from_source(src, fname)
 }

@@ -1,3 +1,5 @@
+//! Home screen — project list with workspace tabs, first-run onboarding card, and quick actions.
+
 use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
 use iced::{Background, Border, Element, Length};
 
@@ -17,6 +19,7 @@ fn project_card_style(_: &iced::Theme, status: button::Status) -> button::Style 
     }
 }
 
+/// Renders the home screen with the project list, workspace tabs, and optional onboarding.
 pub fn view(state: &AppState) -> Element<'_, Message> {
     // ── Header ───────────────────────────────────────────────────────────────
     let header = row![

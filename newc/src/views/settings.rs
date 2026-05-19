@@ -1,4 +1,6 @@
-use iced::widget::{button, column, container, row, text, text_input, Space};
+//! Settings screen — editor/terminal paths, theme picker, clang-format style, and per-project overrides.
+
+use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
 use iced::Element;
 
 use crate::app::ALL_THEMES;
@@ -15,6 +17,7 @@ fn form_row<'a>(label: &'a str, control: impl Into<Element<'a, Message>>) -> Ele
     .into()
 }
 
+/// Renders the settings screen with global and per-project configuration sections.
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let cfg = &state.config_draft;
     let current_theme = &state.active_theme;
@@ -141,16 +144,55 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     ]
     .spacing(8);
 
-    column![
+    // ── Per-project overrides ─────────────────────────────────────────────────
+    let project_section: Option<Element<Message>> = state.project_config.as_ref().map(|_| {
+        let draft = &state.project_config_draft;
+        container(
+            column![
+                th::section_title("Project Overrides"),
+                th::hint_text("Stored in .newc_config.toml in the project root. Blank = use global."),
+                form_row("Editor:", text_input(
+                    &state.config.editor,
+                    draft.editor.as_deref().unwrap_or(""),
+                ).on_input(Message::ProjectConfigDraftEditor).width(280)),
+                form_row("Terminal:", text_input(
+                    &state.config.terminal,
+                    draft.terminal.as_deref().unwrap_or(""),
+                ).on_input(Message::ProjectConfigDraftTerminal).width(280)),
+                form_row("clang-format style:", text_input(
+                    &state.config.clang_format_style,
+                    draft.clang_format_style.as_deref().unwrap_or(""),
+                ).on_input(Message::ProjectConfigDraftClangStyle).width(180)),
+                row![
+                    button(text("Save Project Settings").size(12))
+                        .on_press(Message::ProjectConfigSave)
+                        .style(th::btn_primary),
+                    button(text("Clear").size(12))
+                        .on_press(Message::ProjectConfigClear)
+                        .style(th::btn_danger),
+                ]
+                .spacing(8),
+            ]
+            .spacing(6)
+            .padding(12),
+        )
+        .style(th::section_style)
+        .into()
+    });
+
+    let mut col = column![
         row![th::heading("Settings"), Space::new().width(iced::Length::Fill)].spacing(8),
         th::separator(),
         editor_section,
         appearance_section,
         format_section,
         paths_section,
-        actions,
     ]
     .spacing(10)
-    .padding(16)
-    .into()
+    .padding(16);
+
+    if let Some(proj_sec) = project_section {
+        col = col.push(proj_sec);
+    }
+    scrollable(col.push(actions)).height(iced::Length::Fill).into()
 }

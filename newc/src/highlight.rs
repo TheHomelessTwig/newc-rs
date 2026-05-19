@@ -1,5 +1,23 @@
-use iced::Color;
+//! Syntax highlighting for C source code.
+//!
+//! [`highlight_c`] tokenizes a C source string into coloured [`Span`]s using a
+//! Monokai Pro palette. [`code_view`] wraps those spans in a scrollable iced
+//! widget suitable for the module-detail and header-editor panels.
+//!
+//! The highlighter is a single-pass byte scanner: it handles preprocessor
+//! lines, block/line comments, string/char literals, numeric literals,
+//! keywords (type and flow), function calls (identifier followed by `(`), and
+//! operators. It does not parse the full C grammar.
 
+use iced::widget::{column, container, rich_text, scrollable};
+use iced::widget::text::Span as TSpan;
+use iced::{Color, Element, Length};
+use crate::state::Message;
+use crate::theme as th;
+
+/// A contiguous run of text with a single display colour.
+///
+/// Produced by [`highlight_c`] and consumed by [`code_view`].
 #[derive(Debug, Clone)]
 pub struct Span {
     pub text: String,
@@ -29,6 +47,10 @@ static FLOW_KEYWORDS: &[&str] = &[
     "goto", "if", "return", "sizeof", "switch", "while",
 ];
 
+/// Tokenize a C source string into coloured [`Span`]s.
+///
+/// Each logical line is terminated by a `"\n"` span. Tabs are left as-is;
+/// [`code_view`] expands them to four spaces before rendering.
 pub fn highlight_c(source: &str) -> Vec<Span> {
     let mut spans = Vec::new();
     let mut in_block_comment = false;
@@ -39,6 +61,72 @@ pub fn highlight_c(source: &str) -> Vec<Span> {
     }
 
     spans
+}
+
+/// Stable widget ID for the scrollable code view in the module-detail panel.
+///
+/// Used by [`crate::app::NewcApp::update`] to scroll programmatically when
+/// the user clicks a diagnostic line in the build panel.
+pub const MODULE_CODE_SCROLL: &str = "module_code_scroll";
+
+/// Render a highlighted C source string as a scrollable iced widget.
+///
+/// - `font_size` — monospace font size in logical pixels.
+/// - `highlight_line` — 1-based line number to highlight (light background tint); `None` disables highlighting.
+/// - `scroll_id` — if `Some`, assigns a stable [`iced::widget::Id`] to the
+///   scrollable so it can be scrolled programmatically (use [`MODULE_CODE_SCROLL`]).
+pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>, scroll_id: Option<&'static str>) -> Element<'a, Message> {
+    let spans = highlight_c(source);
+
+    let mut lines: Vec<Vec<(String, Color)>> = vec![Vec::new()];
+    for span in spans {
+        if span.text == "\n" {
+            lines.push(Vec::new());
+        } else {
+            let t = span.text.replace('\t', "    ");
+            if let Some(last) = lines.last_mut() {
+                last.push((t, span.color));
+            }
+        }
+    }
+    if lines.last().map(|l| l.is_empty()).unwrap_or(false) {
+        lines.pop();
+    }
+
+    let line_els: Vec<Element<'a, Message>> = lines.into_iter().enumerate().map(|(i, line)| {
+        let tspans: Vec<TSpan<'static>> = if line.is_empty() {
+            vec![TSpan::new(" ").font(iced::Font::MONOSPACE).size(font_size)]
+        } else {
+            line.into_iter().map(|(t, c)| {
+                TSpan::new(t).font(iced::Font::MONOSPACE).size(font_size).color(c)
+            }).collect()
+        };
+        let line_widget = rich_text(tspans);
+        if highlight_line == Some(i + 1) {
+            container(line_widget)
+                .width(Length::Fill)
+                .style(|_| iced::widget::container::Style {
+                    background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.08).into()),
+                    ..Default::default()
+                })
+                .into()
+        } else {
+            line_widget.into()
+        }
+    }).collect();
+
+    let scr = scrollable(column(line_els).spacing(0)).height(Length::Fill);
+    let scr = if let Some(id) = scroll_id {
+        scr.id(iced::widget::Id::new(id))
+    } else {
+        scr
+    };
+    container(scr)
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .padding(8)
+    .style(th::code_block_style)
+    .into()
 }
 
 fn push(spans: &mut Vec<Span>, text: &str, color: Color) {

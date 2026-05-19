@@ -1,8 +1,12 @@
-use iced::widget::{button, column, row, text, Space};
-use iced::{Color, Element};
+//! Keyboard shortcuts reference panel — displayed as a floating overlay when `?` is pressed.
 
+use iced::widget::{button, column, container, row, text, Space};
+use iced::{Element};
+
+use crate::theme as th;
 use crate::state::{AppState, Message};
 
+/// Renders the keyboard shortcuts overlay; returns an empty widget when `state.show_shortcuts` is false.
 pub fn view(state: &AppState) -> Element<'_, Message> {
     if !state.show_shortcuts {
         return Space::new().into();
@@ -21,21 +25,21 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     let table: Vec<Element<Message>> = rows.iter().map(|(key, desc)| {
         row![
-            text(*key).color(Color::from_rgb(1.0, 0.847, 0.4)).width(240),
-            text(*desc).color(Color::WHITE),
+            text(*key).color(th::color::YELLOW).width(240),
+            text(*desc).color(th::color::TEXT),
         ]
         .spacing(12)
         .into()
     }).collect();
 
-    let modal = column![
-        text("Keyboard Shortcuts").size(18),
+    let inner = column![
+        text("Keyboard Shortcuts").size(18).color(th::color::TEXT),
         column(table).spacing(6),
-        button(text("Close")).on_press(Message::ShowShortcuts(false)),
+        button(text("Close")).on_press(Message::ShowShortcuts(false)).style(th::btn_ghost),
     ]
     .spacing(12)
     .padding(20)
     .max_width(500);
 
-    modal.into()
+    container(inner).style(th::card_raised_style).into()
 }

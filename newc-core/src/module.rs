@@ -1,16 +1,32 @@
+//! Module management — listing, adding, and removing `.c`/`.h` module pairs.
+//!
+//! A "module" in newc is a pair of files: `src/<name>.c` and `include/<name>.h`.
+//! Adding a module also injects the appropriate `#include` into `main.c`.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{NewcError, Result};
 
+/// Metadata about a single newc module.
 #[derive(Debug, Clone)]
 pub struct Module {
+    /// Module name (stem of the `.h`/`.c` filenames).
     pub name: String,
+    /// Absolute path to `include/<name>.h`.
     pub header: PathBuf,
+    /// Absolute path to `src/<name>.c`.
     pub source: PathBuf,
+    /// Number of functions defined in `source`.
     pub function_count: usize,
 }
 
+/// List all modules in the project, sorted by name.
+///
+/// A module is any `.h` file in `include/` that has a matching entry in `src/`.
+///
+/// # Errors
+/// Returns an IO error if `include/` cannot be read.
 pub fn list_modules(root: &Path) -> Result<Vec<Module>> {
     let include_dir = root.join("include");
     let mut modules = Vec::new();
@@ -49,6 +65,11 @@ pub fn is_valid_c_ident(s: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// Create a new module (`.c` + `.h` pair) and inject its `#include` into `main.c`.
+///
+/// # Errors
+/// Returns [`NewcError::InvalidName`] if `name` is not a valid C identifier,
+/// [`NewcError::ModuleExists`] if the files already exist, or an IO error.
 pub fn add_module(root: &Path, name: &str) -> Result<()> {
     if !is_valid_c_ident(name) {
         return Err(NewcError::InvalidName(name.to_string()));
@@ -80,6 +101,10 @@ pub fn add_module(root: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Delete a module's `.c` and `.h` files and remove its `#include` from all `.c` files.
+///
+/// # Errors
+/// Returns [`NewcError::ModuleNotFound`] if neither file exists, or an IO error.
 pub fn remove_module(root: &Path, name: &str) -> Result<()> {
     let header = root.join("include").join(format!("{name}.h"));
     let source = root.join("src").join(format!("{name}.c"));

@@ -1,3 +1,5 @@
+//! Project scaffolding — creates the standard newc directory layout and starter files.
+
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -8,14 +10,20 @@ use crate::error::{NewcError, Result};
 use crate::module::is_valid_c_ident;
 use crate::templates;
 
+/// Options for creating a new newc project.
 #[derive(Debug, Clone)]
 pub struct ScaffoldOptions {
+    /// Project name, used as both the directory name and in generated file headers.
     pub name: String,
+    /// If `true`, run `git init` and write `.gitignore` after creating the project.
     pub git_init: bool,
+    /// Author name inserted into generated source file comments.
     pub author: String,
+    /// Default modules to include in the new project.
     pub modules: Vec<DefaultModule>,
 }
 
+/// Built-in module templates that can be included when scaffolding a project.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DefaultModule {
     Input,
@@ -29,10 +37,12 @@ pub enum DefaultModule {
 }
 
 impl DefaultModule {
+    /// Return the four standard default modules: `Input`, `Math`, `Display`, `Array`.
     pub fn all() -> Vec<Self> {
         vec![Self::Input, Self::Math, Self::Display, Self::Array]
     }
 
+    /// Return the filesystem-safe name used for the module's `.c`/`.h` files.
     pub fn name(&self) -> &str {
         match self {
             Self::Input => "input",
@@ -47,6 +57,14 @@ impl DefaultModule {
     }
 }
 
+/// Create a new newc project directory under `parent`.
+///
+/// Creates `src/`, `include/`, `build/`, `Makefile`, and `src/main.c`, then
+/// writes source files for each module listed in `opts.modules`.
+///
+/// # Errors
+/// Returns [`NewcError::InvalidName`] if the project name is not a valid C identifier,
+/// [`NewcError::ProjectExists`] if the directory already exists, or an IO error.
 pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     if !is_valid_c_ident(&opts.name) {
         return Err(NewcError::InvalidName(opts.name.clone()));
@@ -194,6 +212,7 @@ mod tests {
     }
 }
 
+/// Detect the current user's name from `git config user.name`, falling back to `"Author"`.
 pub fn detect_author() -> String {
     Command::new("git")
         .args(["config", "user.name"])

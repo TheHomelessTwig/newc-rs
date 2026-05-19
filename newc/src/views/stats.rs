@@ -1,18 +1,23 @@
+//! Project statistics screen — module count, function count, LOC summary, and per-module bar chart.
+
 use iced::widget::{button, column, row, text, Space};
-use iced::{Color, Element};
+use iced::{Element};
 use newc_core::{project::Project, stats};
 
+use crate::theme as th;
 use crate::state::{Message, View};
 
+/// Renders the project stats screen with summary totals and a per-module LOC breakdown.
 pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Element<'a, Message> {
     let s = stats::compute(&project.root);
 
     let header = row![
         button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+            .style(th::btn_ghost),
         text(format!("Stats — {}", project.name))
             .size(18)
-            .color(Color::from_rgb(0.663, 0.863, 0.463)),
+            .color(th::color::GREEN),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -30,9 +35,9 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     let module_rows: Vec<Element<Message>> = {
         let mut rows = vec![
             row![
-                text("Module").width(160).color(Color::from_rgb(0.671, 0.616, 0.949)),
-                text("fns").width(60).color(Color::from_rgb(0.671, 0.616, 0.949)),
-                text("LOC").width(60).color(Color::from_rgb(0.671, 0.616, 0.949)),
+                text("Module").width(160).color(th::color::PURPLE),
+                text("fns").width(60).color(th::color::PURPLE),
+                text("LOC").width(60).color(th::color::PURPLE),
                 text("").width(160),
             ]
             .spacing(4)
@@ -43,10 +48,10 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             let bar: String = "█".repeat(bar_pct / 5).into();
             rows.push(
                 row![
-                    text(format!("◆ {}", m.name)).width(160).color(Color::from_rgb(0.663, 0.863, 0.463)),
-                    text(m.functions.to_string()).width(60).color(Color::from_rgb(1.0, 0.847, 0.4)),
-                    text(m.loc.to_string()).width(60).color(Color::from_rgb(1.0, 0.847, 0.4)),
-                    text(bar).size(10).color(Color::from_rgb(0.663, 0.863, 0.463)).width(160),
+                    text(format!("◆ {}", m.name)).width(160).color(th::color::GREEN),
+                    text(m.functions.to_string()).width(60).color(th::color::YELLOW),
+                    text(m.loc.to_string()).width(60).color(th::color::YELLOW),
+                    text(bar).size(10).color(th::color::GREEN).width(160),
                 ]
                 .spacing(4)
                 .into(),
@@ -58,15 +63,15 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     column![
         header,
         Space::new().height(8),
-        text("Summary").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Summary").size(14).color(th::color::CYAN),
         summary,
         Space::new().height(8),
-        text("Per-module breakdown").size(14).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Per-module breakdown").size(14).color(th::color::CYAN),
         column(module_rows).spacing(4),
         Space::new().height(8),
         text("LOC = non-blank, non-comment lines in src/*.c files.")
             .size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+            .color(th::color::TEXT_DIM),
     ]
     .spacing(8)
     .padding(16)
@@ -75,8 +80,8 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
 
 fn stat_row(label: &'static str, value: String) -> Element<'static, Message> {
     row![
-        text(label).width(220).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        text(value).color(Color::from_rgb(0.671, 0.616, 0.949)),
+        text(label).width(220).color(th::color::CYAN),
+        text(value).color(th::color::PURPLE),
     ]
     .spacing(8)
     .into()

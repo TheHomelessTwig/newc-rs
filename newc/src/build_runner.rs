@@ -1,3 +1,17 @@
+//! Background build runner for executing `make` targets.
+//!
+//! [`BuildRunner`] owns a pair of MPSC channels: the UI sends [`BuildCommand`]s
+//! (start a build, kill the current one) and receives [`BuildLine`]s (stdout,
+//! stderr, and a sentinel [`LineKind::Done`] when the process exits).
+//!
+//! A dedicated OS thread (`runner_loop`) blocks on the command channel,
+//! spawns `make` as a subprocess, and streams its output line-by-line via two
+//! reader threads — one for stdout, one for stderr — before waiting for the
+//! process to exit and sending a final `Done` line with the exit code and
+//! elapsed milliseconds.
+//!
+//! The UI drains accumulated lines each frame by calling [`BuildRunner::drain`].
+
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -6,17 +20,24 @@ use std::time::Instant;
 
 use std::sync::mpsc::{self, Receiver, SyncSender};
 
+/// A single line of build output with its classification.
 #[derive(Debug, Clone)]
 pub struct BuildLine {
     pub text: String,
     pub kind: LineKind,
 }
 
+/// Classification of a [`BuildLine`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum LineKind {
+    /// Normal stdout from `make` or the compiler.
     Stdout,
+    /// Stderr from `make` or the compiler (usually warnings and errors).
     Stderr,
+    /// Synthetic informational line injected by the runner (e.g. `"$ make all"`).
     Info,
+    /// Sentinel emitted after the process exits. `exit_code` is `None` if the
+    /// process could not be started or was forcibly killed before exiting.
     Done { exit_code: Option<i32>, duration_ms: u64 },
 }
 
@@ -26,12 +47,17 @@ pub enum BuildCommand {
     Kill,
 }
 
+/// Handle to the background build thread.
+///
+/// Created once in [`crate::app::NewcApp::new`] via [`BuildRunner::spawn`] and
+/// kept alive for the lifetime of the application.
 pub struct BuildRunner {
     pub cmd_tx: SyncSender<BuildCommand>,
     pub line_rx: Receiver<BuildLine>,
 }
 
 impl BuildRunner {
+    /// Spawn the background runner thread and return the channel handles.
     pub fn spawn() -> Self {
         let (cmd_tx, cmd_rx) = mpsc::sync_channel::<BuildCommand>(8);
         let (line_tx, line_rx) = mpsc::sync_channel::<BuildLine>(512);
@@ -39,6 +65,11 @@ impl BuildRunner {
         Self { cmd_tx, line_rx }
     }
 
+    /// Send a `make <target>` command to the runner thread.
+    ///
+    /// The previous build (if any) is not explicitly killed; the runner
+    /// processes commands sequentially, so the new run starts after the
+    /// previous one finishes.
     pub fn run(&self, target: &str, cwd: PathBuf) {
         let _ = self.cmd_tx.try_send(BuildCommand::Run {
             target: target.to_string(),
@@ -46,10 +77,12 @@ impl BuildRunner {
         });
     }
 
+    /// Request the runner to abort the current build (best-effort).
     pub fn kill(&self) {
         let _ = self.cmd_tx.try_send(BuildCommand::Kill);
     }
 
+    /// Collect all [`BuildLine`]s queued since the last call (non-blocking).
     pub fn drain(&self) -> Vec<BuildLine> {
         let mut lines = Vec::new();
         while let Ok(line) = self.line_rx.try_recv() {

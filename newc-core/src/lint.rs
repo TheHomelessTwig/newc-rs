@@ -1,3 +1,9 @@
+//! Basic static linter for C source files.
+//!
+//! Text/pattern based — no AST. Catches common beginner mistakes including
+//! unsafe functions (`gets`, `strcpy`), memory-management errors, format-string
+//! bugs, and style issues.
+
 /// Basic static linter for C source files.
 /// Text/pattern based — no AST. Catches common beginner mistakes.
 
@@ -24,21 +30,31 @@ pub fn lint_header(content: &str) -> Vec<LintWarning> {
     warnings
 }
 
+/// Severity level of a lint warning.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LintSeverity {
+    /// Certain bug or undefined behaviour.
     Error,
+    /// Likely bug or dangerous pattern.
     Warning,
+    /// Style suggestion or code-quality note.
     Info,
 }
 
+/// A single lint diagnostic produced by [`lint_file`] or [`lint_header`].
 #[derive(Debug, Clone)]
 pub struct LintWarning {
+    /// 1-based line number of the offending code.
     pub line_no: usize,
     pub severity: LintSeverity,
+    /// Short rule identifier, e.g. `"L001"`.
     pub code: &'static str,
     pub message: String,
 }
 
+/// Lint a `.c` source file, returning all warnings found.
+///
+/// Checks rules L001–L017. Comments are skipped; blank lines are ignored.
 pub fn lint_file(content: &str) -> Vec<LintWarning> {
     let mut warnings = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
@@ -211,6 +227,22 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
             }
         }
 
+        // L016: strtok() is not re-entrant — global state breaks nested tokenisation
+        if t.contains("strtok(") && !t.contains("strtok_r(") {
+            warnings.push(LintWarning {
+                line_no: lno, severity: LintSeverity::Warning, code: "L016",
+                message: "strtok() uses global state and is not re-entrant — use strtok_r() instead".into(),
+            });
+        }
+
+        // L017: p = realloc(p, ...) — if realloc returns NULL the original pointer is lost
+        if t.contains("= realloc(") {
+            warnings.push(LintWarning {
+                line_no: lno, severity: LintSeverity::Warning, code: "L017",
+                message: "Direct assignment from realloc() loses original pointer on NULL — use a temporary then assign".into(),
+            });
+        }
+
         // L015: comparing a value to a non-zero integer literal that looks like a pointer comparison
         // Heuristic: `== N` or `!= N` where N is a small nonzero int literal (1, -1, 2…)
         // Only flag when it looks like a pointer context (ptr, p_, *name patterns)
@@ -256,6 +288,8 @@ fn has_assignment_in_condition(s: &str) -> bool {
     false
 }
 
+/// Returns `true` if `line` contains an integer literal greater than 9 that is not
+/// in the set of commonly accepted constants (0, 1, 2, 10, 100, 256, 512, …).
 pub fn has_magic_number(line: &str) -> bool {
     // Look for integer literals > 9 that aren't inside array sizes or #define
     // Simple heuristic: digit sequence of 2+ digits not part of identifier

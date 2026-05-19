@@ -1,4 +1,7 @@
-use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
+//! Visual `main()` composer — drag-and-drop block editor with live code preview.
+
+use iced::widget::{button, checkbox, column, container, row, scrollable, text, text_input, Space};
+use crate::highlight::code_view;
 use iced::{Color, Element, Length, Background, Border};
 use newc_core::{
     main_builder::MainBlock,
@@ -8,6 +11,7 @@ use newc_core::{
 use crate::state::{AppState, Message, View};
 use crate::theme as th;
 
+/// Renders the `main()` composer screen with block list, inline editor, and code preview panel.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let builder = &state.main_builder;
     let author = &state.create_author;
@@ -78,6 +82,17 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     // Block list — click to select, up/down/delete wired
     let block_count = builder.blocks.len();
     let block_rows: Vec<Element<Message>> = builder.blocks.iter().enumerate().map(|(i, block)| {
+        // BlankLine blocks render as a thin dim separator — no label button needed
+        if matches!(block, MainBlock::BlankLine) {
+            return container(row![
+                Space::new().width(Length::Fill),
+                text("· · ·").size(9).color(Color::from_rgba(1.0, 1.0, 1.0, 0.2)),
+                Space::new().width(Length::Fill),
+                button(text("✗").size(10)).on_press(Message::ComposerBlockDelete(i)),
+            ].spacing(4).align_y(iced::Alignment::Center))
+            .padding([1, 4])
+            .into();
+        }
         let label = block_label(block);
         let is_sel = state.composer_selected == Some(i);
         let label_color = if is_sel {
@@ -103,6 +118,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             button(text(label).size(12).font(iced::Font::MONOSPACE).color(label_color))
                 .on_press(if any_drag && !is_this_dragging { Message::ComposerDragDrop(i) } else { Message::ComposerSelectBlock(i) }),
             Space::new().width(Length::Fill),
+            button(text("⧉").size(10)).on_press(Message::ComposerBlockDuplicate(i)),
             button(text("↑").size(10)).on_press_maybe(if i > 0 { Some(Message::ComposerBlockMoveUp(i)) } else { None }),
             button(text("↓").size(10)).on_press_maybe(if i + 1 < block_count { Some(Message::ComposerBlockMoveDown(i)) } else { None }),
             button(text("✗").size(10)).on_press(Message::ComposerBlockDelete(i)),
@@ -136,12 +152,30 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         Length::Fill
     };
 
+    // ── Include checklist ─────────────────────────────────────────────────────
+    let include_checks: Vec<Element<Message>> = project.modules.iter().map(|m| {
+        let name = m.name.clone();
+        let checked = builder.includes.contains(&name);
+        checkbox(checked)
+            .label(name.clone())
+            .on_toggle(move |_| Message::ComposerToggleInclude(name.clone()))
+            .into()
+    }).collect();
+    let include_row: Element<Message> = if include_checks.is_empty() {
+        row![th::hint_text("No modules yet.")].spacing(4).into()
+    } else {
+        row(include_checks).spacing(8).wrap().into()
+    };
+
     let left_panel = column![
         text("Author:").size(12),
         text_input("Author name", author)
             .on_input(Message::CreateAuthor)
             .width(200),
-        Space::new().height(8),
+        Space::new().height(4),
+        text("#include modules:").size(11).color(th::color::TEXT_DIM),
+        include_row,
+        Space::new().height(4),
         block_controls,
         Space::new().height(4),
         scrollable(
@@ -161,9 +195,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let right_panel = container(
         column![
             th::section_title("Preview"),
-            scrollable(
-                text(preview.clone()).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT)
-            ).height(Length::Fill),
+            code_view(&preview, 12.0, None, None),
         ]
         .spacing(4)
         .padding(8),
@@ -193,7 +225,7 @@ fn block_type_color(block: &MainBlock) -> Color {
     }
 }
 
-fn build_block_editor<'a>(block: &MainBlock, idx: usize) -> Element<'a, Message> {
+fn build_block_editor<'a>(block: &'a MainBlock, idx: usize) -> Element<'a, Message> {
     let field_row = |label: &'static str, val: &str, field: &'static str| -> Element<'a, Message> {
         let val = val.to_string();
         row![
@@ -213,7 +245,7 @@ fn build_block_editor<'a>(block: &MainBlock, idx: usize) -> Element<'a, Message>
 
     let title = text(format!("Edit block {} — {}", idx + 1, block.label()))
         .size(12)
-        .color(Color::from_rgb(0.471, 0.863, 0.910));
+        .color(th::color::CYAN);
 
     let fields: Vec<Element<Message>> = match block {
         MainBlock::VarDecl { type_name, name, init, .. } => vec![
@@ -226,14 +258,20 @@ fn build_block_editor<'a>(block: &MainBlock, idx: usize) -> Element<'a, Message>
             field_row("Args:", &args.join(", "), "args"),
             field_row("Assign to:", assign_to, "assign_to"),
         ],
-        MainBlock::IfBlock { condition, .. } | MainBlock::WhileLoop { condition, .. } => vec![
-            field_row("Condition:", condition, "condition"),
-        ],
-        MainBlock::ForLoop { init, condition, increment, .. } => vec![
-            field_row("Init:", init, "init"),
-            field_row("Condition:", condition, "condition"),
-            field_row("Increment:", increment, "increment"),
-        ],
+        MainBlock::IfBlock { condition, body, .. } | MainBlock::WhileLoop { condition, body, .. } => {
+            let mut v = vec![field_row("Condition:", condition, "condition")];
+            v.extend(body_editor(idx, body));
+            v
+        }
+        MainBlock::ForLoop { init, condition, increment, body } => {
+            let mut v = vec![
+                field_row("Init:", init, "init"),
+                field_row("Condition:", condition, "condition"),
+                field_row("Increment:", increment, "increment"),
+            ];
+            v.extend(body_editor(idx, body));
+            v
+        }
         MainBlock::Comment(c) => vec![field_row("Text:", c, "text")],
         MainBlock::RawCode(c) => vec![field_row("Code:", c, "text")],
         MainBlock::BlankLine => vec![text("Blank line — no fields.").size(11).into()],
@@ -242,6 +280,52 @@ fn build_block_editor<'a>(block: &MainBlock, idx: usize) -> Element<'a, Message>
     column(std::iter::once(title.into()).chain(fields).collect::<Vec<_>>())
         .spacing(4)
         .into()
+}
+
+fn body_editor<'a>(parent: usize, body: &'a [MainBlock]) -> Vec<Element<'a, Message>> {
+    let mut items: Vec<Element<Message>> = vec![
+        text("Body blocks:").size(11).color(th::color::TEXT_DIM).into(),
+    ];
+    for (ci, child) in body.iter().enumerate() {
+        let label = child.label().to_string();
+        let child_row = row![
+            text(format!("  {}", block_label(child))).size(11).font(iced::Font::MONOSPACE),
+            Space::new().width(Length::Fill),
+            button(text("↑").size(9))
+                .on_press_maybe(if ci > 0 { Some(Message::ComposerMoveChildUp { parent, child: ci }) } else { None }),
+            button(text("↓").size(9))
+                .on_press_maybe(if ci + 1 < body.len() { Some(Message::ComposerMoveChildDown { parent, child: ci }) } else { None }),
+            button(text("✗").size(9)).on_press(Message::ComposerDeleteChildBlock { parent, child: ci }),
+        ]
+        .spacing(2)
+        .align_y(iced::Alignment::Center);
+        let _ = label;
+        items.push(child_row.into());
+    }
+    // Add block buttons for body
+    let add_btns = row![
+        text("+ body:").size(10).color(th::color::TEXT_HINT),
+        button(text("var").size(9)).on_press(Message::ComposerAddChildBlock {
+            parent,
+            block: MainBlock::VarDecl { type_name: "int".into(), name: "x".into(), init: String::new(), is_array: false, array_size: String::new() },
+        }),
+        button(text("call").size(9)).on_press(Message::ComposerAddChildBlock {
+            parent,
+            block: MainBlock::FunctionCall { func_name: "func".into(), args: Vec::new(), assign_to: String::new(), comment: String::new() },
+        }),
+        button(text("//").size(9)).on_press(Message::ComposerAddChildBlock {
+            parent,
+            block: MainBlock::Comment(String::new()),
+        }),
+        button(text("raw").size(9)).on_press(Message::ComposerAddChildBlock {
+            parent,
+            block: MainBlock::RawCode(String::new()),
+        }),
+    ]
+    .spacing(2)
+    .align_y(iced::Alignment::Center);
+    items.push(add_btns.into());
+    items
 }
 
 fn block_label(block: &MainBlock) -> String {

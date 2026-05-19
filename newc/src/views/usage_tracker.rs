@@ -1,18 +1,23 @@
+//! Usage tracker screen — shows which library functions are called across the project's source files.
+
 use std::collections::HashMap;
 
 use iced::widget::{button, column, row, scrollable, text, text_input, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 use newc_core::{function_lib::FunctionLibrary, project::Project};
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
+/// Renders the usage tracker screen listing each library function and the files that call it.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let header = row![
         button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+            .style(th::btn_ghost),
         text(format!("Usage — {}", project.name))
             .size(18)
-            .color(Color::from_rgb(0.671, 0.616, 0.949)),
+            .color(th::color::PURPLE),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -39,7 +44,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             header,
             search_row,
             text("No library function usage found.")
-                .color(Color::from_rgb(0.5, 0.5, 0.5)),
+                .color(th::color::TEXT_DIM),
         ]
         .spacing(8)
         .padding(16)
@@ -61,15 +66,15 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let rows: Vec<Element<Message>> = entries.into_iter().map(|e| {
         row![
             Space::new().width(8),
-            text(e.fname).width(200).size(12).font(iced::Font::MONOSPACE),
-            text(e.files).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+            text(e.fname).width(200).size(12).font(iced::Font::MONOSPACE).color(th::color::CYAN),
+            text(e.files).size(12).color(th::color::TEXT_DIM),
         ]
         .spacing(4)
         .into()
     }).collect();
 
     let content = if rows.is_empty() {
-        column![text("No matches.").color(Color::from_rgb(0.5, 0.5, 0.5))]
+        column![text("No matches.").color(th::color::TEXT_DIM)]
     } else {
         column(rows).spacing(4)
     };

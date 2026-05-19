@@ -1,9 +1,17 @@
-use iced::widget::{button, column, row, scrollable, text, text_input};
+//! C standard-library reference browser — searchable function list with signature and example.
+
+use iced::widget::{button, column, pane_grid, row, scrollable, text, text_input};
 use iced::{Color, Element, Length};
 use newc_core::cref;
 
-use crate::state::{Message};
+use crate::highlight::code_view;
+use crate::state::Message;
 
+/// Identifies which pane of the C Reference resizable pane-grid is being rendered.
+#[derive(Clone, Copy)]
+pub enum CRefPane { Headers, Functions, Detail }
+
+/// Renders the C Reference browser with header list, function list, and detail panels.
 pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
     let search = &state.cref_search;
     let selected_header = &state.cref_selected_header;
@@ -79,13 +87,13 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
                 text("Signature").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-                text(func.signature).size(12).font(iced::Font::MONOSPACE),
+                code_view(func.signature, 12.0, None, None),
                 text("Description").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
                 text(func.description),
                 text("Returns").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
                 text(func.returns),
                 text("Example").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-                text(func.example).size(12).font(iced::Font::MONOSPACE),
+                code_view(func.example, 12.0, None, None),
             ]
             .spacing(8)
             .into()
@@ -119,15 +127,27 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         );
     }
 
+    let headers_cell = std::cell::RefCell::new(Some(header_panel.into()));
+    let fns_cell = std::cell::RefCell::new(Some(fn_panel.into()));
+    let detail_cell = std::cell::RefCell::new(Some(scrollable(detail).height(Length::Fill).into()));
+
+    let grid: Element<Message> = pane_grid::PaneGrid::new(&state.cref_panes, |_, pane, _| {
+        let body: Element<Message> = match pane {
+            CRefPane::Headers => headers_cell.borrow_mut().take().unwrap(),
+            CRefPane::Functions => fns_cell.borrow_mut().take().unwrap(),
+            CRefPane::Detail => detail_cell.borrow_mut().take().unwrap(),
+        };
+        pane_grid::Content::new(body)
+    })
+    .on_resize(8, Message::CRefPaneResized)
+    .spacing(4)
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into();
+
     column![
         search_bar,
-        row![
-            header_panel,
-            fn_panel,
-            scrollable(detail).height(Length::Fill),
-        ]
-        .spacing(8)
-        .height(Length::Fill),
+        grid,
     ]
     .spacing(8)
     .padding(12)

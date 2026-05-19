@@ -1,3 +1,5 @@
+//! Interactive call graph canvas — function nodes with BFS layout from `main()`, pan/zoom, and SVG export.
+
 // Interactive graphical call graph using iced Canvas.
 // Nodes = function boxes, edges = call arrows, BFS layout from main().
 
@@ -12,23 +14,31 @@ use crate::state::{AppState, Message, View};
 
 // ── Graph data ─────────────────────────────────────────────────────────────────
 
+/// A positioned node in the call or dependency graph canvas.
 #[derive(Debug, Clone)]
 pub struct GraphNode {
+    /// Function or module name displayed as the node label.
     pub id: String,
+    /// X position in graph-space (before pan/zoom transform).
     pub x: f32,
+    /// Y position in graph-space (before pan/zoom transform).
     pub y: f32,
     pub w: f32,
     pub h: f32,
+    /// True when this node represents `main()`.
     pub is_main: bool,
+    /// True when the function is not reachable from `main()`.
     pub is_unreachable: bool,
 }
 
+/// A directed edge between two graph nodes, identified by their `id` strings.
 #[derive(Debug, Clone)]
 pub struct GraphEdge {
     pub from: String,
     pub to: String,
 }
 
+/// Complete graph data (nodes + edges) ready to be rendered on a canvas.
 #[derive(Debug, Clone, Default)]
 pub struct CallGraphData {
     pub nodes: Vec<GraphNode>,
@@ -37,6 +47,7 @@ pub struct CallGraphData {
 
 // ── Canvas program ─────────────────────────────────────────────────────────────
 
+/// iced `Canvas` program that renders the call graph with pan, zoom, and click-to-select.
 pub struct CallGraphCanvas {
     pub data: CallGraphData,
     pub selected: Option<String>,
@@ -46,8 +57,10 @@ pub struct CallGraphCanvas {
     pub cache: canvas::Cache,
 }
 
+/// Per-frame interaction state for the canvas (tracks drag origin for panning).
 #[derive(Debug, Clone, Default)]
 pub struct CanvasState {
+    /// Canvas position where the current drag started; `None` when not dragging.
     pub drag_start: Option<Point>,
 }
 
@@ -333,6 +346,7 @@ pub fn build_graph(project: &Project) -> CallGraphData {
 
 // ── View ───────────────────────────────────────────────────────────────────────
 
+/// Renders the interactive call graph screen for the given project.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let graph_data = build_graph(project);
 
@@ -418,13 +432,22 @@ fn build_call_map(project: &Project) -> HashMap<String, Vec<String>> {
 
     let main_c = project.root.join("src").join("main.c");
     if let Ok(src) = std::fs::read_to_string(&main_c) {
-        let funcs = extract_function_implementations(&src);
+        // Extract Allman-style helpers defined in main.c (non-main functions)
+        let helpers = extract_function_implementations(&src);
         let all: Vec<String> = map.keys().cloned()
-            .chain(funcs.iter().map(|f| f.name.clone()))
+            .chain(helpers.iter().map(|f| f.name.clone()))
             .collect();
-        for func in &funcs {
+        for func in &helpers {
             let calls = calls_in(&func.body, &all);
             map.insert(func.name.clone(), calls);
+        }
+        // If "main" wasn't extracted (K&R-style brace on same line), seed it from raw scan.
+        if !map.contains_key("main") {
+            let main_calls: Vec<String> = all.iter()
+                .filter(|n| n.as_str() != "main" && src.contains(&format!("{n}(")))
+                .cloned()
+                .collect();
+            map.insert("main".to_string(), main_calls);
         }
     }
 
@@ -456,11 +479,13 @@ fn reachable_from(map: &HashMap<String, Vec<String>>, root: &str) -> HashSet<Str
 
 // ── SVG export ─────────────────────────────────────────────────────────────────
 
+/// Exports the call graph for `project` as an SVG string.
 pub fn export_svg(project: &Project) -> String {
     let data = build_graph(project);
     graph_to_svg(&data)
 }
 
+/// Converts pre-built graph data into an SVG document string.
 pub fn graph_to_svg(data: &CallGraphData) -> String {
     if data.nodes.is_empty() {
         return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"60\"><text x=\"10\" y=\"30\" fill=\"#fff\">No functions found.</text></svg>".to_string();

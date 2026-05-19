@@ -1,28 +1,42 @@
+//! Global application configuration and per-project configuration overrides.
+//!
+//! The global config is stored at `~/.config/newc/config.toml` (TOML) and is
+//! loaded once at startup. Per-project overrides live in `<project>/.newc_config.toml`.
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::project::expand_tilde;
 
+/// A named group of project paths shown together in the GUI library view.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Workspace {
     pub name: String,
+    /// Absolute paths of projects belonging to this workspace.
     #[serde(default)]
     pub paths: Vec<PathBuf>,
 }
 
+/// Global application configuration persisted to `~/.config/newc/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    /// Terminal emulator command used by [`AppConfig::open_in_editor`].
     #[serde(default = "default_terminal")]
     pub terminal: String,
+    /// Editor command launched inside the terminal.
     #[serde(default = "default_editor")]
     pub editor: String,
+    /// Directories searched when discovering projects (supports `~` expansion).
     #[serde(default = "default_scan_dirs")]
     pub scan_dirs: Vec<String>,
+    /// UI colour theme: `"dark"` or `"light"`.
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Named groups of projects; the special `"__archived__"` group holds hidden projects.
     #[serde(default)]
     pub workspaces: Vec<Workspace>,
+    /// Style argument passed to `clang-format --style=`.
     #[serde(default = "default_clang_format_style")]
     pub clang_format_style: String,
 }
@@ -93,7 +107,40 @@ fn which(bin: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Per-project setting overrides stored in `<project>/.newc_config.toml`.
+/// Any `Some` value overrides the corresponding global `AppConfig` field.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    pub editor: Option<String>,
+    pub terminal: Option<String>,
+    pub clang_format_style: Option<String>,
+}
+
+impl ProjectConfig {
+    /// Load per-project overrides from `<root>/.newc_config.toml`.
+    ///
+    /// Returns `None` if the file does not exist or cannot be parsed.
+    pub fn load_from(root: &std::path::Path) -> Option<Self> {
+        let path = root.join(".newc_config.toml");
+        let content = std::fs::read_to_string(&path).ok()?;
+        toml::from_str(&content).ok()
+    }
+
+    /// Write per-project overrides to `<root>/.newc_config.toml`.
+    ///
+    /// # Errors
+    /// Returns an error if serialisation or the file write fails.
+    pub fn save_to(&self, root: &std::path::Path) -> crate::error::Result<()> {
+        let path = root.join(".newc_config.toml");
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| crate::error::NewcError::Other(e.to_string()))?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+}
+
 impl AppConfig {
+    /// Load the global config from disk, falling back to defaults on any error.
     pub fn load() -> Self {
         let Some(path) = config_path() else {
             return Self::default();
@@ -107,6 +154,10 @@ impl AppConfig {
         toml::from_str(&content).unwrap_or_default()
     }
 
+    /// Persist the current config to disk, creating parent directories as needed.
+    ///
+    /// # Errors
+    /// Returns an error if serialisation or the write fails.
     pub fn save(&self) -> crate::error::Result<()> {
         let Some(path) = config_path() else {
             return Ok(());
@@ -120,6 +171,7 @@ impl AppConfig {
         Ok(())
     }
 
+    /// Return [`scan_dirs`](Self::scan_dirs) as expanded `PathBuf`s with `~` resolved.
     pub fn scan_paths(&self) -> Vec<PathBuf> {
         self.scan_dirs
             .iter()
@@ -127,10 +179,14 @@ impl AppConfig {
             .collect()
     }
 
+    /// Returns `true` unless the theme is set to `"light"`.
     pub fn is_dark(&self) -> bool {
         self.theme != "light"
     }
 
+    /// Create a new empty workspace with the given name.
+    ///
+    /// Returns `false` if a workspace with that name already exists.
     pub fn add_workspace(&mut self, name: impl Into<String>) -> bool {
         let name = name.into();
         if self.workspaces.iter().any(|w| w.name == name) {
@@ -140,6 +196,8 @@ impl AppConfig {
         true
     }
 
+    /// Add `path` to the named workspace, creating the workspace if it does not exist.
+    /// Duplicate paths are silently ignored.
     pub fn add_to_workspace(&mut self, name: &str, path: PathBuf) {
         if let Some(ws) = self.workspaces.iter_mut().find(|w| w.name == name) {
             if !ws.paths.contains(&path) {
@@ -150,23 +208,27 @@ impl AppConfig {
         }
     }
 
+    /// Remove `path` from every workspace it appears in.
     pub fn remove_from_all_workspaces(&mut self, path: &PathBuf) {
         for ws in &mut self.workspaces {
             ws.paths.retain(|p| p != path);
         }
     }
 
+    /// Move `path` to the hidden `"__archived__"` workspace, removing it from all others.
     pub fn archive(&mut self, path: PathBuf) {
         self.remove_from_all_workspaces(&path);
         self.add_to_workspace("__archived__", path);
     }
 
+    /// Remove `path` from the `"__archived__"` workspace.
     pub fn unarchive(&mut self, path: &PathBuf) {
         if let Some(ws) = self.workspaces.iter_mut().find(|w| w.name == "__archived__") {
             ws.paths.retain(|p| p != path);
         }
     }
 
+    /// Returns `true` if `path` is in the `"__archived__"` workspace.
     pub fn is_archived(&self, path: &PathBuf) -> bool {
         self.workspaces
             .iter()

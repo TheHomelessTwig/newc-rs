@@ -1,10 +1,22 @@
+//! Project export utilities.
+//!
+//! Currently supports bundling a project as a ZIP archive containing all
+//! source files, headers, the Makefile, and `.gitignore`.
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::error::{NewcError, Result};
 
 /// Bundle a project's source files into a ZIP archive at `dest`.
-/// Includes: src/*.c, include/*.h, Makefile, .gitignore (if present).
+///
+/// Includes `src/*.c`, `include/*.h`, `Makefile`, and `.gitignore` (if present).
+///
+/// # Returns
+/// The path of the created ZIP file (`<dest>/<project_name>.zip`).
+///
+/// # Errors
+/// Returns an error if any file cannot be read or the archive cannot be written.
 pub fn export_zip(project_root: &Path, project_name: &str, dest: &Path) -> Result<PathBuf> {
     let out_path = dest.join(format!("{project_name}.zip"));
     let file = std::fs::File::create(&out_path)?;

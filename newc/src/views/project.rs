@@ -1,3 +1,5 @@
+//! Project detail screen — metadata badges, build controls, code tools, and module table.
+
 use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Background, Border, Element, Length};
 use newc_core::project::Project;
@@ -5,6 +7,7 @@ use newc_core::project::Project;
 use crate::state::{AppState, BuildState, Message, View};
 use crate::theme as th;
 
+/// Renders the project detail screen for the given project.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let build_running = matches!(state.build_state, BuildState::Running);
     let meta = &state.meta_draft;
@@ -213,6 +216,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 button(text("Save Template").size(12))
                     .on_press(Message::ShowSaveTemplate(true))
                     .style(th::btn_secondary),
+                button(text("Report").size(12))
+                    .on_press(Message::GenerateReport)
+                    .style(th::btn_secondary),
             ]
             .spacing(4)
             .wrap(),
@@ -228,6 +234,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             row![
                 text("Module").size(11).width(180).color(th::color::TEXT_DIM),
                 text("fns").size(11).width(40).color(th::color::TEXT_DIM),
+                text("size").size(11).width(52).color(th::color::TEXT_DIM),
                 Space::new().width(Length::Fill),
             ]
             .spacing(4)
@@ -242,10 +249,11 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let module_rows: Element<Message> = if project.modules.is_empty() {
             th::hint_text("No modules found.").into()
         } else {
-            struct ModRow { name: String, fn_count: usize }
+            struct ModRow { name: String, fn_count: usize, src_bytes: u64 }
             let mod_data: Vec<ModRow> = project.modules.iter().map(|m| ModRow {
                 name: m.name.clone(),
                 fn_count: m.function_count,
+                src_bytes: std::fs::metadata(&m.source).map(|md| md.len()).unwrap_or(0),
             }).collect();
 
             let rows: Vec<Element<Message>> = mod_data.into_iter().enumerate().map(|(i, m)| {
@@ -262,6 +270,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                     row![
                         text(format!("◆ {}", m.name)).size(12).width(180).color(th::color::GREEN),
                         text(m.fn_count.to_string()).size(12).width(40).color(fn_color),
+                        text(fmt_bytes(m.src_bytes)).size(11).width(52).color(th::color::TEXT_DIM),
                         Space::new().width(Length::Fill),
                         button(text("Edit").size(11))
                             .on_press(Message::Navigate(View::ModuleDetail { project: proj, module_name: m_name }))
@@ -313,4 +322,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .spacing(8)
     .padding(12)
     .into()
+}
+
+fn fmt_bytes(b: u64) -> String {
+    if b < 1024 { format!("{b}B") }
+    else { format!("{:.1}K", b as f64 / 1024.0) }
 }

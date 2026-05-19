@@ -1,5 +1,8 @@
+//! Error types used throughout `newc-core`.
+
 use thiserror::Error;
 
+/// All errors that can be returned by `newc-core` operations.
 #[derive(Debug, Error)]
 pub enum NewcError {
     #[error("IO error: {0}")]
@@ -30,4 +33,5 @@ pub enum NewcError {
     Other(String),
 }
 
+/// Convenience alias for `Result<T, NewcError>`.
 pub type Result<T> = std::result::Result<T, NewcError>;

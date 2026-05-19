@@ -86,6 +86,19 @@ clean:
 	rm -rf $(BUILD_DIR) $(TARGET)
 
 # =========================
+# Valgrind
+# =========================
+valgrind: CFLAGS += -g -O0
+valgrind: all
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TARGET)
+
+# =========================
+# Clang static analysis
+# =========================
+analyse:
+	clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
 # Help
 # =========================
 help:
@@ -97,10 +110,12 @@ help:
 	@echo "  debug     Build with debug symbols and sanitizers (ASan, UBSan)"
 	@echo "  release   Build with optimisations and hardening flags"
 	@echo "  strict    Clean rebuild with -Werror and release optimisations"
+	@echo "  valgrind  Build with -g and run under Valgrind memory checker"
+	@echo "  analyse   Run clang static analysis (syntax check + extra warnings)"
 	@echo "  clean     Remove build artefacts and executable"
 	@echo "  help      Show this help message"
 
-.PHONY: all run clean debug release strict help
+.PHONY: all run clean debug release strict valgrind analyse help
 "#;
 
 pub const GITIGNORE: &str = "build/\nmain\n";
@@ -2186,6 +2201,19 @@ clean:
 	rm -rf $(BUILD_DIR) $(TARGET)
 
 # =========================
+# Valgrind
+# =========================
+valgrind: CFLAGS += -g -O0
+valgrind: all
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TARGET)
+
+# =========================
+# Clang static analysis
+# =========================
+analyse:
+	clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
 # Help
 # =========================
 help:
@@ -2198,8 +2226,10 @@ help:
 	@echo "  debug     Build with debug symbols and sanitizers (ASan, UBSan)"
 	@echo "  release   Build with optimisations and hardening flags"
 	@echo "  strict    Clean rebuild with -Werror and release optimisations"
+	@echo "  valgrind  Build with -g and run under Valgrind memory checker"
+	@echo "  analyse   Run clang static analysis (syntax check + extra warnings)"
 	@echo "  clean     Remove build artefacts and executable"
 	@echo "  help      Show this help message"
 
-.PHONY: all test run clean debug release strict help
+.PHONY: all test run clean debug release strict valgrind analyse help
 "#;

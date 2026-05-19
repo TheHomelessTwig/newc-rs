@@ -1,3 +1,15 @@
+//! Self-update logic for the `newc` binary.
+//!
+//! [`check`] queries the GitHub Releases API for the latest tag and returns the
+//! version string if it is newer than the running binary. [`update`] performs
+//! the full download-and-install flow.
+//!
+//! Platform detection (`platform_asset`) maps `(OS, ARCH)` pairs to the
+//! pre-built asset filenames published with each GitHub release. On non-Windows
+//! systems `install_binary` falls back to `sudo cp` if a direct write fails
+//! (e.g. the binary lives in `/usr/local/bin`). On Windows the replacement is
+//! deferred to a batch script that runs after the process exits.
+
 use anyhow::{anyhow, Result};
 use std::io::Write;
 use std::path::Path;
@@ -5,6 +17,7 @@ use std::time::Duration;
 
 const REPO: &str = "TheHomelessTwig/newc-rs";
 
+/// Return the version of the currently running binary (from `CARGO_PKG_VERSION`).
 pub fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }

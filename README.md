@@ -2,7 +2,7 @@
 
 A Rust GUI application for scaffolding, building, and managing C projects. Built on [iced](https://github.com/iced-rs/iced) 0.14 with a multi-window MVU architecture.
 
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
+![Version](https://img.shields.io/badge/version-0.6.1-blue)
 ![Language](https://img.shields.io/badge/language-Rust-orange)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
@@ -19,7 +19,7 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 - **Export** — bundle a project as a ZIP, or generate a Markdown report (stats, module list, build history, notes)
 
 ### Build & Analysis
-- **One-click make** — run `all`, `run`, `debug`, `release`, `strict`, `test`, or `clean` targets from the GUI
+- **One-click make** — run `all`, `run`, `debug`, `release`, `test`, `valgrind`, `analyse`, or `clean` targets from the GUI
 - **Live build output** — streaming stdout/stderr with timing ("Build succeeded in 1.4s")
 - **Build history** — per-project log of every build (target, result, duration) stored in `.newc_builds.json`
 - **Compiler diagnostics** — gcc/clang output parsed into a colour-coded table; click a row to navigate directly to the source module
@@ -27,7 +27,7 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 - **Health dashboard** — single view of dead-code count, missing includes, TODO/FIXMEs, lint warnings, header guard issues, prototype mismatches, and last build status
 
 ### Code Intelligence
-- **Static linter** — 15 rules catching common C mistakes (L001–L015):
+- **Static linter** — 17 rules catching common C mistakes (L001–L017):
   - `L001` — `gets()` usage
   - `L002` — `strcpy()` without bounds
   - `L003` — `scanf("%s")` without width limit
@@ -43,9 +43,14 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
   - `L013` — `atoi()`/`atof()` usage
   - `L014` — returning address of local variable
   - `L015` — comparing pointer to non-zero integer
+  - `L016` — `strtok()` not re-entrant (use `strtok_r`)
+  - `L017` — `= realloc(...)` loses pointer on `NULL` return
 - **Syntax highlighting** — C keywords, strings, numbers, comments, and operators colour-coded in module editor (Monokai Pro palette)
 - **Function call tree** — recursive call graph (depth 5) rendered inline for any selected function
-- **Project-wide search** — grep across all `.c` and `.h` files with click-to-navigate results
+- **Project-wide search** — regex/case-insensitive grep across all `.c` and `.h` files; click result to navigate to module at line
+- **Refactoring** — rename a function across the entire project, or move a function between modules with automatic header re-sync
+- **Report generation** — Markdown report (stats, module list, build history, notes) from the project detail screen
+- **Ctrl+P quick search** — fuzzy overlay searching functions and projects; click function to jump to C Reference entry
 
 ### Function Library
 - **Built-in library** — 9 modules with 100+ functions: `input`, `math`, `display`, `array`, `algorithms`, `strings`, `linked_list`, `files`, `test_utils`
@@ -64,6 +69,7 @@ A visual block-based builder for `src/main.c`:
 - Live preview of generated `src/main.c`
 - Write to file with one click
 - Drag-to-reorder blocks
+- **Flowchart view** — automatically generates a proper branching flowchart (YES/NO branches side-by-side, loop-back arrows for while/for)
 
 ### Git Integration
 - Status view: branch, staged/unstaged/untracked file counts
@@ -93,10 +99,13 @@ A visual block-based builder for `src/main.c`:
 11 built-in project templates: Calculator, Array Processor, Grade Manager, Menu-Driven App, File Parser, Linked List, Student Records, Recursion, CLI Arguments, State Machine, Unit Test Runner. Create custom templates by saving any project's structure.
 
 ### C Reference
-Searchable reference for ~70 C standard library functions across `stdio.h`, `stdlib.h`, `string.h`, `math.h`, and `time.h`. Can be detached into a pop-out OS window (⊞ button in header).
+Searchable reference for ~70 C standard library functions across `stdio.h`, `stdlib.h`, `string.h`, `math.h`, and `time.h`. Can be detached into a pop-out OS window (⊞ button in header). Jump directly to any function via Ctrl+P quick search.
 
 ### clang-format Integration
 Format any function using clang-format. Configurable style (file, LLVM, Google, Chromium, GNU, Microsoft) in Settings.
+
+### Per-project Settings
+Override editor, terminal, and clang-format style on a per-project basis via `.newc_config.toml` in the project root. Editable from the Settings screen when a project is open.
 
 ---
 

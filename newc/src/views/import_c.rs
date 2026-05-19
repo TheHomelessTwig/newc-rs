@@ -1,34 +1,43 @@
+//! Import-from-C-file dialog — pick a `.c` file, select functions, and copy them into a module.
+
 use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 use newc_core::function_lib::FunctionTemplate;
 use newc_core::sync::ExtractedFunction;
 
+/// Transient state for the "Import from .c file" dialog.
 #[derive(Default, Debug, Clone)]
 pub struct ImportState {
+    /// Functions extracted from the selected source file.
     pub extracted: Vec<ExtractedFunction>,
+    /// Parallel boolean per extracted function — true when selected for import.
     pub selected: Vec<bool>,
+    /// Destination module name to receive the imported functions.
     pub target_module: String,
+    /// Display name of the browsed source file path.
     pub path_label: String,
 }
 
+/// Renders the import-from-.c-file dialog screen.
 pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message> {
-    use crate::state::Message;
+    use crate::theme as th;
+use crate::state::Message;
 
     let imp = &state.import_state;
 
     let header = row![
         text("Import from .c file").size(18),
         Space::new().width(Length::Fill),
-        button(text("Cancel")).on_press(Message::ShowImport(false)),
+        button(text("Cancel")).on_press(Message::ShowImport(false)).style(th::btn_ghost),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
     let pick_row = row![
-        button(text("Browse .c file…")).on_press(Message::ImportPickFile),
+        button(text("Browse .c file…")).on_press(Message::ImportPickFile).style(th::btn_secondary),
         text(if imp.path_label.is_empty() { "" } else { &imp.path_label })
             .size(12)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+            .color(th::color::TEXT_DIM),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -70,7 +79,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
                         text(func.name.as_str()).size(13).font(iced::Font::MONOSPACE),
                         text(func.signature.as_str())
                             .size(11)
-                            .color(Color::from_rgb(0.5, 0.5, 0.5))
+                            .color(th::color::TEXT_DIM)
                             .font(iced::Font::MONOSPACE),
                     ]
                     .spacing(2),
@@ -83,7 +92,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
         .collect();
 
     let can_import = selected_count > 0 && !imp.target_module.trim().is_empty();
-    let mut import_btn = button(text(format!("Import {selected_count} function(s)")));
+    let mut import_btn = button(text(format!("Import {selected_count} function(s)"))).style(th::btn_primary);
     if can_import {
         import_btn = import_btn.on_press(Message::ImportSubmit);
     }
@@ -93,12 +102,12 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
         pick_row,
         target_row,
         row![
-            button(text("Select all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX)),
-            button(text("Deselect all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX - 1)),
+            button(text("Select all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX)).style(th::btn_ghost),
+            button(text("Deselect all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX - 1)).style(th::btn_ghost),
         ]
         .spacing(6),
         scrollable(column(func_rows).spacing(6)).height(360),
-        row![import_btn, button(text("Cancel")).on_press(Message::ShowImport(false))].spacing(8),
+        row![import_btn, button(text("Cancel")).on_press(Message::ShowImport(false)).style(th::btn_ghost)].spacing(8),
     ]
     .spacing(10)
     .padding(16)

@@ -1,5 +1,19 @@
-// Central styling system for newc — Monokai Pro dark palette.
-// All views import from here rather than hardcoding colors inline.
+//! Central styling system for newc — Monokai Pro dark palette.
+//!
+//! All views import style functions and colour constants from this module
+//! rather than hardcoding values inline. The public API falls into four
+//! groups:
+//!
+//! - **[`color`]** — named colour constants (`ACCENT`, `GREEN`, `TEXT`, …).
+//! - **Container styles** — closures compatible with `container::style()`
+//!   (`card_style`, `panel_style`, `code_block_style`, …).
+//! - **Button styles** — closures compatible with `button::style()`
+//!   (`btn_primary`, `btn_secondary`, `btn_ghost`, `btn_danger`, `btn_nav_*`).
+//! - **Typography helpers** — pre-styled `Text` widgets (`heading`,
+//!   `subheading`, `section_title`, `hint_text`, `mono`).
+//!
+//! All style functions take an `&iced::Theme` argument (unused — the palette is
+//! hardcoded) so they satisfy the iced styling trait bounds.
 #![allow(dead_code)]
 
 use iced::widget::{button, container, text, text_input};
@@ -7,6 +21,10 @@ use iced::{Background, Border, Color, Font, Shadow};
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
+/// Named colour constants from the Monokai Pro palette.
+///
+/// Grouped by role: backgrounds (`BG_*`), borders (`BORDER*`), text (`TEXT*`),
+/// and semantic accent colours (`ACCENT`, `GREEN`, `CYAN`, `YELLOW`, `PURPLE`, `ORANGE`).
 pub mod color {
     use iced::Color;
 
@@ -47,6 +65,7 @@ pub fn separator<'a, Message: 'a>() -> iced::widget::Container<'a, Message> {
 
 // ── Container styles ──────────────────────────────────────────────────────────
 
+/// Deepest background — used for the top bar and status bar.
 pub fn deep_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_DEEP)),
@@ -55,6 +74,7 @@ pub fn deep_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Sidebar and detached-window background.
 pub fn panel_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_PANEL)),
@@ -63,6 +83,7 @@ pub fn panel_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Slightly elevated card surface with a 6 px corner radius.
 pub fn card_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_CARD)),
@@ -71,6 +92,7 @@ pub fn card_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Card with a drop shadow — used for modal-like elements.
 pub fn card_raised_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_RAISED)),
@@ -80,6 +102,7 @@ pub fn card_raised_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Section background with a 4 px radius — lighter border than `card_style`.
 pub fn section_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_CARD)),
@@ -88,6 +111,7 @@ pub fn section_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Card with a 3 px accent-coloured left border — used for selected/active rows.
 pub fn accent_left_border(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_CARD)),
@@ -96,6 +120,7 @@ pub fn accent_left_border(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Translucent accent tint used for selected list rows.
 pub fn selected_row_style(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(Color::from_rgba8(0xFF, 0x61, 0x88, 0.098))),
@@ -104,6 +129,7 @@ pub fn selected_row_style(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Even-row background for zebra-striped tables.
 pub fn stripe_even(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_CARD)),
@@ -111,6 +137,7 @@ pub fn stripe_even(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Odd-row background for zebra-striped tables.
 pub fn stripe_odd(_: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(color::BG_BASE)),
@@ -118,8 +145,18 @@ pub fn stripe_odd(_: &iced::Theme) -> container::Style {
     }
 }
 
+/// Code block background — deep dark with a dim border and 4 px radius.
+pub fn code_block_style(_: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(color::BG_DEEP)),
+        border: Border { color: color::BORDER_DIM, width: 1.0, radius: 4.0.into() },
+        ..Default::default()
+    }
+}
+
 // ── Button styles ─────────────────────────────────────────────────────────────
 
+/// Filled accent-coloured button — primary actions (save, submit).
 pub fn btn_primary(
     _theme: &iced::Theme,
     status: button::Status,
@@ -138,6 +175,7 @@ pub fn btn_primary(
     }
 }
 
+/// Outline button with no background by default — secondary actions.
 pub fn btn_secondary(
     _theme: &iced::Theme,
     status: button::Status,
@@ -159,6 +197,7 @@ pub fn btn_secondary(
     }
 }
 
+/// Borderless button — only shows a background tint on hover/press.
 pub fn btn_ghost(
     _theme: &iced::Theme,
     status: button::Status,
@@ -175,6 +214,7 @@ pub fn btn_ghost(
     }
 }
 
+/// Red-tinted button for destructive actions (delete, remove).
 pub fn btn_danger(
     _theme: &iced::Theme,
     status: button::Status,
@@ -194,6 +234,7 @@ pub fn btn_danger(
     }
 }
 
+/// Top-bar navigation button in its active (current view) state.
 pub fn btn_nav_active(
     _theme: &iced::Theme,
     _status: button::Status,
@@ -206,6 +247,7 @@ pub fn btn_nav_active(
     }
 }
 
+/// Top-bar navigation button in its inactive (other view) state.
 pub fn btn_nav_inactive(
     _theme: &iced::Theme,
     status: button::Status,
@@ -224,6 +266,7 @@ pub fn btn_nav_inactive(
 
 // ── Text input styles ─────────────────────────────────────────────────────────
 
+/// Uniform text-input style: card background, dim border that turns accent on focus.
 pub fn input_style(
     _theme: &iced::Theme,
     status: text_input::Status,
@@ -245,32 +288,42 @@ pub fn input_style(
 
 // ── Typography helpers ────────────────────────────────────────────────────────
 
+/// 20 px view heading text in the default text colour.
 pub fn heading(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(20).color(color::TEXT)
 }
 
+/// 15 px subheading in dim text colour.
 pub fn subheading(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(15).color(color::TEXT_DIM)
 }
 
+/// 13 px section label in cyan — used for sidebar section headings.
 pub fn section_title(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(13).color(color::CYAN)
 }
 
+/// 12 px body label in the default text colour.
 pub fn label_text(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(12).color(color::TEXT)
 }
 
+/// 11 px hint text in the faintest hint colour — used for empty-state messages.
 pub fn hint_text(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(11).color(color::TEXT_HINT)
 }
 
+/// 12 px monospace text in the default text colour.
 pub fn mono(s: impl ToString) -> iced::widget::Text<'static> {
     text(s.to_string()).size(12).font(Font::MONOSPACE).color(color::TEXT)
 }
 
 // ── Toast helpers ─────────────────────────────────────────────────────────────
 
+/// Container style for a [`crate::state::Toast`] notification.
+///
+/// The border colour and translucent background tint vary by [`crate::state::ToastKind`]:
+/// green for success, accent-red for error, cyan for info.
 pub fn toast_style(kind: &crate::state::ToastKind) -> container::Style {
     let (border_color, bg) = match kind {
         crate::state::ToastKind::Success => (color::GREEN, Color::from_rgba8(0xA9, 0xDC, 0x76, 0.071)),

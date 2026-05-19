@@ -1,9 +1,13 @@
+//! Form view for adding a new module (.c + .h pair) to an existing project.
+
 use iced::widget::{button, column, row, text, text_input};
-use iced::{Color, Element};
+use iced::{Element};
 use newc_core::{module::is_valid_c_ident, project::Project};
 
+use crate::theme as th;
 use crate::state::{Message, View};
 
+/// Renders the "Add Module" form screen for the given project.
 pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Element<'a, Message> {
     let name = &state.add_module_name;
     let name_valid = name.trim().is_empty() || is_valid_c_ident(name.trim());
@@ -12,10 +16,11 @@ pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Elem
     let mut col = column![
         row![
             button(text("← Back"))
-                .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+                .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+                .style(th::btn_ghost),
             text(format!("+ Add Module — {}", project.name))
                 .size(18)
-                .color(Color::from_rgb(0.663, 0.863, 0.463)),
+                .color(th::color::GREEN),
         ]
         .spacing(10)
         .align_y(iced::Alignment::Center),
@@ -35,11 +40,11 @@ pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Elem
         col = col.push(
             text("Must be a valid C identifier (letters, digits, underscores; no spaces)")
                 .size(12)
-                .color(Color::from_rgb(1.0, 0.3, 0.3)),
+                .color(th::color::ACCENT),
         );
     }
 
-    let mut create_btn = button(text("Create Module"));
+    let mut create_btn = button(text("Create Module")).style(th::btn_primary);
     if can_create {
         create_btn = create_btn.on_press(Message::AddModuleSubmit);
     }
@@ -48,7 +53,8 @@ pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Elem
         row![
             create_btn,
             button(text("Cancel"))
-                .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+                .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+                .style(th::btn_ghost),
         ]
         .spacing(8),
     )

@@ -1,9 +1,13 @@
+//! First-run onboarding wizard — project discovery, author name, and theme selection steps.
+
 use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 
 use crate::app::ALL_THEMES;
+use crate::theme as th;
 use crate::state::{AppState, Message};
 
+/// Renders the onboarding wizard at the given step index (0 = find projects, 1 = author, 2 = theme).
 pub fn view<'a>(state: &'a AppState, step: usize) -> Element<'a, Message> {
     let content: Element<Message> = match step {
         0 => step0(state),
@@ -25,11 +29,11 @@ fn progress_bar<'a>(step: usize) -> Element<'a, Message> {
     let steps = ["Find Projects", "Author", "Theme"];
     let btns: Vec<Element<Message>> = steps.iter().enumerate().map(|(i, label)| {
         let color = if i == step {
-            Color::from_rgb(0.663, 0.863, 0.463)
+            th::color::GREEN
         } else if i < step {
-            Color::from_rgb(0.4, 0.6, 0.4)
+            th::color::GREEN
         } else {
-            Color::from_rgb(0.4, 0.4, 0.4)
+            th::color::TEXT_DIM
         };
         text(format!("{}. {}", i + 1, label)).size(13).color(color).into()
     }).collect();
@@ -42,7 +46,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
     let project_list: Element<Message> = if found.is_empty() {
         text("No newc projects found in ~/projects/, ~/uni/, or ~/school/.")
             .size(13)
-            .color(Color::from_rgb(0.5, 0.5, 0.5))
+            .color(th::color::TEXT_DIM)
             .into()
     } else {
         let rows: Vec<Element<Message>> = found.iter().enumerate().map(|(i, (path, sel))| {
@@ -53,7 +57,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
             let path_str = path.display().to_string();
             row![
                 checkbox(*sel).label(label).on_toggle(move |_| Message::OnboardingToggleProject(i)),
-                text(path_str).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                text(path_str).size(11).color(th::color::TEXT_DIM),
             ]
             .spacing(8)
             .into()
@@ -62,7 +66,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
     };
 
     column![
-        text("Welcome to newc").size(28).color(Color::from_rgb(0.663, 0.863, 0.463)),
+        text("Welcome to newc").size(28).color(th::color::GREEN),
         text("A C project manager with GUI. Let's set things up.").size(14),
         Space::new().height(12),
         text("Found newc projects — select which to import:").size(14),
@@ -70,7 +74,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
         Space::new().height(16),
         row![
             Space::new().width(Length::Fill),
-            button(text("Next →")).on_press(Message::OnboardingNext),
+            button(text("Next →")).on_press(Message::OnboardingNext).style(th::btn_primary),
         ],
     ]
     .spacing(8)
@@ -79,7 +83,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
 
 fn step1<'a>(state: &'a AppState) -> Element<'a, Message> {
     column![
-        text("Your name").size(22).color(Color::from_rgb(0.663, 0.863, 0.463)),
+        text("Your name").size(22).color(th::color::GREEN),
         text("Used in generated file headers and main.c author fields.").size(13),
         Space::new().height(16),
         row![
@@ -92,9 +96,9 @@ fn step1<'a>(state: &'a AppState) -> Element<'a, Message> {
         .align_y(iced::Alignment::Center),
         Space::new().height(24),
         row![
-            button(text("← Back")).on_press(Message::OnboardingBack),
+            button(text("← Back")).on_press(Message::OnboardingBack).style(th::btn_ghost),
             Space::new().width(Length::Fill),
-            button(text("Next →")).on_press(Message::OnboardingNext),
+            button(text("Next →")).on_press(Message::OnboardingNext).style(th::btn_primary),
         ]
         .spacing(8),
     ]
@@ -106,9 +110,9 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
     let theme_btns: Vec<Element<Message>> = ALL_THEMES.iter().map(|(key, label)| {
         let is_active = state.active_theme == *key;
         let color = if is_active {
-            Color::from_rgb(0.663, 0.863, 0.463)
+            th::color::GREEN
         } else {
-            Color::WHITE
+            th::color::TEXT
         };
         button(text(*label).size(12).color(color))
             .on_press(Message::ThemeSelect(key.to_string()))
@@ -116,7 +120,7 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
     }).collect();
 
     column![
-        text("Choose a theme").size(22).color(Color::from_rgb(0.663, 0.863, 0.463)),
+        text("Choose a theme").size(22).color(th::color::GREEN),
         text("Can be changed any time in Settings.").size(13),
         Space::new().height(12),
         scrollable(
@@ -124,9 +128,9 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
         ).height(320),
         Space::new().height(16),
         row![
-            button(text("← Back")).on_press(Message::OnboardingBack),
+            button(text("← Back")).on_press(Message::OnboardingBack).style(th::btn_ghost),
             Space::new().width(Length::Fill),
-            button(text("✓ Finish")).on_press(Message::OnboardingFinish),
+            button(text("✓ Finish")).on_press(Message::OnboardingFinish).style(th::btn_primary),
         ]
         .spacing(8),
     ]
@@ -136,7 +140,7 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
 
 fn step_done<'a>() -> Element<'a, Message> {
     column![
-        text("All done!").size(28).color(Color::from_rgb(0.663, 0.863, 0.463)),
+        text("All done!").size(28).color(th::color::GREEN),
         button(text("Go to Home")).on_press(Message::OnboardingFinish),
     ]
     .spacing(16)

@@ -1,3 +1,10 @@
+//! Header synchronisation — extracts function signatures from `.c` files and
+//! regenerates the corresponding `.h` files.
+//!
+//! The `SYNC_IGNORE` block in a header is preserved verbatim across regeneration,
+//! allowing user-written typedefs, structs, and `#define`s to coexist with
+//! auto-generated prototypes.
+
 use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -12,17 +19,23 @@ static FUNC_DEF: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^([a-zA-Z][^;{#\n]*\([^;{\n]*\))\s*\n\{").unwrap()
 });
 
-/// A parsed function extracted from a .c file.
+/// A parsed function extracted from a `.c` file.
 #[derive(Debug, Clone)]
 pub struct ExtractedFunction {
+    /// C function name (e.g. `"read_int"`).
     pub name: String,
+    /// Normalised function signature without trailing semicolon.
     pub signature: String,
+    /// Preceding block comment (`/* … */`), or empty if none.
     pub comment: String,
+    /// Raw body text including the outer braces.
     pub body: String,
 }
 
-/// Extract full function implementations from a .c file source string.
-/// Returns comment block + signature + body for each function found.
+/// Extract all function implementations from a `.c` source string.
+///
+/// Recognises Allman-style brace placement (`{` on its own line). Returns the
+/// preceding block comment, normalised signature, and body for each function found.
 pub fn extract_function_implementations(source: &str) -> Vec<ExtractedFunction> {
     let lines: Vec<&str> = source.lines().collect();
     let mut result = Vec::new();
@@ -130,6 +143,10 @@ fn extract_name_from_sig(sig: &str) -> Option<String> {
     }
 }
 
+/// Extract only the function signatures (no bodies) from a `.c` source string.
+///
+/// Uses the [`FUNC_DEF`] regex; requires Allman brace style (opening `{` on its
+/// own line). Whitespace in each signature is normalised.
 pub fn extract_signatures(source: &str) -> Vec<String> {
     FUNC_DEF
         .captures_iter(source)
@@ -141,6 +158,14 @@ pub fn extract_signatures(source: &str) -> Vec<String> {
         .collect()
 }
 
+/// Regenerate `include/<name>.h` from the function signatures in `src/<name>.c`.
+///
+/// The `SYNC_IGNORE` block from the existing header is preserved. The guard macro
+/// is derived from the module name (uppercased + `_H`).
+///
+/// # Errors
+/// Returns an error if `src/<name>.c` does not exist, contains no functions, or
+/// any file cannot be read or written.
 pub fn sync_module(root: &Path, name: &str) -> Result<()> {
     let src = root.join("src").join(format!("{name}.c"));
     let hdr = root.join("include").join(format!("{name}.h"));
@@ -182,6 +207,17 @@ pub fn sync_module(root: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Sync all module headers in the project.
+///
+/// Iterates every `.h` file in `include/` and calls [`sync_module`] for each.
+/// Errors from individual modules are collected as warning strings rather than
+/// aborting the entire operation.
+///
+/// # Returns
+/// A list of status messages (successes followed by warnings).
+///
+/// # Errors
+/// Returns an IO error only if `include/` cannot be read.
 pub fn sync_all(root: &Path) -> Result<Vec<String>> {
     let include_dir = root.join("include");
     let mut synced = Vec::new();
@@ -209,8 +245,13 @@ pub fn sync_all(root: &Path) -> Result<Vec<String>> {
     Ok(synced)
 }
 
-/// Replace a function's implementation in a .c source file.
-/// Removes the old definition (comment + signature + body) and appends the new one.
+/// Replace a function's implementation in a `.c` source file.
+///
+/// Removes the old definition (comment + signature + body) and appends `new_impl`
+/// at the end of the file.
+///
+/// # Errors
+/// Returns an IO error if the file cannot be read or written.
 pub fn update_function_in_source(src: &Path, fname: &str, new_impl: &str) -> Result<()> {
     // Remove old implementation
     crate::analysis::remove_function_from_source_pub(src, fname)?;

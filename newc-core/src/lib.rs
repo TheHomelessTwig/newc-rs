@@ -1,3 +1,9 @@
+//! Core library for the `newc` C project manager.
+//!
+//! Provides all project operations — scaffolding, module management, header sync,
+//! static analysis, build history, git integration, and the function library —
+//! as pure Rust functions consumed by both the CLI and the GUI.
+
 pub mod analysis;
 pub mod build_history;
 pub mod config;
@@ -16,6 +22,7 @@ pub mod module;
 pub mod notes;
 pub mod project;
 pub mod project_template;
+pub mod refactor;
 pub mod report;
 pub mod scaffold;
 pub mod stats;

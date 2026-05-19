@@ -1,3 +1,8 @@
+//! User-defined `main()` templates stored in `~/.config/newc/templates/`.
+//!
+//! A template captures the full [`MainBuilderState`] (blocks, globals, module
+//! includes) so that a common project structure can be reused across new projects.
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -5,16 +10,22 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::main_builder::{GlobalVar, MainBlock, MainBuilderState};
 
+/// A saved `main()` builder configuration that can be re-applied to new projects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserTemplate {
+    /// Display name shown in the template picker.
     pub name: String,
     pub description: String,
+    /// Module names to `#include` when the template is applied.
     pub modules: Vec<String>,
+    /// Ordered list of statements for the `main()` body.
     pub blocks: Vec<MainBlock>,
+    /// File-scope variable declarations.
     pub globals: Vec<GlobalVar>,
 }
 
 impl UserTemplate {
+    /// Convert this template into a [`MainBuilderState`] ready to load into the builder.
     pub fn to_builder_state(&self) -> MainBuilderState {
         MainBuilderState {
             blocks: self.blocks.clone(),
@@ -25,6 +36,13 @@ impl UserTemplate {
     }
 }
 
+/// Persist a template to `~/.config/newc/templates/<safe_name>.toml`.
+///
+/// The filename is derived from the template name with non-alphanumeric characters
+/// replaced by `_`.
+///
+/// # Errors
+/// Returns an error if the directory cannot be created or the file cannot be written.
 pub fn save(template: &UserTemplate) -> Result<()> {
     let Some(dir) = template_dir() else { return Ok(()) };
     std::fs::create_dir_all(&dir)?;
@@ -38,6 +56,9 @@ pub fn save(template: &UserTemplate) -> Result<()> {
     Ok(())
 }
 
+/// Load all templates from `~/.config/newc/templates/`, sorted by filename.
+///
+/// Returns an empty vec if the directory does not exist or cannot be read.
 pub fn load_all() -> Vec<UserTemplate> {
     let Some(dir) = template_dir() else { return Vec::new() };
     if !dir.exists() { return Vec::new(); }
@@ -59,6 +80,12 @@ pub fn load_all() -> Vec<UserTemplate> {
     templates
 }
 
+/// Delete a template by name from `~/.config/newc/templates/`.
+///
+/// No-ops if the file does not exist.
+///
+/// # Errors
+/// Returns an IO error if the file exists but cannot be removed.
 pub fn delete(name: &str) -> Result<()> {
     let Some(dir) = template_dir() else { return Ok(()) };
     let safe_name: String = name.chars()

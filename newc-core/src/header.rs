@@ -1,3 +1,10 @@
+//! Header file editor — reading and writing the `SYNC_IGNORE` block and generating
+//! C declaration snippets.
+//!
+//! The `SYNC_IGNORE` block (bounded by `/* SYNC_IGNORE_START */` / `/* SYNC_IGNORE_END */`)
+//! preserves user-written content (structs, enums, `#define`s) across header regeneration
+//! by [`crate::sync::sync_module`].
+
 use std::path::Path;
 
 use crate::error::Result;
@@ -80,27 +87,33 @@ pub fn write_ignore_block(hdr: &Path, new_content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Section templates the GUI can insert into the SYNC_IGNORE block.
+/// Section templates the GUI can insert into the `SYNC_IGNORE` block.
+
+/// Return a `typedef struct` skeleton with a placeholder field.
 pub fn struct_template(name: &str) -> String {
     format!(
         "typedef struct {{\n\t/* TODO: add fields */\n\tint placeholder;\n}} {name};\n"
     )
 }
 
+/// Return a `typedef enum` skeleton with three sentinel values.
 pub fn enum_template(name: &str) -> String {
     format!(
         "typedef enum {{\n\t{name}_FIRST = 0,\n\t{name}_SECOND,\n\t{name}_COUNT\n}} {name};\n"
     )
 }
 
+/// Return a `#define` preprocessor macro line.
 pub fn define_template(name: &str, value: &str) -> String {
     format!("#define {name} {value}\n")
 }
 
+/// Return a `typedef` alias declaration.
 pub fn typedef_template(original: &str, alias: &str) -> String {
     format!("typedef {original} {alias};\n")
 }
 
+/// Return a `static const` typed constant declaration.
 pub fn constant_template(type_name: &str, name: &str, value: &str) -> String {
     format!("static const {type_name} {name} = {value};\n")
 }

@@ -1,28 +1,45 @@
+//! Parser for GCC/clang compiler diagnostic output.
+//!
+//! Matches lines of the form `file.c:12:5: error: message` and converts them
+//! into structured [`Diagnostic`] records for display in the GUI build panel.
+
 /// Parse GCC/clang diagnostic output into structured records.
 /// Matches lines like: `file.c:12:5: error: message`
 
+/// Severity level of a compiler diagnostic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiagKind {
+    /// Fatal compilation error.
     Error,
+    /// Non-fatal warning.
     Warning,
+    /// Informational note (often attached to a prior error).
     Note,
 }
 
+/// A single structured compiler diagnostic.
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
+    /// Source file name as reported by the compiler.
     pub file: String,
+    /// 1-based line number.
     pub line: usize,
+    /// 1-based column number, or `0` if the compiler omitted it.
     pub col: usize,
     pub kind: DiagKind,
     pub message: String,
 }
 
 impl Diagnostic {
+    /// Returns `true` if this diagnostic is a hard error (not a warning or note).
     pub fn is_error(&self) -> bool {
         self.kind == DiagKind::Error
     }
 }
 
+/// Parse raw compiler output lines into a list of diagnostics.
+///
+/// Lines that do not match the GCC/clang format are silently skipped.
 pub fn parse(lines: &[String]) -> Vec<Diagnostic> {
     let mut result = Vec::new();
     for line in lines {

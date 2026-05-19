@@ -1,3 +1,5 @@
+//! Global quick-search overlay (Ctrl+P) — searches library functions and known projects.
+
 use std::path::PathBuf;
 
 use iced::widget::{button, column, row, scrollable, text, text_input, Space};
@@ -6,20 +8,27 @@ use newc_core::function_lib::FunctionLibrary;
 
 use crate::state::{AppState, Message};
 
+/// Persistent state for the quick-search overlay.
 #[derive(Default)]
 pub struct QuickSearchState {
+    /// Whether the overlay is currently visible.
     pub open: bool,
     pub query: String,
+    /// Index of the highlighted result row for keyboard navigation.
     pub cursor: usize,
 }
 
+/// A single result entry in the quick-search overlay.
 #[derive(Clone)]
 #[allow(dead_code)]
 pub enum QuickSearchResult {
+    /// A function from the function library.
     Function { name: String, module: String, description: String },
+    /// A known project path.
     Project { name: String, path: PathBuf },
 }
 
+/// Renders the quick-search overlay; returns an empty widget when `state.quick_search.open` is false.
 pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
     if !state.quick_search.open {
         return Space::new().into();
@@ -58,8 +67,8 @@ pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
         };
 
         let msg = match result {
-            QuickSearchResult::Function { name: _, .. } => {
-                Message::QuickSearchSelect(i)
+            QuickSearchResult::Function { name, module, .. } => {
+                Message::QuickSearchSelectFunc { name: name.clone(), header: module.clone() }
             }
             QuickSearchResult::Project { path, .. } => {
                 let p = path.clone();

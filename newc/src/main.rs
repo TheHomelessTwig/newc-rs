@@ -1,3 +1,14 @@
+//! Entry point for the `newc` binary.
+//!
+//! Parses CLI arguments via [`cli`], then either dispatches a CLI subcommand
+//! or launches the iced GUI. The GUI is always started as a detached subprocess
+//! (`internal-gui`) so the terminal is released immediately; [`run_gui_inline`]
+//! is invoked by that subprocess and owns the iced runtime.
+//!
+//! On WSL2 the GPU/Vulkan environment is configured before iced starts
+//! ([`configure_wsl2_gpu`]), selecting a virtio/gfxstream ICD when a DRI device
+//! is present, or falling back to software rendering otherwise.
+
 mod cli;
 mod app;
 mod highlight;
@@ -33,6 +44,11 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+/// Spawn the GUI as a detached `internal-gui` subprocess, then return.
+///
+/// This releases the terminal immediately while the window continues running.
+/// On Windows a `CREATE_NO_WINDOW` flag suppresses the console that would
+/// otherwise flash briefly.
 fn launch_gui(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let mut cmd = std::process::Command::new(&exe);
@@ -52,6 +68,7 @@ fn launch_gui(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Returns `true` when running inside WSL2 (detected via `/proc/version`).
 fn is_wsl2() -> bool {
     std::fs::read_to_string("/proc/version")
         .map(|s| s.to_ascii_lowercase().contains("microsoft"))
@@ -59,6 +76,11 @@ fn is_wsl2() -> bool {
 }
 
 
+/// Configure Vulkan / GPU environment variables for WSL2.
+///
+/// Prefers hardware ICD files (`virtio_icd.json`, `gfxstream_vk_icd.json`) when
+/// `/dev/dri` is present and falls back to `lvp_icd.json` (LLVMpipe) or the
+/// wgpu `gl` backend + softpipe as a last resort.
 fn configure_wsl2_gpu() {
     unsafe { std::env::remove_var("WAYLAND_DISPLAY"); }
 
@@ -95,6 +117,11 @@ fn configure_wsl2_gpu() {
     }
 }
 
+/// Start the iced daemon and block until the window closes.
+///
+/// Called by the `internal-gui` subcommand. Configures the GPU environment on
+/// WSL2, then hands control to `iced::daemon` with [`app::NewcApp`] as the
+/// application.
 fn run_gui_inline(initial_path: Option<PathBuf>) -> anyhow::Result<()> {
     use app::NewcApp;
 

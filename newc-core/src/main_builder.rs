@@ -1,41 +1,69 @@
+//! Visual `main()` builder — structured representation of C `main.c` contents.
+//!
+//! [`MainBlock`] is the AST-like IR for statements inside `main()`, while
+//! [`GlobalVar`] represents file-scope variable declarations. [`MainBuilderState`]
+//! holds the full editor state and can round-trip through real `main.c` source.
+
 use serde::{Deserialize, Serialize};
 
+/// A single statement or control-flow construct inside `main()`.
+///
+/// Each variant maps one-to-one to a C construct and can emit valid C source
+/// via [`MainBlock::to_c`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MainBlock {
+    /// A local variable declaration, optionally with an initialiser.
     VarDecl {
         type_name: String,
         name: String,
+        /// Initialiser expression, or empty string for no initialiser.
         init: String,
+        /// `true` when the variable is a C array.
         is_array: bool,
+        /// Array dimension expression (e.g. `"10"` or `"MAX"`), empty for scalars.
         array_size: String,
     },
+    /// A function call statement, optionally assigned to an lvalue.
     FunctionCall {
         func_name: String,
+        /// Positional argument expressions in call order.
         args: Vec<String>,
+        /// Left-hand-side variable to assign the return value to, or empty.
         assign_to: String,
+        /// Optional inline comment rendered above the call.
         comment: String,
     },
+    /// A `/* … */` or `// …` comment.
     Comment(String),
+    /// Arbitrary C code that did not match any structured variant during parsing.
     RawCode(String),
+    /// An empty line inserted for readability.
     BlankLine,
+    /// An `if` / `else` block.
     IfBlock {
         condition: String,
         body: Vec<MainBlock>,
+        /// Empty vec when there is no `else` branch.
         else_body: Vec<MainBlock>,
     },
+    /// A `while` loop.
     WhileLoop {
         condition: String,
         body: Vec<MainBlock>,
     },
+    /// A `for` loop.
     ForLoop {
+        /// Initialiser clause (e.g. `"int i = 0"`).
         init: String,
         condition: String,
+        /// Increment clause (e.g. `"i++"`).
         increment: String,
         body: Vec<MainBlock>,
     },
 }
 
 impl MainBlock {
+    /// Short display label for use in GUI list views (e.g. `"Variable"`, `"Call"`).
     pub fn label(&self) -> &str {
         match self {
             MainBlock::VarDecl { .. } => "Variable",
@@ -49,6 +77,7 @@ impl MainBlock {
         }
     }
 
+    /// Single-line human-readable summary of the block (e.g. `"int x"`, `"foo(a, b)"`).
     pub fn summary(&self) -> String {
         match self {
             MainBlock::VarDecl { type_name, name, is_array, array_size, .. } => {
@@ -73,6 +102,7 @@ impl MainBlock {
         }
     }
 
+    /// Emit valid C source for this block, indented with a single leading tab.
     pub fn to_c(&self) -> String {
         match self {
             MainBlock::VarDecl { type_name, name, init, is_array, array_size } => {
@@ -143,17 +173,23 @@ fn indent_block(block: &MainBlock) -> String {
         .join("\n")
 }
 
+/// A file-scope variable declaration placed before `main()`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct GlobalVar {
     pub type_name: String,
     pub name: String,
+    /// Initialiser expression, or empty string for no initialiser.
     pub init: String,
+    /// `true` when the variable is a C array.
     pub is_array: bool,
+    /// Array dimension expression, empty for scalars.
     pub array_size: String,
+    /// `true` to emit a `static` storage-class specifier.
     pub is_static: bool,
 }
 
 impl GlobalVar {
+    /// Emit a complete C variable declaration line (no trailing newline).
     pub fn to_c(&self) -> String {
         let prefix = if self.is_static { "static " } else { "" };
         if self.is_array {
@@ -177,7 +213,9 @@ pub struct FuncParam {
     pub name: String,
 }
 
-/// Parse parameter list from a C function signature string.
+/// Parse the parameter list from a C function signature string.
+///
+/// Returns an empty vec if the signature contains no `(…)` or only `void`.
 pub fn parse_params(signature: &str) -> Vec<FuncParam> {
     let start = match signature.find('(') { Some(i) => i, None => return Vec::new() };
     let end   = match signature.rfind(')') { Some(i) => i, None => return Vec::new() };
@@ -215,7 +253,17 @@ fn parse_single_param(p: &str) -> Option<FuncParam> {
     })
 }
 
-/// Generate a complete main.c from blocks, globals, and includes.
+/// Generate a complete `main.c` source file from structured builder state.
+///
+/// # Arguments
+/// * `blocks` — ordered list of statements for the body of `main()`.
+/// * `globals` — file-scope variable declarations inserted before `main()`.
+/// * `author` / `date` — substituted into the file-header comment.
+/// * `includes` — module names whose headers are `#include`d (without `.h`).
+/// * `argc_argv` — if `true`, `main` is declared with `int argc, char *argv[]`.
+///
+/// # Returns
+/// A complete, syntactically valid `main.c` as a `String`.
 pub fn generate_main_c(
     blocks: &[MainBlock],
     globals: &[GlobalVar],
@@ -259,15 +307,22 @@ pub fn generate_main_c(
     )
 }
 
+/// Full editor state for the visual `main()` builder.
+///
+/// Can be serialised, loaded from an existing `main.c`, and rendered back
+/// to C source via [`MainBuilderState::preview`].
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct MainBuilderState {
     pub blocks: Vec<MainBlock>,
     pub globals: Vec<GlobalVar>,
+    /// Module names to `#include` (without `.h` extension).
     pub includes: Vec<String>,
+    /// When `true`, `main` is declared with `argc` and `argv` parameters.
     pub argc_argv: bool,
 }
 
 impl MainBuilderState {
+    /// Create an empty state pre-populated with the module headers found in `<root>/include/`.
     pub fn from_project(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
         Self { blocks: Vec::new(), globals: Vec::new(), includes, argc_argv: false }
@@ -286,6 +341,7 @@ impl MainBuilderState {
         Self { blocks, globals, includes, argc_argv }
     }
 
+    /// Render the current state as a complete `main.c` source string.
     pub fn preview(&self, author: &str, date: &str) -> String {
         generate_main_c(&self.blocks, &self.globals, author, date, &self.includes, self.argc_argv)
     }

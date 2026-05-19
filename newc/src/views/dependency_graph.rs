@@ -1,3 +1,5 @@
+//! Interactive module dependency graph canvas — modules as nodes, `#include` relationships as edges.
+
 // Interactive graphical dependency graph using iced Canvas.
 // Modules as nodes, #include dependencies as directed edges.
 
@@ -13,6 +15,7 @@ use crate::views::call_graph::{GraphNode, GraphEdge, CallGraphData, CanvasState}
 
 // ── Canvas program ─────────────────────────────────────────────────────────────
 
+/// iced `Canvas` program that renders the module dependency graph with pan, zoom, and selection.
 pub struct DepGraphCanvas {
     pub data: CallGraphData,
     pub selected: Option<String>,
@@ -231,6 +234,7 @@ fn build_dep_map(project: &Project) -> HashMap<String, Vec<String>> {
 
 // ── SVG export ─────────────────────────────────────────────────────────────────
 
+/// Exports the dependency graph for `project` as an SVG string.
 pub fn export_svg(project: &Project) -> String {
     let data = build_dep_graph(project);
     crate::views::call_graph::graph_to_svg(&data)
@@ -238,6 +242,7 @@ pub fn export_svg(project: &Project) -> String {
 
 // ── View ───────────────────────────────────────────────────────────────────────
 
+/// Renders the interactive module dependency graph screen for the given project.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let graph_data = build_dep_graph(project);
 

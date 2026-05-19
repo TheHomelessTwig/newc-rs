@@ -1,5 +1,4 @@
-// Flowchart canvas — renders MainBuilderState blocks as an interactive flowchart.
-// Start → blocks with decision diamonds for if/while/for → End.
+//! Flowchart canvas — renders the `main()` composer blocks as a zoomable/pannable flowchart.
 
 use iced::widget::canvas::{self, Canvas, Path, Stroke};
 use iced::widget::{button, column, row, text, Space};
@@ -12,9 +11,10 @@ use crate::views::call_graph::CanvasState;
 
 const BOX_W: f32 = 180.0;
 const BOX_H: f32 = 40.0;
-const DIAMOND_W: f32 = 160.0;
-const _DIAMOND_H: f32 = 48.0;
-const V_GAP: f32 = 30.0;
+const DIAMOND_W: f32 = 200.0;
+const V_GAP: f32 = 28.0;
+// Horizontal offset for YES/NO branches from the centre of a decision node.
+const BRANCH_X: f32 = 130.0;
 
 #[derive(Debug, Clone)]
 struct FlowNode {
@@ -28,13 +28,15 @@ struct FlowNode {
 
 #[derive(Debug, Clone, PartialEq)]
 enum NodeShape {
-    Rect,       // process / statement
-    Diamond,    // condition
-    Rounded,    // start / end
+    Rect,
+    Diamond,
+    Rounded,
 }
 
 struct FlowCanvas {
     nodes: Vec<FlowNode>,
+    /// Explicit directed edges `(from_idx, to_idx)` drawn as arrows.
+    edges: Vec<(usize, usize)>,
     pan_x: f32,
     pan_y: f32,
     zoom: f32,
@@ -57,19 +59,38 @@ impl canvas::Program<Message> for FlowCanvas {
             let cx = bounds.width / 2.0 + self.pan_x;
             let z = self.zoom;
 
-            // Draw connectors between nodes
-            for i in 0..self.nodes.len().saturating_sub(1) {
-                let n = &self.nodes[i];
-                let m = &self.nodes[i + 1];
-                let fx = cx + n.x * z + n.w * z / 2.0;
-                let fy = self.pan_y + n.y * z + n.h * z;
-                let tx = cx + m.x * z + m.w * z / 2.0;
+            // Draw explicit edges
+            for &(fi, ti) in &self.edges {
+                let n = &self.nodes[fi];
+                let m = &self.nodes[ti];
+                let fx = cx + (n.x + n.w / 2.0) * z;
+                let fy = self.pan_y + (n.y + n.h) * z;
+                let tx = cx + (m.x + m.w / 2.0) * z;
                 let ty = self.pan_y + m.y * z;
-                let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
-                frame.stroke(&path, Stroke::default()
-                    .with_color(Color::from_rgb8(0x7A, 0x7A, 0x8A))
-                    .with_width(1.5 * z));
-                // Arrowhead
+
+                // For loop-back edges (going upward), use an elbow route
+                if ty < fy - 4.0 {
+                    // Right-elbow: down from source, across, up to target
+                    let elbow_x = cx + (n.x + n.w + 16.0) * z;
+                    let mid_y = fy + 10.0 * z;
+                    let path = Path::new(|b| {
+                        b.move_to(Point::new(fx, fy));
+                        b.line_to(Point::new(fx, mid_y));
+                        b.line_to(Point::new(elbow_x, mid_y));
+                        b.line_to(Point::new(elbow_x, ty));
+                        b.line_to(Point::new(tx, ty));
+                    });
+                    frame.stroke(&path, Stroke::default()
+                        .with_color(Color::from_rgb8(0x6A, 0x6A, 0x8A))
+                        .with_width(1.5 * z));
+                } else {
+                    let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
+                    frame.stroke(&path, Stroke::default()
+                        .with_color(Color::from_rgb8(0x7A, 0x7A, 0x8A))
+                        .with_width(1.5 * z));
+                }
+
+                // Arrowhead pointing into the target node
                 let as_ = 6.0 * z;
                 let ah = Path::new(|b| {
                     b.move_to(Point::new(tx, ty));
@@ -108,13 +129,13 @@ impl canvas::Program<Message> for FlowCanvas {
 
                 match node.shape {
                     NodeShape::Diamond => {
-                        let cx = nx + nw / 2.0;
-                        let cy = ny + nh / 2.0;
+                        let dcx = nx + nw / 2.0;
+                        let dcy = ny + nh / 2.0;
                         let diamond = Path::new(|b| {
-                            b.move_to(Point::new(cx, ny));
-                            b.line_to(Point::new(nx + nw, cy));
-                            b.line_to(Point::new(cx, ny + nh));
-                            b.line_to(Point::new(nx, cy));
+                            b.move_to(Point::new(dcx, ny));
+                            b.line_to(Point::new(nx + nw, dcy));
+                            b.line_to(Point::new(dcx, ny + nh));
+                            b.line_to(Point::new(nx, dcy));
                             b.close();
                         });
                         frame.fill(&diamond, fill);
@@ -132,10 +153,9 @@ impl canvas::Program<Message> for FlowCanvas {
                     }
                 }
 
-                // Truncate label to fit
                 let max_chars = (nw / (fs * 0.6)) as usize;
                 let label = if node.label.len() > max_chars && max_chars > 3 {
-                    format!("{}…", &node.label[..max_chars - 1])
+                    format!("{}…", &node.label[..max_chars.saturating_sub(1)])
                 } else {
                     node.label.clone()
                 };
@@ -198,71 +218,154 @@ impl canvas::Program<Message> for FlowCanvas {
     }
 }
 
-fn build_flowchart(builder: &MainBuilderState) -> Vec<FlowNode> {
-    let mut nodes = Vec::new();
-    let mut y = 0.0;
+/// Build the node list and explicit edge list from the composer state.
+fn build_flowchart(builder: &MainBuilderState) -> (Vec<FlowNode>, Vec<(usize, usize)>) {
+    let mut nodes: Vec<FlowNode> = Vec::new();
+    let mut edges: Vec<(usize, usize)> = Vec::new();
+    let mut y = 0.0f32;
+
     nodes.push(FlowNode { x: -BOX_W / 2.0, y, w: BOX_W, h: BOX_H, label: "START".into(), shape: NodeShape::Rounded });
     y += BOX_H + V_GAP;
-    push_blocks(&builder.blocks, &mut nodes, &mut y, 0.0);
+
+    let exits = push_blocks(&builder.blocks, &mut nodes, &mut edges, &mut y, 0.0, vec![0]);
+
+    let end_idx = nodes.len();
     nodes.push(FlowNode { x: -BOX_W / 2.0, y, w: BOX_W, h: BOX_H, label: "return 0".into(), shape: NodeShape::Rounded });
-    nodes
+    for e in exits {
+        edges.push((e, end_idx));
+    }
+
+    (nodes, edges)
 }
 
-fn push_blocks(blocks: &[MainBlock], nodes: &mut Vec<FlowNode>, y: &mut f32, indent: f32) {
-    let x_center = -BOX_W / 2.0 + indent;
-    let d_center = -DIAMOND_W / 2.0 + indent;
+/// Recursively lay out `blocks`, appending to `nodes`/`edges`.
+///
+/// `prev_exits` — node indices whose output arrow should connect to the first node of this sequence.
+/// Returns exit node indices that need to connect to whatever comes after this sequence.
+fn push_blocks(
+    blocks: &[MainBlock],
+    nodes: &mut Vec<FlowNode>,
+    edges: &mut Vec<(usize, usize)>,
+    y: &mut f32,
+    indent: f32,
+    mut prev_exits: Vec<usize>,
+) -> Vec<usize> {
     for block in blocks {
         match block {
-            MainBlock::Comment(_) | MainBlock::BlankLine => continue, // skip decorative
+            MainBlock::Comment(_) | MainBlock::BlankLine => continue,
+
             MainBlock::IfBlock { condition, body, else_body } => {
-                nodes.push(FlowNode { x: d_center, y: *y, w: DIAMOND_W, h: BOX_H,
+                // Decision diamond
+                let d_x = -DIAMOND_W / 2.0 + indent;
+                let diamond_idx = nodes.len();
+                nodes.push(FlowNode { x: d_x, y: *y, w: DIAMOND_W, h: BOX_H,
                     label: format!("if {condition}"), shape: NodeShape::Diamond });
-                *y += BOX_H + V_GAP;
-                // true branch (indented right)
-                if !body.is_empty() {
-                    nodes.push(FlowNode { x: d_center + 20.0, y: *y, w: BOX_W, h: 20.0,
-                        label: "YES →".into(), shape: NodeShape::Rect });
-                    *y += 20.0 + V_GAP / 2.0;
-                    push_blocks(body, nodes, y, indent + 20.0);
+                for e in prev_exits {
+                    edges.push((e, diamond_idx));
                 }
-                // false/else branch
+                *y += BOX_H + V_GAP;
+
+                let branch_y = *y;
+                let mut all_exits: Vec<usize> = Vec::new();
+
+                // YES branch — right side
+                let yes_x_offset = indent + BRANCH_X;
+                if !body.is_empty() {
+                    let lbl_idx = nodes.len();
+                    nodes.push(FlowNode {
+                        x: yes_x_offset - BOX_W / 2.0, y: *y,
+                        w: BOX_W, h: 20.0, label: "YES →".into(), shape: NodeShape::Rect,
+                    });
+                    edges.push((diamond_idx, lbl_idx));
+                    let mut yes_y = branch_y + 20.0 + V_GAP / 2.0;
+                    let yes_exits = push_blocks(body, nodes, edges, &mut yes_y, yes_x_offset, vec![lbl_idx]);
+                    all_exits.extend(yes_exits);
+                    if yes_y > *y { *y = yes_y; }
+                } else {
+                    all_exits.push(diamond_idx);
+                }
+
+                // NO / else branch — left side
+                let no_x_offset = indent - BRANCH_X;
                 if !else_body.is_empty() {
-                    nodes.push(FlowNode { x: d_center - 20.0, y: *y, w: BOX_W, h: 20.0,
-                        label: "NO →".into(), shape: NodeShape::Rect });
-                    *y += 20.0 + V_GAP / 2.0;
-                    push_blocks(else_body, nodes, y, indent - 20.0);
+                    let lbl_idx = nodes.len();
+                    nodes.push(FlowNode {
+                        x: no_x_offset - BOX_W / 2.0, y: branch_y,
+                        w: BOX_W, h: 20.0, label: "← NO".into(), shape: NodeShape::Rect,
+                    });
+                    edges.push((diamond_idx, lbl_idx));
+                    let mut no_y = branch_y + 20.0 + V_GAP / 2.0;
+                    let no_exits = push_blocks(else_body, nodes, edges, &mut no_y, no_x_offset, vec![lbl_idx]);
+                    all_exits.extend(no_exits);
+                    if no_y > *y { *y = no_y; }
+                } else {
+                    // No else: diamond itself is the "false" exit (falls through)
+                    all_exits.push(diamond_idx);
                 }
+
+                *y += V_GAP;
+                prev_exits = all_exits;
             }
+
             MainBlock::WhileLoop { condition, body } => {
-                nodes.push(FlowNode { x: d_center, y: *y, w: DIAMOND_W, h: BOX_H,
+                let d_x = -DIAMOND_W / 2.0 + indent;
+                let diamond_idx = nodes.len();
+                nodes.push(FlowNode { x: d_x, y: *y, w: DIAMOND_W, h: BOX_H,
                     label: format!("while {condition}"), shape: NodeShape::Diamond });
-                *y += BOX_H + V_GAP;
-                if !body.is_empty() {
-                    push_blocks(body, nodes, y, indent + 16.0);
-                    // loop-back marker
-                    nodes.push(FlowNode { x: d_center + 30.0, y: *y, w: 100.0, h: 18.0,
-                        label: "↩ loop".into(), shape: NodeShape::Rect });
-                    *y += 18.0 + V_GAP;
+                for e in prev_exits {
+                    edges.push((e, diamond_idx));
                 }
+                *y += BOX_H + V_GAP;
+
+                if !body.is_empty() {
+                    let body_exits = push_blocks(body, nodes, edges, y, indent + BRANCH_X, vec![diamond_idx]);
+                    // Loop-back: body exits → diamond
+                    for e in body_exits {
+                        edges.push((e, diamond_idx));
+                    }
+                }
+
+                *y += V_GAP;
+                // Loop exit when condition is false
+                prev_exits = vec![diamond_idx];
             }
+
             MainBlock::ForLoop { init, condition, increment, body } => {
-                nodes.push(FlowNode { x: d_center, y: *y, w: DIAMOND_W, h: BOX_H,
-                    label: format!("for {init}; {condition}; {increment}"), shape: NodeShape::Diamond });
-                *y += BOX_H + V_GAP;
-                if !body.is_empty() {
-                    push_blocks(body, nodes, y, indent + 16.0);
-                    nodes.push(FlowNode { x: d_center + 30.0, y: *y, w: 100.0, h: 18.0,
-                        label: "↩ loop".into(), shape: NodeShape::Rect });
-                    *y += 18.0 + V_GAP;
+                let d_x = -DIAMOND_W / 2.0 + indent;
+                let for_label = format!("for({init}; {condition}; {increment})");
+                let diamond_idx = nodes.len();
+                nodes.push(FlowNode { x: d_x, y: *y, w: DIAMOND_W + 40.0, h: BOX_H,
+                    label: for_label, shape: NodeShape::Diamond });
+                for e in prev_exits {
+                    edges.push((e, diamond_idx));
                 }
+                *y += BOX_H + V_GAP;
+
+                if !body.is_empty() {
+                    let body_exits = push_blocks(body, nodes, edges, y, indent + BRANCH_X, vec![diamond_idx]);
+                    for e in body_exits {
+                        edges.push((e, diamond_idx));
+                    }
+                }
+
+                *y += V_GAP;
+                prev_exits = vec![diamond_idx];
             }
+
             block => {
                 let (label, shape, w) = block_to_flow(block);
-                nodes.push(FlowNode { x: x_center, y: *y, w, h: BOX_H, label, shape });
+                let x = -w / 2.0 + indent;
+                let node_idx = nodes.len();
+                nodes.push(FlowNode { x, y: *y, w, h: BOX_H, label, shape });
+                for e in prev_exits {
+                    edges.push((e, node_idx));
+                }
                 *y += BOX_H + V_GAP;
+                prev_exits = vec![node_idx];
             }
         }
     }
+    prev_exits
 }
 
 fn block_to_flow(block: &MainBlock) -> (String, NodeShape, f32) {
@@ -280,14 +383,17 @@ fn block_to_flow(block: &MainBlock) -> (String, NodeShape, f32) {
             let preview = if r.len() > 30 { &r[..30] } else { r };
             (preview.to_string(), NodeShape::Rect, BOX_W)
         }
-        // Loops/ifs/blanks/comments handled in push_blocks
+        MainBlock::Comment(c) => (format!("// {c}"), NodeShape::Rect, BOX_W),
         _ => ("…".to_string(), NodeShape::Rect, BOX_W),
     }
 }
 
+/// Renders the interactive flowchart screen derived from the current `MainBuilderState`.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
-    let nodes = build_flowchart(&state.main_builder);
-    let block_count = state.main_builder.blocks.len();
+    let (nodes, edges) = build_flowchart(&state.main_builder);
+    let block_count = state.main_builder.blocks.iter()
+        .filter(|b| !matches!(b, MainBlock::BlankLine | MainBlock::Comment(_)))
+        .count();
 
     let controls = row![
         button(text("← Composer"))
@@ -306,11 +412,13 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         text("▬ Process").size(11).color(Color::WHITE),
         text("◇ Decision").size(11).color(Color::from_rgb8(0xFF, 0xD8, 0x66)),
         text("▬ Start/End").size(11).color(Color::from_rgb8(0xA9, 0xDC, 0x76)),
+        text("YES → branches right   ← NO branches left").size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
     ]
     .spacing(16);
 
     let canvas_widget = Canvas::new(FlowCanvas {
         nodes,
+        edges,
         pan_x: state.graph_pan_x,
         pan_y: state.graph_pan_y + 40.0,
         zoom: state.graph_zoom,

@@ -1,16 +1,22 @@
-use iced::widget::{button, column, row, scrollable, text, text_input};
+//! Project-wide grep search — queries all `.c` and `.h` files with highlighted match display.
+
+use iced::widget::{button, column, rich_text, row, scrollable, text, text_input};
+use iced::widget::text::Span as TSpan;
 use iced::{Color, Element, Length};
 use newc_core::project::Project;
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
+/// Renders the project search screen with query input and highlighted results list.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
     let header = row![
         button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+            .on_press(Message::Navigate(View::ProjectDetail(project.clone())))
+            .style(th::btn_ghost),
         text(format!("Search — {}", project.name))
             .size(18)
-            .color(Color::from_rgb(1.0, 0.847, 0.4)),
+            .color(th::color::YELLOW),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -20,7 +26,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .on_input(Message::SearchQuery)
             .on_submit(Message::SearchSubmit)
             .width(360),
-        button(text("Search")).on_press(Message::SearchSubmit),
+        button(text("Search")).on_press(Message::SearchSubmit).style(th::btn_primary),
         button(text("×").size(12)).on_press(Message::SearchQuery(String::new())),
     ]
     .spacing(8)
@@ -31,7 +37,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             header,
             search_row,
             text("Enter a query and press Enter or click Search.")
-                .color(Color::from_rgb(0.5, 0.5, 0.5)),
+                .color(th::color::TEXT_DIM),
         ]
         .spacing(10)
         .padding(16)
@@ -42,7 +48,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         return column![
             header,
             search_row,
-            text("No results.").color(Color::from_rgb(0.5, 0.5, 0.5)),
+            text("No results.").color(th::color::TEXT_DIM),
         ]
         .spacing(10)
         .padding(16)
@@ -51,30 +57,26 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
     let count_label = text(format!("{} result(s)", state.search_results.len()))
         .size(12)
-        .color(Color::from_rgb(0.5, 0.5, 0.5));
+        .color(th::color::TEXT_DIM);
 
     let col_header = row![
-        text("File").width(180).color(Color::WHITE),
-        text("Line").width(60).color(Color::WHITE),
-        text("Text").color(Color::WHITE),
+        text("File").width(180).color(th::color::TEXT),
+        text("Line").width(60).color(th::color::TEXT),
+        text("Text").color(th::color::TEXT),
     ]
     .spacing(8);
 
     let q = state.search_query.to_lowercase();
     let result_rows: Vec<Element<Message>> = state.search_results.iter().map(|result| {
-        let module_name = result.module.clone();
-        let project_clone = project.clone();
+        let line = result.line_no;
         let file_btn = button(
             text(result.file.as_str())
                 .size(12)
-                .color(Color::from_rgb(0.392, 0.706, 1.0))
+                .color(th::color::CYAN)
                 .font(iced::Font::MONOSPACE),
         )
-        .on_press_maybe(module_name.as_ref().map(|m| {
-            Message::Navigate(View::ModuleDetail {
-                project: project_clone,
-                module_name: m.clone(),
-            })
+        .on_press_maybe(result.module.as_ref().map(|m| {
+            Message::DiagJumpTo { module: m.clone(), line }
         }));
 
         let highlighted = highlight_match(&result.text, &q);
@@ -82,8 +84,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         row![
             file_btn.width(180),
             text(result.line_no.to_string()).size(12).width(60)
-                .color(Color::from_rgb(0.5, 0.5, 0.5)),
-            text(highlighted).size(12).font(iced::Font::MONOSPACE),
+                .color(th::color::TEXT_DIM),
+            highlighted,
         ]
         .spacing(8)
         .into()
@@ -101,8 +103,28 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .into()
 }
 
-fn highlight_match(text_str: &str, _query: &str) -> String {
-    // In iced without rich_text spans, just return the text as-is.
-    // Highlighting will be added when rich_text widget is wired in.
-    text_str.to_string()
+fn highlight_match<'a>(text_str: &str, query: &str) -> Element<'a, Message> {
+    let lower = text_str.to_lowercase();
+    if !query.is_empty() {
+        if let Some(pos) = lower.find(query) {
+            let end = (pos + query.len()).min(text_str.len());
+            let before  = text_str[..pos].to_string();
+            let matched = text_str[pos..end].to_string();
+            let after   = text_str[end..].to_string();
+            let mut spans: Vec<TSpan<'static>> = Vec::new();
+            if !before.is_empty() {
+                spans.push(TSpan::new(before).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT));
+            }
+            spans.push(
+                TSpan::new(matched).font(iced::Font::MONOSPACE).size(12)
+                    .color(th::color::YELLOW)
+                    .background(Color::from_rgba(1.0, 0.847, 0.0, 0.18)),
+            );
+            if !after.is_empty() {
+                spans.push(TSpan::new(after).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT));
+            }
+            return rich_text(spans).into();
+        }
+    }
+    rich_text([TSpan::<()>::new(text_str.to_string()).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT)]).into()
 }

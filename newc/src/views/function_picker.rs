@@ -1,9 +1,13 @@
+//! Inline function picker widget — searchable checklist of library functions with dependency resolution.
+
 use iced::widget::{checkbox, column, row, scrollable, text, text_input, Space};
-use iced::{Color, Element};
+use iced::{Element};
 use newc_core::function_lib::FunctionLibrary;
 
+use crate::theme as th;
 use crate::state::Message;
 
+/// Renders the function picker panel used when inserting functions from the library into a module.
 pub fn view<'a>(
     state: &'a crate::state::AppState,
     lib: &'a FunctionLibrary,
@@ -62,7 +66,7 @@ pub fn view<'a>(
         if fd.module != current_module {
             current_module = fd.module.clone();
             func_rows.push(
-                text(fd.module).size(13).color(Color::from_rgb(0.471, 0.863, 0.910)).into(),
+                text(fd.module).size(13).color(th::color::CYAN).into(),
             );
         }
         let name = fd.name.clone();
@@ -74,13 +78,13 @@ pub fn view<'a>(
                 Message::LibrarySelect(None)
             }
         });
-        let label_color = if fd.is_dep { Color::from_rgb(0.588, 0.588, 1.0) } else { Color::WHITE };
+        let label_color = if fd.is_dep { th::color::PURPLE } else { th::color::TEXT };
         func_rows.push(
             row![
                 Space::new().width(20),
                 cb,
                 text(name2).color(label_color).size(13),
-                text(fd.description).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                text(fd.description).size(11).color(th::color::TEXT_DIM),
             ]
             .spacing(6)
             .align_y(iced::Alignment::Center)
@@ -97,7 +101,7 @@ pub fn view<'a>(
     column![
         search_row,
         scrollable(column(func_rows).spacing(4)).height(260),
-        text(sel_summary).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text(sel_summary).size(12).color(th::color::TEXT_DIM),
     ]
     .spacing(8)
     .into()
