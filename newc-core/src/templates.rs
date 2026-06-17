@@ -120,6 +120,150 @@ help:
 
 pub const GITIGNORE: &str = "build/\nmain\n";
 
+/// CMake equivalent of [`MAKEFILE`] — same warning flags, build-type flags, and
+/// custom targets (`run`, `valgrind`, `analyse`).
+pub const CMAKE_LISTS: &str = r#"cmake_minimum_required(VERSION 3.10)
+project(main C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+option(STRICT "Treat warnings as errors" OFF)
+
+set(BASE_WARNINGS
+    -Wall -Wextra -Wpedantic
+    -Wshadow -Wconversion -Wsign-conversion
+    -Wstrict-prototypes -Wmissing-prototypes
+    -Wundef -Wpointer-arith -Wcast-align
+    -Wformat=2 -Wswitch-enum -Wimplicit-fallthrough
+)
+
+file(GLOB SRCS ${CMAKE_SOURCE_DIR}/src/*.c)
+
+add_executable(main ${SRCS})
+target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_compile_options(main PRIVATE ${BASE_WARNINGS})
+
+target_compile_options(main PRIVATE
+    $<$<CONFIG:Debug>:-g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer>
+    $<$<CONFIG:Release>:-O2 -fstack-protector-strong -D_FORTIFY_SOURCE=2>
+)
+target_link_options(main PRIVATE
+    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+)
+
+if(STRICT)
+    target_compile_options(main PRIVATE -Werror)
+endif()
+
+# =========================
+# Run
+# =========================
+add_custom_target(run
+    COMMAND $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Valgrind
+# =========================
+add_custom_target(valgrind
+    COMMAND valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Clang static analysis
+# =========================
+add_custom_target(analyse
+    COMMAND clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -I${CMAKE_SOURCE_DIR}/include ${SRCS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+"#;
+
+/// CMake equivalent of [`MAKEFILE_WITH_TEST`] — adds a `test` target that runs
+/// the built executable, plus links `-lm`.
+pub const CMAKE_LISTS_WITH_TEST: &str = r#"cmake_minimum_required(VERSION 3.10)
+project(main C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+option(STRICT "Treat warnings as errors" OFF)
+
+set(BASE_WARNINGS
+    -Wall -Wextra -Wpedantic
+    -Wshadow -Wconversion -Wsign-conversion
+    -Wstrict-prototypes -Wmissing-prototypes
+    -Wundef -Wpointer-arith -Wcast-align
+    -Wformat=2 -Wswitch-enum -Wimplicit-fallthrough
+)
+
+file(GLOB SRCS ${CMAKE_SOURCE_DIR}/src/*.c)
+
+add_executable(main ${SRCS})
+target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_compile_options(main PRIVATE ${BASE_WARNINGS})
+target_link_libraries(main PRIVATE m)
+
+target_compile_options(main PRIVATE
+    $<$<CONFIG:Debug>:-g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer>
+    $<$<CONFIG:Release>:-O2 -fstack-protector-strong -D_FORTIFY_SOURCE=2>
+)
+target_link_options(main PRIVATE
+    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+)
+
+if(STRICT)
+    target_compile_options(main PRIVATE -Werror)
+endif()
+
+# =========================
+# Test
+# =========================
+add_custom_target(test
+    COMMAND $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Run
+# =========================
+add_custom_target(run
+    COMMAND $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Valgrind
+# =========================
+add_custom_target(valgrind
+    COMMAND valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Clang static analysis
+# =========================
+add_custom_target(analyse
+    COMMAND clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -I${CMAKE_SOURCE_DIR}/include ${SRCS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+"#;
+
 pub fn main_c(author: &str, date: &str, includes: &[&str]) -> String {
     let include_lines: String = includes
         .iter()

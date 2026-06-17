@@ -284,15 +284,21 @@ int main(void) {
 }
 ```
 
-### Makefile
+### Build file (Makefile or CMakeLists.txt)
 
-The generated Makefile targets:
+`newc new --build-system make|cmake` (default `make`) controls which file is generated. The
+project's build system is auto-detected afterwards from whichever file exists at the root —
+no separate config flag is stored. Both expose the same targets, with the CMake side
+implemented as `add_custom_target` wrappers around an `add_executable(main ...)`:
 
 | Target | Description |
 |---|---|
-| `all` | Compile all `.c` files to `build/<project>` |
+| `all` | Compile all `.c` files to `build/<project>` (or `cmake --build build`) |
 | `run` | Build then execute |
-| `debug` | Build with `-g -fsanitize=address,undefined` |
-| `release` | Build with `-O2` |
-| `strict` | Build with all warnings as errors |
-| `clean` | Remove `build/` directory |
+| `debug` | Build with `-g -fsanitize=address,undefined` (CMake: configure `-DCMAKE_BUILD_TYPE=Debug`) |
+| `release` | Build with `-O2` (CMake: configure `-DCMAKE_BUILD_TYPE=Release`, the default) |
+| `strict` | Build with all warnings as errors (CMake: configure `-DSTRICT=ON`, clean rebuild) |
+| `valgrind` | Run the built executable under Valgrind |
+| `analyse` | Run clang static analysis (syntax-only) |
+| `test` | Run the built executable (only present if the `test_utils` module was included at scaffold time) |
+| `clean` | Remove `build/` directory (or `cmake --build build --target clean`) |

@@ -11,7 +11,7 @@ pub enum NewcError {
     #[error("Project '{0}' already exists")]
     ProjectExists(String),
 
-    #[error("Not a newc project (missing src/main.c, include/, or Makefile)")]
+    #[error("Not a newc project (missing src/main.c, include/, or Makefile/CMakeLists.txt)")]
     NotAProject,
 
     #[error("Module '{0}' not found")]

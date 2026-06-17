@@ -11,7 +11,7 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 ## Features
 
 ### Project Management
-- **Scaffold** new C projects (`src/`, `include/`, `build/`, `Makefile`) with one command or via the GUI
+- **Scaffold** new C projects (`src/`, `include/`, `build/`, `Makefile` or `CMakeLists.txt`) with one command or via the GUI
 - **Module system** — add/remove `.c`/`.h` pairs; auto-sync prototypes between source and header
 - **Input validation** — project and module names validated as legal C identifiers at both GUI and CLI layers
 - **Workspaces** — organise projects into named groups (e.g. by course or client); archive old projects
@@ -19,7 +19,7 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 - **Export** — bundle a project as a ZIP, or generate a Markdown report (stats, module list, build history, notes)
 
 ### Build & Analysis
-- **One-click make** — run `all`, `run`, `debug`, `release`, `test`, `valgrind`, `analyse`, or `clean` targets from the GUI
+- **One-click build** — run `all`, `run`, `debug`, `release`, `strict`, `test`, `valgrind`, `analyse`, or `clean` targets from the GUI, via `make` or `cmake` depending on how the project was scaffolded
 - **Live build output** — streaming stdout/stderr with timing ("Build succeeded in 1.4s")
 - **Build history** — per-project log of every build (target, result, duration) stored in `.newc_builds.json`
 - **Compiler diagnostics** — gcc/clang output parsed into a colour-coded table; click a row to navigate directly to the source module
@@ -142,7 +142,7 @@ curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/n
 
 ### Build from source
 
-Requires Rust stable (via [rustup](https://rustup.rs/)), `gcc`/`clang`, and `make`.
+Requires Rust stable (via [rustup](https://rustup.rs/)), `gcc`/`clang`, and `make` (or `cmake` if scaffolding CMake projects).
 
 ```bash
 git clone https://github.com/TheHomelessTwig/newc-rs.git
@@ -170,9 +170,10 @@ newc gui ~/projects/myapp    # open directly to a project
 ### CLI
 
 ```bash
-newc new <name>              # scaffold a new project
+newc new <name>              # scaffold a new project (Makefile by default)
 newc new <name> --git        # scaffold + git init
 newc new <name> --template calculator  # scaffold from template
+newc new <name> --build-system cmake   # scaffold with CMakeLists.txt instead of Makefile
 
 newc add <module>            # add a new module (.c + .h)
 newc remove                  # interactively remove a module
@@ -185,10 +186,10 @@ newc stats                   # print function count and LOC per module
 newc funcs [module]          # list function signatures
 newc search <query>          # search all .c and .h files
 
-newc test                    # run `make test`
+newc test                    # run the test target (`make test` or `cmake --build build --target test`)
 ```
 
-All CLI commands except `new` and `gui` require a project root (directory containing `src/`, `include/`, and `Makefile`).
+All CLI commands except `new` and `gui` require a project root (directory containing `src/`, `include/`, and a `Makefile` or `CMakeLists.txt`). Build system is auto-detected from which file is present.
 
 ---
 
@@ -204,7 +205,7 @@ myapp/
 │   ├── input.h
 │   └── math.h
 ├── build/
-├── Makefile
+├── Makefile            # or CMakeLists.txt, depending on --build-system
 ├── .newc_meta.toml     # course, assignment, due date, marks
 ├── .newc_builds.json   # build history (last 100 records)
 └── .gitignore          # generated if --git flag used
@@ -258,7 +259,7 @@ requires = []
 | `Ctrl+P` | Quick search (projects and functions) |
 | `Ctrl+Z` | Undo (Composer) |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Redo (Composer) |
-| `Ctrl+S` | Save (notes, module editor, Makefile editor) |
+| `Ctrl+S` | Save (notes, module editor, build file editor) |
 | `?` | Open keyboard shortcuts panel |
 | `Esc` | Close modal / cancel |
 | `↑` `↓` | Navigate quick-search results |

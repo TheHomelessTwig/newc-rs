@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 
 use newc_core::{
     analysis, module, project_template,
+    project::BuildSystem,
     scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
 };
 
@@ -34,6 +35,9 @@ pub enum Command {
         /// Seed main.c from a named template (e.g. calculator)
         #[arg(long, value_name = "TEMPLATE")]
         template: Option<String>,
+        /// Build system to scaffold: `make` (default) or `cmake`
+        #[arg(long, value_name = "SYSTEM", default_value = "make")]
+        build_system: String,
     },
     /// Add a new module to the current project
     Add { module: String },
@@ -79,7 +83,9 @@ pub enum Command {
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::New { name, git, template } => cmd_new(&name, git, template.as_deref()),
+        Command::New { name, git, template, build_system } => {
+            cmd_new(&name, git, template.as_deref(), &build_system)
+        }
         Command::Add { module: name } => cmd_add(&name),
         Command::Remove => cmd_remove(),
         Command::List => cmd_list(),
@@ -109,14 +115,20 @@ fn cmd_update(check_only: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_new(name: &str, git: bool, template: Option<&str>) -> anyhow::Result<()> {
+fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) -> anyhow::Result<()> {
     let cwd = env::current_dir()?;
     let author = scaffold::detect_author();
+    let build_system = match build_system.to_lowercase().as_str() {
+        "cmake" => BuildSystem::CMake,
+        "make" => BuildSystem::Make,
+        other => anyhow::bail!("Unknown build system '{other}', expected 'make' or 'cmake'"),
+    };
     let opts = ScaffoldOptions {
         name: name.to_string(),
         git_init: git,
         author: author.clone(),
         modules: DefaultModule::all(),
+        build_system,
     };
     scaffold::create_project(&opts, &cwd)?;
     println!("Project created: {name}");
@@ -331,19 +343,51 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
 fn cmd_test() -> anyhow::Result<()> {
     let root = find_project_root()?;
     use std::process::Command;
-    let status = Command::new("make")
-        .arg("test")
-        .current_dir(&root)
+    let status = match BuildSystem::detect(&root) {
+        BuildSystem::Make => Command::new("make")
+            .arg("test")
+            .current_dir(&root)
+            .status()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
+                } else {
+                    anyhow::anyhow!("Failed to run make: {e}")
+                }
+            })?,
+        BuildSystem::CMake => {
+            cmake_configure_if_needed(&root)?;
+            Command::new("cmake")
+                .args(["--build", "build", "--target", "test"])
+                .current_dir(&root)
+                .status()
+                .map_err(|e| anyhow::anyhow!("Failed to run cmake: {e}"))?
+        }
+    };
+    if !status.success() {
+        anyhow::bail!("Tests failed (exit code {:?})", status.code());
+    }
+    Ok(())
+}
+
+fn cmake_configure_if_needed(root: &std::path::Path) -> anyhow::Result<()> {
+    use std::process::Command;
+    if root.join("build").join("CMakeCache.txt").exists() {
+        return Ok(());
+    }
+    let status = Command::new("cmake")
+        .args(["-S", ".", "-B", "build"])
+        .current_dir(root)
         .status()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
+                anyhow::anyhow!("cmake not found. Install CMake (e.g. `winget install Kitware.CMake` on Windows)")
             } else {
-                anyhow::anyhow!("Failed to run make: {e}")
+                anyhow::anyhow!("Failed to run cmake: {e}")
             }
         })?;
     if !status.success() {
-        anyhow::bail!("Tests failed (exit code {:?})", status.code());
+        anyhow::bail!("cmake configure failed (exit code {:?})", status.code());
     }
     Ok(())
 }
@@ -354,6 +398,6 @@ fn find_project_root() -> anyhow::Result<PathBuf> {
         return Ok(cwd);
     }
     Err(anyhow::anyhow!(
-        "Not a newc project. Run this command from the project root (directory containing src/, include/, Makefile)."
+        "Not a newc project. Run this command from the project root (directory containing src/, include/, Makefile or CMakeLists.txt)."
     ))
 }

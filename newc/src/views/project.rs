@@ -133,7 +133,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 button(text("Usage").size(12))
                     .on_press(Message::Navigate(View::UsageTracker(project.clone())))
                     .style(th::btn_secondary),
-                button(text("Makefile").size(12))
+                button(text(project.build_system.build_file_name()).size(12))
                     .on_press(Message::Navigate(View::MakefileEditor(project.clone())))
                     .style(th::btn_secondary),
             ]

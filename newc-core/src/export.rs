@@ -10,7 +10,8 @@ use crate::error::{NewcError, Result};
 
 /// Bundle a project's source files into a ZIP archive at `dest`.
 ///
-/// Includes `src/*.c`, `include/*.h`, `Makefile`, and `.gitignore` (if present).
+/// Includes `src/*.c`, `include/*.h`, the build file (`Makefile` or `CMakeLists.txt`),
+/// and `.gitignore` (if present).
 ///
 /// # Returns
 /// The path of the created ZIP file (`<dest>/<project_name>.zip`).
@@ -38,7 +39,7 @@ pub fn export_zip(project_root: &Path, project_name: &str, dest: &Path) -> Resul
         }
     }
 
-    for name in ["Makefile", ".gitignore"] {
+    for name in ["Makefile", "CMakeLists.txt", ".gitignore"] {
         let p = project_root.join(name);
         if p.exists() {
             zip.start_file(name, options).map_err(|e| NewcError::Other(e.to_string()))?;

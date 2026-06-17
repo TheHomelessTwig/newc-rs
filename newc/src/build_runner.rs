@@ -14,11 +14,13 @@
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Instant;
 
 use std::sync::mpsc::{self, Receiver, SyncSender};
+
+use newc_core::project::BuildSystem;
 
 /// A single line of build output with its classification.
 #[derive(Debug, Clone)]
@@ -43,7 +45,7 @@ pub enum LineKind {
 
 #[allow(dead_code)]
 pub enum BuildCommand {
-    Run { target: String, cwd: PathBuf },
+    Run { target: String, cwd: PathBuf, build_system: BuildSystem },
     Kill,
 }
 
@@ -65,15 +67,16 @@ impl BuildRunner {
         Self { cmd_tx, line_rx }
     }
 
-    /// Send a `make <target>` command to the runner thread.
+    /// Send a build command (`make <target>` or the CMake equivalent) to the runner thread.
     ///
     /// The previous build (if any) is not explicitly killed; the runner
     /// processes commands sequentially, so the new run starts after the
     /// previous one finishes.
-    pub fn run(&self, target: &str, cwd: PathBuf) {
+    pub fn run(&self, target: &str, cwd: PathBuf, build_system: BuildSystem) {
         let _ = self.cmd_tx.try_send(BuildCommand::Run {
             target: target.to_string(),
             cwd,
+            build_system,
         });
     }
 
@@ -96,74 +99,12 @@ fn runner_loop(cmd_rx: mpsc::Receiver<BuildCommand>, line_tx: SyncSender<BuildLi
     for cmd in cmd_rx {
         match cmd {
             BuildCommand::Kill => {}
-            BuildCommand::Run { target, cwd } => {
-                let _ = line_tx.send(BuildLine {
-                    text: format!("$ make {target}"),
-                    kind: LineKind::Info,
-                });
-
+            BuildCommand::Run { target, cwd, build_system } => {
                 let start = Instant::now();
-
-                let mut child = match Command::new("make")
-                    .arg(&target)
-                    .current_dir(&cwd)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                {
-                    Ok(c) => c,
-                    Err(e) => {
-                        let _ = line_tx.send(BuildLine {
-                            text: format!("Error: {e}"),
-                            kind: LineKind::Stderr,
-                        });
-                        #[cfg(target_os = "windows")]
-                        if e.kind() == std::io::ErrorKind::NotFound {
-                            for msg in [
-                                "make not found. Install one of:",
-                                "  winget install GnuWin32.Make",
-                                "  or MinGW-w64 (includes mingw32-make)",
-                                "  https://www.mingw-w64.org/",
-                            ] {
-                                let _ = line_tx.send(BuildLine { text: msg.into(), kind: LineKind::Info });
-                            }
-                        }
-                        let _ = line_tx.send(BuildLine {
-                            text: String::new(),
-                            kind: LineKind::Done {
-                                exit_code: None,
-                                duration_ms: start.elapsed().as_millis() as u64,
-                            },
-                        });
-                        continue;
-                    }
+                let exit_code = match build_system {
+                    BuildSystem::Make => run_make(&target, &cwd, &line_tx),
+                    BuildSystem::CMake => run_cmake(&target, &cwd, &line_tx),
                 };
-
-                let stdout = child.stdout.take().map(BufReader::new);
-                let stderr = child.stderr.take().map(BufReader::new);
-
-                let tx_out = line_tx.clone();
-                let stdout_thread = stdout.map(|r| {
-                    thread::spawn(move || {
-                        for line in r.lines().map_while(Result::ok) {
-                            let _ = tx_out.send(BuildLine { text: line, kind: LineKind::Stdout });
-                        }
-                    })
-                });
-
-                let tx_err = line_tx.clone();
-                let stderr_thread = stderr.map(|r| {
-                    thread::spawn(move || {
-                        for line in r.lines().map_while(Result::ok) {
-                            let _ = tx_err.send(BuildLine { text: line, kind: LineKind::Stderr });
-                        }
-                    })
-                });
-
-                if let Some(t) = stdout_thread { let _ = t.join(); }
-                if let Some(t) = stderr_thread { let _ = t.join(); }
-
-                let exit_code = child.wait().ok().and_then(|s| s.code());
                 let duration_ms = start.elapsed().as_millis() as u64;
                 let _ = line_tx.send(BuildLine {
                     text: String::new(),
@@ -172,4 +113,137 @@ fn runner_loop(cmd_rx: mpsc::Receiver<BuildCommand>, line_tx: SyncSender<BuildLi
             }
         }
     }
+}
+
+/// Run one command to completion, streaming its stdout/stderr line-by-line.
+/// Returns `None` if the process failed to spawn.
+fn stream_command(mut cmd: Command, line_tx: &SyncSender<BuildLine>) -> Option<i32> {
+    let mut child: Child = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = line_tx.send(BuildLine { text: format!("Error: {e}"), kind: LineKind::Stderr });
+            return None;
+        }
+    };
+
+    let stdout = child.stdout.take().map(BufReader::new);
+    let stderr = child.stderr.take().map(BufReader::new);
+
+    let tx_out = line_tx.clone();
+    let stdout_thread = stdout.map(|r| {
+        thread::spawn(move || {
+            for line in r.lines().map_while(Result::ok) {
+                let _ = tx_out.send(BuildLine { text: line, kind: LineKind::Stdout });
+            }
+        })
+    });
+
+    let tx_err = line_tx.clone();
+    let stderr_thread = stderr.map(|r| {
+        thread::spawn(move || {
+            for line in r.lines().map_while(Result::ok) {
+                let _ = tx_err.send(BuildLine { text: line, kind: LineKind::Stderr });
+            }
+        })
+    });
+
+    if let Some(t) = stdout_thread { let _ = t.join(); }
+    if let Some(t) = stderr_thread { let _ = t.join(); }
+
+    child.wait().ok().and_then(|s| s.code())
+}
+
+fn run_make(target: &str, cwd: &std::path::Path, line_tx: &SyncSender<BuildLine>) -> Option<i32> {
+    let _ = line_tx.send(BuildLine { text: format!("$ make {target}"), kind: LineKind::Info });
+
+    let mut cmd = Command::new("make");
+    cmd.arg(target).current_dir(cwd);
+    let code = stream_command(cmd, line_tx);
+
+    #[cfg(target_os = "windows")]
+    if code.is_none() {
+        for msg in [
+            "make not found. Install one of:",
+            "  winget install GnuWin32.Make",
+            "  or MinGW-w64 (includes mingw32-make)",
+            "  https://www.mingw-w64.org/",
+        ] {
+            let _ = line_tx.send(BuildLine { text: msg.into(), kind: LineKind::Info });
+        }
+    }
+    code
+}
+
+/// CMake build-type and option flags for each Makefile-equivalent target.
+fn cmake_configure_args(target: &str) -> Vec<&'static str> {
+    match target {
+        "debug" => vec!["-DCMAKE_BUILD_TYPE=Debug", "-DSTRICT=OFF"],
+        "strict" => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=ON"],
+        _ => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=OFF"],
+    }
+}
+
+/// Map a Makefile-style target name to the CMake `--build` target to invoke
+/// (CMake has no implicit default for these synthetic Make targets).
+fn cmake_build_target(target: &str) -> Option<&str> {
+    match target {
+        "all" | "debug" | "release" | "strict" => None, // default target
+        _ => Some(target),
+    }
+}
+
+fn run_cmake(target: &str, cwd: &std::path::Path, line_tx: &SyncSender<BuildLine>) -> Option<i32> {
+    if target == "help" {
+        for msg in [
+            "Targets:",
+            "  all       Build the project (default)",
+            "  run       Build and run the executable",
+            "  debug     Build with debug symbols and sanitizers (ASan, UBSan)",
+            "  release   Build with optimisations and hardening flags",
+            "  strict    Clean rebuild with -Werror and release optimisations",
+            "  valgrind  Build with -g and run under Valgrind memory checker",
+            "  analyse   Run clang static analysis (syntax check + extra warnings)",
+            "  clean     Remove build artefacts and executable",
+        ] {
+            let _ = line_tx.send(BuildLine { text: msg.into(), kind: LineKind::Info });
+        }
+        return Some(0);
+    }
+
+    let cache_exists = cwd.join("build").join("CMakeCache.txt").exists();
+    let needs_configure = !cache_exists || matches!(target, "debug" | "release" | "strict");
+    if needs_configure {
+        let args = cmake_configure_args(target);
+        let _ = line_tx.send(BuildLine {
+            text: format!("$ cmake -S . -B build {}", args.join(" ")),
+            kind: LineKind::Info,
+        });
+        let mut cmd = Command::new("cmake");
+        cmd.args(["-S", ".", "-B", "build"]).args(&args).current_dir(cwd);
+        match stream_command(cmd, line_tx) {
+            Some(0) => {}
+            other => return other,
+        }
+    }
+
+    if target == "strict" {
+        let _ = line_tx.send(BuildLine { text: "$ cmake --build build --target clean".into(), kind: LineKind::Info });
+        let mut clean_cmd = Command::new("cmake");
+        clean_cmd.args(["--build", "build", "--target", "clean"]).current_dir(cwd);
+        if stream_command(clean_cmd, line_tx) != Some(0) {
+            return Some(1);
+        }
+    }
+
+    let build_target = cmake_build_target(target);
+    let mut cmd = Command::new("cmake");
+    cmd.args(["--build", "build"]).current_dir(cwd);
+    if let Some(t) = build_target {
+        cmd.args(["--target", t]);
+    }
+    let _ = line_tx.send(BuildLine {
+        text: format!("$ cmake --build build{}", build_target.map(|t| format!(" --target {t}")).unwrap_or_default()),
+        kind: LineKind::Info,
+    });
+    stream_command(cmd, line_tx)
 }

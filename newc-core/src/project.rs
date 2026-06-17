@@ -10,6 +10,33 @@ use walkdir::WalkDir;
 use crate::error::{NewcError, Result};
 use crate::module::{list_modules, Module};
 
+/// Which build tool a project's build file targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildSystem {
+    Make,
+    CMake,
+}
+
+impl BuildSystem {
+    /// Name of the build file this system expects at the project root.
+    pub fn build_file_name(self) -> &'static str {
+        match self {
+            BuildSystem::Make => "Makefile",
+            BuildSystem::CMake => "CMakeLists.txt",
+        }
+    }
+
+    /// Detect the build system in use at `path` by checking which build file exists.
+    /// Defaults to `Make` if neither is present (e.g. mid-scaffold).
+    pub fn detect(path: &Path) -> Self {
+        if path.join("CMakeLists.txt").exists() {
+            BuildSystem::CMake
+        } else {
+            BuildSystem::Make
+        }
+    }
+}
+
 /// An opened newc project with its module list and git state.
 #[derive(Debug, Clone)]
 pub struct Project {
@@ -20,6 +47,8 @@ pub struct Project {
     pub modules: Vec<Module>,
     /// `true` if `<root>/.git` exists.
     pub has_git: bool,
+    /// Build system in use, detected from which build file exists at the root.
+    pub build_system: BuildSystem,
 }
 
 impl Project {
@@ -27,7 +56,7 @@ impl Project {
     ///
     /// # Errors
     /// Returns [`NewcError::NotAProject`] if the directory does not contain
-    /// `src/main.c`, `include/`, and `Makefile`.
+    /// `src/main.c`, `include/`, and a `Makefile` or `CMakeLists.txt`.
     pub fn open(root: PathBuf) -> Result<Self> {
         if !Self::is_newc_project(&root) {
             return Err(NewcError::NotAProject);
@@ -38,14 +67,15 @@ impl Project {
             .unwrap_or_else(|| "unknown".to_string());
         let has_git = root.join(".git").exists();
         let modules = list_modules(&root)?;
-        Ok(Self { name, root, modules, has_git })
+        let build_system = BuildSystem::detect(&root);
+        Ok(Self { name, root, modules, has_git, build_system })
     }
 
     /// Returns `true` if `path` looks like a valid newc project directory.
     pub fn is_newc_project(path: &Path) -> bool {
         path.join("src").join("main.c").exists()
             && path.join("include").is_dir()
-            && path.join("Makefile").exists()
+            && (path.join("Makefile").exists() || path.join("CMakeLists.txt").exists())
     }
 
     /// Re-scan `include/` and update the cached module list.

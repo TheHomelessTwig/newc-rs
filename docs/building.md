@@ -26,6 +26,7 @@ curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/n
 | Rust | stable | Install via [rustup](https://rustup.rs/) |
 | gcc or clang | any recent | For compiling C projects newc manages |
 | make | any | Required for generated Makefile targets |
+| cmake | 3.10+ | Required if scaffolding with `--build-system cmake` |
 | git | 2.x | Optional; required for git panel features |
 | clang-format | any | Optional; required for "Format" button in editor |
 

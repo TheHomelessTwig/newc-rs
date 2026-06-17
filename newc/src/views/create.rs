@@ -92,6 +92,16 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
+        )
+        .push(
+            row![
+                text("Use CMake:").width(120),
+                checkbox(state.create_use_cmake)
+                    .on_toggle(Message::CreateUseCmakeToggle),
+                text("(unchecked = Makefile)").size(11).color(th::color::TEXT_DIM),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
         );
 
     if !loc_valid {

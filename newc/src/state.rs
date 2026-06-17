@@ -101,6 +101,7 @@ pub enum Message {
     CreateLocation(String),
     CreateLocationBrowse,
     CreateGitToggle(bool),
+    CreateUseCmakeToggle(bool),
     CreateInclude(String, bool),
     CreateTemplate(usize),
     CreateSubmit,
@@ -448,6 +449,8 @@ pub struct AppState {
     // Create project form state
     pub create_name: String,
     pub create_git: bool,
+    /// `true` to scaffold a CMakeLists.txt instead of a Makefile.
+    pub create_use_cmake: bool,
     pub create_author: String,
     pub create_include_input: bool,
     pub create_include_math: bool,
@@ -611,6 +614,7 @@ impl AppState {
             status: None,
             create_name: String::new(),
             create_git: false,
+            create_use_cmake: false,
             create_author: author,
             create_include_input: true,
             create_include_math: true,

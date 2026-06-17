@@ -38,10 +38,10 @@ Pure Rust logic. No dependency on `iced` or any GUI toolkit.
 | `meta` | Project metadata (`course`, `assignment`, `due_date`, marks) |
 | `module` | Module add/remove filesystem operations + C identifier validation |
 | `notes` | Plain-text project notes read/write |
-| `project` | `Project` struct, discovery, `is_newc_project()` |
+| `project` | `Project` struct, discovery, `is_newc_project()`, `BuildSystem` detection (Make/CMake) |
 | `project_template` | 11 built-in project templates + builder functions |
 | `report` | Markdown project report generation |
-| `scaffold` | Project directory creation, Makefile generation, `DefaultModule` enum |
+| `scaffold` | Project directory creation, Makefile/CMakeLists.txt generation, `DefaultModule` enum |
 | `stats` | LOC and function-count metrics |
 | `sync` | Prototype extraction and `.h` regeneration |
 | `templates` | C file content for all built-in modules |

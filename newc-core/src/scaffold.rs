@@ -8,6 +8,7 @@ use chrono::Local;
 
 use crate::error::{NewcError, Result};
 use crate::module::is_valid_c_ident;
+use crate::project::BuildSystem;
 use crate::templates;
 
 /// Options for creating a new newc project.
@@ -21,6 +22,8 @@ pub struct ScaffoldOptions {
     pub author: String,
     /// Default modules to include in the new project.
     pub modules: Vec<DefaultModule>,
+    /// Build file to generate: `Makefile` or `CMakeLists.txt`.
+    pub build_system: BuildSystem,
 }
 
 /// Built-in module templates that can be included when scaffolding a project.
@@ -92,13 +95,18 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
         templates::main_c(author, &date, &include_names),
     )?;
 
-    // Makefile — use test variant if test_utils module is included
-    let makefile = if opts.modules.contains(&DefaultModule::TestUtils) {
-        templates::MAKEFILE_WITH_TEST
-    } else {
-        templates::MAKEFILE
-    };
-    fs::write(root.join("Makefile"), makefile)?;
+    // Build file — use test variant if test_utils module is included
+    let has_tests = opts.modules.contains(&DefaultModule::TestUtils);
+    match opts.build_system {
+        BuildSystem::Make => {
+            let makefile = if has_tests { templates::MAKEFILE_WITH_TEST } else { templates::MAKEFILE };
+            fs::write(root.join("Makefile"), makefile)?;
+        }
+        BuildSystem::CMake => {
+            let cmake = if has_tests { templates::CMAKE_LISTS_WITH_TEST } else { templates::CMAKE_LISTS };
+            fs::write(root.join("CMakeLists.txt"), cmake)?;
+        }
+    }
 
     // Default module files
     for module in &opts.modules {
@@ -167,6 +175,7 @@ mod tests {
             git_init: false,
             author: "Test".to_string(),
             modules,
+            build_system: BuildSystem::Make,
         }
     }
 
@@ -191,6 +200,17 @@ mod tests {
             assert!(root.join(format!("src/{name}.c")).exists(), "{name}.c missing");
             assert!(root.join(format!("include/{name}.h")).exists(), "{name}.h missing");
         }
+    }
+
+    #[test]
+    fn creates_cmake_lists_when_requested() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut o = opts("proj", vec![]);
+        o.build_system = BuildSystem::CMake;
+        create_project(&o, tmp.path()).unwrap();
+        let root = tmp.path().join("proj");
+        assert!(root.join("CMakeLists.txt").exists());
+        assert!(!root.join("Makefile").exists());
     }
 
     #[test]

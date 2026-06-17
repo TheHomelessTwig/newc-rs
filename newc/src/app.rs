@@ -140,7 +140,8 @@ impl NewcApp {
                         self.state.graph_selected = None;
                     }
                     View::MakefileEditor(project) => {
-                        let raw = std::fs::read_to_string(project.root.join("Makefile"))
+                        let file_name = project.build_system.build_file_name();
+                        let raw = std::fs::read_to_string(project.root.join(file_name))
                             .unwrap_or_default();
                         self.state.makefile_content =
                             iced::widget::text_editor::Content::with_text(&raw);
@@ -194,11 +195,12 @@ impl NewcApp {
             Message::BuildStart(target) => {
                 if let Some(project) = self.state.current_project() {
                     let cwd = project.root.clone();
+                    let build_system = project.build_system;
                     self.state.build_target_current = target.clone();
                     self.state.build_state = BuildState::Running;
                     self.state.build_lines.clear();
                     self.state.diagnostics.clear();
-                    self.runner.run(&target, cwd);
+                    self.runner.run(&target, cwd, build_system);
                 }
             }
 
@@ -247,6 +249,7 @@ impl NewcApp {
             }
 
             Message::CreateGitToggle(v) => self.state.create_git = v,
+            Message::CreateUseCmakeToggle(v) => self.state.create_use_cmake = v,
             Message::CreateTemplate(i) => self.state.selected_template = Some(i),
 
             Message::CreateInclude(name, val) => match name.as_str() {
@@ -428,12 +431,13 @@ impl NewcApp {
 
             Message::MakefileSave => {
                 if let Some(project) = self.state.current_project() {
-                    let path = project.root.join("Makefile");
+                    let file_name = project.build_system.build_file_name();
+                    let path = project.root.join(file_name);
                     if let Err(e) = std::fs::write(&path, self.state.makefile_content.text()) {
                         self.state.set_error(e.to_string());
                     } else {
                         self.state.makefile_dirty = false;
-                        self.state.set_status("Makefile saved.");
+                        self.state.set_status(format!("{file_name} saved."));
                     }
                 }
             }
@@ -1886,11 +1890,17 @@ impl NewcApp {
         if self.state.create_include_files { modules.push(DefaultModule::Files); }
         if self.state.create_include_test_utils { modules.push(DefaultModule::TestUtils); }
 
+        let build_system = if self.state.create_use_cmake {
+            newc_core::project::BuildSystem::CMake
+        } else {
+            newc_core::project::BuildSystem::Make
+        };
         let opts = ScaffoldOptions {
             name: name.clone(),
             author: self.state.create_author.clone(),
             git_init: self.state.create_git,
             modules,
+            build_system,
         };
 
         match create_project(&opts, &parent) {
