@@ -2,7 +2,7 @@
 
 A Rust GUI application for scaffolding, building, and managing C projects. Built on [iced](https://github.com/iced-rs/iced) 0.14 with a multi-window MVU architecture.
 
-![Version](https://img.shields.io/badge/version-0.6.1-blue)
+![Version](https://img.shields.io/badge/version-0.6.2-blue)
 ![Language](https://img.shields.io/badge/language-Rust-orange)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
