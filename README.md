@@ -186,8 +186,11 @@ newc stats                   # print function count and LOC per module
 newc funcs [module]          # list function signatures
 newc search <query>          # search all .c and .h files
 
-newc test                    # run the test target (`make test` or `cmake --build build --target test`)
+newc build [target]          # run a build target (default: all) — works for Makefile or CMakeLists.txt
+newc test                    # alias for `newc build test`
 ```
+
+`newc build` targets: `all`, `run`, `debug`, `release`, `strict`, `valgrind`, `analyse`, `test`, `clean`, `help`. Auto-detects Makefile vs CMakeLists.txt and runs the equivalent `make` or `cmake` invocation with the same flags either way — debug/release/strict drive `CMAKE_BUILD_TYPE`/`STRICT` for CMake projects, reconfiguring as needed.
 
 All CLI commands except `new` and `gui` require a project root (directory containing `src/`, `include/`, and a `Makefile` or `CMakeLists.txt`). Build system is auto-detected from which file is present.
 

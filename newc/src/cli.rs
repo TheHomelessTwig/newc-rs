@@ -72,7 +72,12 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
-    /// Run `make test` in the current project (requires a test: target in the Makefile)
+    /// Run a build target in the current project (auto-detects Makefile vs CMakeLists.txt)
+    ///
+    /// Targets: all, run, debug, release, strict, valgrind, analyse, test, clean, help.
+    /// Defaults to `all` if omitted.
+    Build { target: Option<String> },
+    /// Run `make test` / `cmake --build build --target test` in the current project
     Test,
     /// Internal: run the GUI in-process (spawned by `newc` itself; not for direct use)
     #[command(hide = true)]
@@ -97,7 +102,8 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::Gui { .. } => unreachable!("GUI handled in main"),
         Command::InternalGui { .. } => unreachable!("InternalGui handled in main"),
         Command::Update { check } => cmd_update(check),
-        Command::Test => cmd_test(),
+        Command::Build { target } => cmd_build(target.as_deref().unwrap_or("all")),
+        Command::Test => cmd_build("test"),
     }
 }
 
@@ -340,56 +346,91 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_test() -> anyhow::Result<()> {
+/// Run a logical build target (`all`, `run`, `debug`, `release`, `strict`,
+/// `valgrind`, `analyse`, `test`, `clean`, `help`) against whichever build
+/// system the current project uses, with the same flags the GUI build
+/// runner uses (see [`newc_core::build`]).
+fn cmd_build(target: &str) -> anyhow::Result<()> {
     let root = find_project_root()?;
-    use std::process::Command;
-    let status = match BuildSystem::detect(&root) {
-        BuildSystem::Make => Command::new("make")
-            .arg("test")
-            .current_dir(&root)
-            .status()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
-                } else {
-                    anyhow::anyhow!("Failed to run make: {e}")
-                }
-            })?,
-        BuildSystem::CMake => {
-            cmake_configure_if_needed(&root)?;
-            Command::new("cmake")
-                .args(["--build", "build", "--target", "test"])
-                .current_dir(&root)
-                .status()
-                .map_err(|e| anyhow::anyhow!("Failed to run cmake: {e}"))?
-        }
-    };
-    if !status.success() {
-        anyhow::bail!("Tests failed (exit code {:?})", status.code());
+    match BuildSystem::detect(&root) {
+        BuildSystem::Make => run_make(&root, target),
+        BuildSystem::CMake => run_cmake(&root, target),
     }
-    Ok(())
 }
 
-fn cmake_configure_if_needed(root: &std::path::Path) -> anyhow::Result<()> {
+fn run_make(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
     use std::process::Command;
-    if root.join("build").join("CMakeCache.txt").exists() {
-        return Ok(());
-    }
-    let status = Command::new("cmake")
-        .args(["-S", ".", "-B", "build"])
+    let status = Command::new("make")
+        .arg(target)
         .current_dir(root)
         .status()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!("cmake not found. Install CMake (e.g. `winget install Kitware.CMake` on Windows)")
+                anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
             } else {
-                anyhow::anyhow!("Failed to run cmake: {e}")
+                anyhow::anyhow!("Failed to run make: {e}")
             }
         })?;
     if !status.success() {
-        anyhow::bail!("cmake configure failed (exit code {:?})", status.code());
+        anyhow::bail!("Build failed (exit code {:?})", status.code());
     }
     Ok(())
+}
+
+fn run_cmake(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
+    use newc_core::build::{cmake_build_target, cmake_configure_args, cmake_needs_reconfigure, HELP_LINES};
+    use std::process::Command;
+
+    if target == "help" {
+        for msg in HELP_LINES {
+            println!("{msg}");
+        }
+        return Ok(());
+    }
+
+    let cmake_err = |e: std::io::Error| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            anyhow::anyhow!("cmake not found. Install CMake (e.g. `winget install Kitware.CMake` on Windows)")
+        } else {
+            anyhow::anyhow!("Failed to run cmake: {e}")
+        }
+    };
+    let check = |status: std::process::ExitStatus| -> anyhow::Result<()> {
+        if status.success() {
+            Ok(())
+        } else {
+            anyhow::bail!("Build failed (exit code {:?})", status.code());
+        }
+    };
+
+    let cache_exists = root.join("build").join("CMakeCache.txt").exists();
+    if !cache_exists || cmake_needs_reconfigure(target) {
+        let args = cmake_configure_args(target);
+        let status = Command::new("cmake")
+            .args(["-S", ".", "-B", "build"])
+            .args(&args)
+            .current_dir(root)
+            .status()
+            .map_err(cmake_err)?;
+        check(status)?;
+    }
+
+    if target == "strict" {
+        let status = Command::new("cmake")
+            .args(["--build", "build", "--target", "clean"])
+            .current_dir(root)
+            .status()
+            .map_err(cmake_err)?;
+        check(status)?;
+    }
+
+    let mut cmd = Command::new("cmake");
+    cmd.args(["--build", "build"]).current_dir(root);
+    if let Some(t) = cmake_build_target(target) {
+        cmd.args(["--target", t]);
+    }
+    let status = cmd.status().map_err(cmake_err)?;
+    check(status)
 }
 
 fn find_project_root() -> anyhow::Result<PathBuf> {

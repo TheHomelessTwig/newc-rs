@@ -5,6 +5,7 @@
 //! as pure Rust functions consumed by both the CLI and the GUI.
 
 pub mod analysis;
+pub mod build;
 pub mod build_history;
 pub mod config;
 pub mod cref;

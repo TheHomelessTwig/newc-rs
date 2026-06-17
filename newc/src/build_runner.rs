@@ -20,6 +20,7 @@ use std::time::Instant;
 
 use std::sync::mpsc::{self, Receiver, SyncSender};
 
+use newc_core::build::{cmake_build_target, cmake_configure_args, cmake_needs_reconfigure, HELP_LINES};
 use newc_core::project::BuildSystem;
 
 /// A single line of build output with its classification.
@@ -174,44 +175,16 @@ fn run_make(target: &str, cwd: &std::path::Path, line_tx: &SyncSender<BuildLine>
     code
 }
 
-/// CMake build-type and option flags for each Makefile-equivalent target.
-fn cmake_configure_args(target: &str) -> Vec<&'static str> {
-    match target {
-        "debug" => vec!["-DCMAKE_BUILD_TYPE=Debug", "-DSTRICT=OFF"],
-        "strict" => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=ON"],
-        _ => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=OFF"],
-    }
-}
-
-/// Map a Makefile-style target name to the CMake `--build` target to invoke
-/// (CMake has no implicit default for these synthetic Make targets).
-fn cmake_build_target(target: &str) -> Option<&str> {
-    match target {
-        "all" | "debug" | "release" | "strict" => None, // default target
-        _ => Some(target),
-    }
-}
-
 fn run_cmake(target: &str, cwd: &std::path::Path, line_tx: &SyncSender<BuildLine>) -> Option<i32> {
     if target == "help" {
-        for msg in [
-            "Targets:",
-            "  all       Build the project (default)",
-            "  run       Build and run the executable",
-            "  debug     Build with debug symbols and sanitizers (ASan, UBSan)",
-            "  release   Build with optimisations and hardening flags",
-            "  strict    Clean rebuild with -Werror and release optimisations",
-            "  valgrind  Build with -g and run under Valgrind memory checker",
-            "  analyse   Run clang static analysis (syntax check + extra warnings)",
-            "  clean     Remove build artefacts and executable",
-        ] {
-            let _ = line_tx.send(BuildLine { text: msg.into(), kind: LineKind::Info });
+        for msg in HELP_LINES {
+            let _ = line_tx.send(BuildLine { text: (*msg).into(), kind: LineKind::Info });
         }
         return Some(0);
     }
 
     let cache_exists = cwd.join("build").join("CMakeCache.txt").exists();
-    let needs_configure = !cache_exists || matches!(target, "debug" | "release" | "strict");
+    let needs_configure = !cache_exists || cmake_needs_reconfigure(target);
     if needs_configure {
         let args = cmake_configure_args(target);
         let _ = line_tx.send(BuildLine {
