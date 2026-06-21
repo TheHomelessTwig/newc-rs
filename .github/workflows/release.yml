@@ -177,14 +177,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # continue-on-error: until TheHomelessTwig.newc exists in the *merged*
+      # microsoft/winget-pkgs (first submission is a pending PR, not merged
+      # yet), this action errors out — that shouldn't block the independent
+      # Homebrew steps below.
       - name: Publish to winget
         uses: vedantmgoyal2009/winget-releaser@v2
+        continue-on-error: true
         with:
           identifier: TheHomelessTwig.newc
           installers-regex: 'newc-x86_64-windows\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
 
       - name: Bump Homebrew formula
+        if: always()
         uses: mislav/bump-homebrew-formula-action@v4
         with:
           formula-name: newc
@@ -196,6 +202,7 @@ jobs:
       # the Cask (Casks/newc.rb, GUI install — distinct from the CLI Formula)
       # is bumped by hand here instead: it's just two literal fields.
       - name: Bump Homebrew cask
+        if: always()
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
         run: |
