@@ -1099,7 +1099,23 @@ impl NewcApp {
             }
             Message::LibraryEditMode(v) => {
                 self.state.library_state.edit_mode = v;
-                if !v { self.state.library_state.draft = None; }
+                if v {
+                    if self.state.library_state.draft.is_none() {
+                        if let Some(sel) = self.state.library_state.selected.clone() {
+                            if let Some(f) = self.function_lib.all().iter().find(|f| f.name == sel) {
+                                self.state.library_state.draft = Some(f.clone());
+                            }
+                        }
+                    }
+                    if let Some(draft) = &self.state.library_state.draft {
+                        self.state.library_state.header_editor =
+                            iced::widget::text_editor::Content::with_text(&draft.header_code);
+                        self.state.library_state.impl_editor =
+                            iced::widget::text_editor::Content::with_text(&draft.impl_code);
+                    }
+                } else {
+                    self.state.library_state.draft = None;
+                }
             }
             Message::LibraryAddingNew(v) => {
                 self.state.library_state.adding_new = v;
@@ -1111,6 +1127,8 @@ impl NewcApp {
                     self.state.library_state.draft = Some(draft);
                     self.state.library_state.selected = None;
                     self.state.library_state.edit_mode = true;
+                    self.state.library_state.header_editor = iced::widget::text_editor::Content::new();
+                    self.state.library_state.impl_editor = iced::widget::text_editor::Content::new();
                 }
             }
             Message::LibraryGroupNew => {
@@ -1130,6 +1148,24 @@ impl NewcApp {
                         Notes => draft.notes = value,
                     }
                 }
+            }
+            Message::LibraryHeaderEditAction(action) => {
+                self.state.library_state.header_editor.perform(action);
+                let text = self.state.library_state.header_editor.text();
+                if let Some(draft) = &mut self.state.library_state.draft {
+                    draft.header_code = text;
+                }
+            }
+            Message::LibraryImplEditAction(action) => {
+                self.state.library_state.impl_editor.perform(action);
+                let text = self.state.library_state.impl_editor.text();
+                if let Some(draft) = &mut self.state.library_state.draft {
+                    draft.impl_code = text;
+                }
+            }
+            Message::LibraryCopyCode(code) => {
+                self.state.push_toast(crate::state::Toast::success("Copied to clipboard.".to_string()));
+                return iced::clipboard::write(code);
             }
             Message::LibraryUpdateNotes { name, notes } => {
                 if let Some(f) = self.function_lib.get_mut(&name) {
@@ -1979,6 +2015,9 @@ impl NewcApp {
         // Global keyboard shortcuts
         subs.push(iced::event::listen_with(|event, _status, _window| {
             if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) = event {
+                if key.as_ref() == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
+                    return Some(Message::QuickSearchClose);
+                }
                 match (modifiers.control(), modifiers.shift(), key.as_ref()) {
                     (true, _, iced::keyboard::Key::Character("b")) => Some(Message::BuildStart("all".into())),
                     (true, _, iced::keyboard::Key::Character("r")) => Some(Message::RefreshProject),

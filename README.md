@@ -17,6 +17,7 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 - **Workspaces** — organise projects into named groups (e.g. by course or client); archive old projects
 - **Project metadata** — attach course name, assignment title, due date, and marks; due-date countdown shown in project header
 - **Export** — bundle a project as a ZIP, or generate a Markdown report (stats, module list, build history, notes)
+- **Licensing** — pick a license at scaffold time (MIT, Apache-2.0, GPL-2.0/3.0, BSD-3-Clause, Unlicense); writes `LICENSE` and stamps `SPDX-License-Identifier` into every generated source file. `newc add` reuses the project's chosen license for new modules.
 
 ### Build & Analysis
 - **One-click build** — run `all`, `run`, `debug`, `release`, `strict`, `test`, `valgrind`, `valgrind-xml`, `analyse`, `cppcheck`, `coverage`, or `clean` targets from the GUI, via `make` or `cmake` depending on how the project was scaffolded
@@ -188,6 +189,7 @@ newc new <name>              # scaffold a new project (Makefile by default)
 newc new <name> --git        # scaffold + git init
 newc new <name> --template calculator  # scaffold from template
 newc new <name> --build-system cmake   # scaffold with CMakeLists.txt instead of Makefile
+newc new <name> --license MIT          # write LICENSE + stamp SPDX headers (MIT, Apache-2.0, GPL-2.0-only, GPL-3.0-only, BSD-3-Clause, Unlicense)
 
 newc add <module>            # add a new module (.c + .h)
 newc remove                  # interactively remove a module
@@ -225,7 +227,8 @@ myapp/
 ├── Makefile            # or CMakeLists.txt, depending on --build-system
 ├── .newc_meta.toml     # course, assignment, due date, marks
 ├── .newc_builds.json   # build history (last 100 records)
-└── .gitignore          # generated if --git flag used
+├── .gitignore          # generated if --git flag used
+└── LICENSE             # generated if --license flag used
 ```
 
 ---

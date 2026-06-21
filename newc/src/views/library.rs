@@ -1,6 +1,6 @@
 //! Function library browser — grouped function list, detail/edit panel, and composer integration.
 
-use iced::widget::{button, column, pane_grid, row, scrollable, text, text_input, Space};
+use iced::widget::{button, column, pane_grid, row, scrollable, text, text_editor, text_input, Space};
 use iced::{Color, Element, Length};
 use newc_core::function_lib::{FunctionLibrary, FunctionTemplate};
 use newc_core::main_builder::MainBlock;
@@ -32,6 +32,10 @@ pub struct LibraryState {
     /// When true the signature field is edited directly, bypassing the param builder.
     pub draft_override_sig: bool,
     pub draft_params_ready: bool,
+    /// Editable text-editor content for the draft's header (`.h`) code.
+    pub header_editor: text_editor::Content,
+    /// Editable text-editor content for the draft's implementation (`.c`) code.
+    pub impl_editor: text_editor::Content,
 }
 
 impl LibraryState {
@@ -281,9 +285,19 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>, font_siz
             };
             tags_el
         },
-        text("Prototype").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        row![
+            text("Prototype").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+            Space::new().width(Length::Fill),
+            button(text("Copy").size(11)).on_press(Message::LibraryCopyCode(f.header_code.clone())),
+        ]
+        .align_y(iced::Alignment::Center),
         code_view(&f.header_code, (font_size - 1.0).max(8.0), None, None),
-        text("Implementation").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        row![
+            text("Implementation").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+            Space::new().width(Length::Fill),
+            button(text("Copy").size(11)).on_press(Message::LibraryCopyCode(f.impl_code.clone())),
+        ]
+        .align_y(iced::Alignment::Center),
         code_view(&f.impl_code, (font_size - 1.0).max(8.0), None, None),
         {
             let req_str = f.requires.join(", ");
@@ -309,8 +323,6 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
     let desc_val = draft_template.map(|f| f.description.clone()).unwrap_or_default();
     let sig_val = draft_template.map(|f| f.signature.clone()).unwrap_or_default();
     let tags_val = draft_template.map(|f| f.tags.join(", ")).unwrap_or_default();
-    let header_val = draft_template.map(|f| f.header_code.clone()).unwrap_or_default();
-    let impl_val = draft_template.map(|f| f.impl_code.clone()).unwrap_or_default();
     let _notes_val = draft_template.map(|f| f.notes.clone()).unwrap_or_default();
 
     let title = if ls.adding_new { "New Function" } else { "Edit Function" };
@@ -358,11 +370,19 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
         ]
         .spacing(8).align_y(iced::Alignment::Center),
         text("Header (.h):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&header_val, (state.config.code_font_size - 1.0).max(8.0), None, None),
+        text_editor(&ls.header_editor)
+            .highlight("c", iced::highlighter::Theme::Base16Mocha)
+            .on_action(Message::LibraryHeaderEditAction)
+            .font(iced::Font::MONOSPACE)
+            .size((state.config.code_font_size - 1.0).max(8.0))
+            .height(120),
         text("Implementation (.c):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&impl_val, (state.config.code_font_size - 1.0).max(8.0), None, None),
-        text("(Full code editor integration coming in next iteration)")
-            .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text_editor(&ls.impl_editor)
+            .highlight("c", iced::highlighter::Theme::Base16Mocha)
+            .on_action(Message::LibraryImplEditAction)
+            .font(iced::Font::MONOSPACE)
+            .size((state.config.code_font_size - 1.0).max(8.0))
+            .height(220),
         row![
             save_btn,
             button(text("Cancel")).on_press(Message::LibraryEditMode(false)),

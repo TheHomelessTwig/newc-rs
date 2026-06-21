@@ -57,7 +57,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         fn_btns.push(
             button(
                 row![
-                    text(func.name).size(12),
+                    text(func.name).size(12).color(Color::WHITE),
                     text(format!("<{}>", func.header))
                         .size(10)
                         .color(Color::from_rgb(0.5, 0.5, 0.5)),
@@ -65,6 +65,8 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
                 .spacing(4),
             )
             .on_press(Message::CRefSelectFunc(Some(func.name)))
+            .style(crate::theme::btn_ghost)
+            .width(Length::Fill)
             .into(),
         );
     }
