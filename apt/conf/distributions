@@ -1,0 +1,7 @@
+Origin: newc
+Label: newc
+Codename: stable
+Architectures: amd64
+Components: main
+Description: APT repository for newc (https://github.com/TheHomelessTwig/newc-rs)
+SignWith: 5C3F638FD92BB003
