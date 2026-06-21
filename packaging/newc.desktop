@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=newc
+Comment=C project scaffolding & management
+Exec=newc %f
+Icon=newc
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=newc

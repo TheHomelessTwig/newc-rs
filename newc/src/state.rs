@@ -478,6 +478,8 @@ pub struct AppState {
     pub build_state: BuildState,
     /// Status bar message and the [`Instant`] it was set (auto-cleared after 4 s).
     pub status: Option<(String, Instant)>,
+    /// Set when a `Message::UpdateCheck` finds a newer release; cleared after install.
+    pub update_available: Option<String>,
     // Create project form state
     pub create_name: String,
     pub create_git: bool,
@@ -664,6 +666,7 @@ impl AppState {
             valgrind_errors: Vec::new(),
             build_state: BuildState::Idle,
             status: None,
+            update_available: None,
             create_name: String::new(),
             create_git: false,
             create_use_cmake: false,

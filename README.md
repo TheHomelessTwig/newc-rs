@@ -155,6 +155,26 @@ curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/n
     -o /tmp/newc && chmod +x /tmp/newc && sudo mv /tmp/newc /usr/local/bin/newc
 ```
 
+```powershell
+# Windows — installs to Program Files, adds to PATH, creates a Start Menu shortcut
+irm https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/main/packaging/install.ps1 | iex
+```
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap thehomelesstwig/newc
+brew install newc
+```
+
+### Desktop launcher (Linux/macOS)
+
+`install.sh` (this repo) and the [dotfiles](https://github.com/TheHomelessTwig/dotfiles) installer both register `newc` with the OS app launcher in addition to installing the CLI binary:
+- **Linux** — `~/.local/share/applications/newc.desktop` + a hicolor SVG icon, so `newc` shows up in any XDG-compliant launcher (rofi, wofi, GNOME/KDE menus, …).
+- **macOS** — a minimal unsigned `/Applications/newc.app` bundle (for personal-use Launchpad/Spotlight access), wrapping the same installed binary.
+
+On both, `newc` (no args) opens the GUI directly — the CLI remains available from any shell since the binary still lives in the usual `PATH` location (`/usr/local/bin` or Homebrew's bin dir).
+
 ### Build from source
 
 Requires Rust stable (via [rustup](https://rustup.rs/)), `gcc`/`clang`, and `make` (or `cmake` if scaffolding CMake projects).

@@ -1001,6 +1001,7 @@ impl NewcApp {
                 );
             }
             Message::UpdateCheckResult(v) => {
+                self.state.update_available = v.clone();
                 match v {
                     Some(ver) => self.state.push_toast(crate::state::Toast::info(
                         format!("v{ver} available. Click Install to update.")
@@ -1022,6 +1023,7 @@ impl NewcApp {
                 );
             }
             Message::UpdateInstallDone => {
+                self.state.update_available = None;
                 self.state.push_toast(crate::state::Toast::success("Updated. Restart newc to apply.".to_string()));
             }
 

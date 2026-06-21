@@ -154,6 +154,36 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     )
     .style(th::section_style);
 
+    // ── Updates ───────────────────────────────────────────────────────────────
+    let mut update_rows = column![
+        text(format!("Version: v{}", crate::updater::current_version())).size(12),
+        button(text("Check for Updates").size(12))
+            .on_press(Message::UpdateCheck)
+            .style(th::btn_secondary),
+    ]
+    .spacing(8);
+    if let Some(ver) = &state.update_available {
+        update_rows = update_rows.push(
+            row![
+                text(format!("v{ver} available")).size(12).color(th::color::ACCENT),
+                button(text("Install Update").size(12))
+                    .on_press(Message::UpdateInstall(ver.clone()))
+                    .style(th::btn_primary),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
+        );
+    }
+    let updates_section = container(
+        column![
+            th::section_title("Updates"),
+            update_rows,
+        ]
+        .spacing(8)
+        .padding(12),
+    )
+    .style(th::section_style);
+
     // ── Save / Discard ────────────────────────────────────────────────────────
     let actions = row![
         button(text("Save").size(12))
@@ -233,6 +263,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         format_section,
         font_size_section,
         paths_section,
+        updates_section,
     ]
     .spacing(10)
     .padding(16);
