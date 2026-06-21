@@ -172,14 +172,25 @@ winget install TheHomelessTwig.newc
 | Homebrew CLI (macOS/Linux) | `brew tap thehomelesstwig/newc && brew install newc` — builds from source via cargo |
 | Homebrew GUI app (macOS, Apple Silicon) | `brew install --cask thehomelesstwig/newc/newc` — prebuilt `.app`, no Rust needed |
 | AUR (Arch Linux) | `yay -S newc-bin` (or any AUR helper) |
-| apt (Debian/Ubuntu) | download `newc_*_amd64.deb` from [Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest), then `sudo apt install ./newc_*_amd64.deb` |
+| apt repo (Debian/Ubuntu, amd64) | see below — `apt install newc` after a one-time setup |
 | winget (Windows) | `winget install TheHomelessTwig.newc` (pending review) |
 
-The `.deb` and AUR packages both bundle the desktop launcher entry + icon alongside the binary, same as the install scripts below.
+The `.deb`, apt repo, and AUR packages all bundle the desktop launcher entry + icon alongside the binary, same as the install scripts below.
+
+#### apt repo (Debian/Ubuntu, amd64)
+
+Self-hosted (not in the official Debian/Ubuntu archives) — one-time setup, then `apt update`/`apt upgrade` picks up new releases like any other repo:
+
+```bash
+curl -fsSL https://thehomelesstwig.github.io/newc-rs/apt/pubkey.asc | sudo gpg --dearmor -o /etc/apt/keyrings/newc.gpg
+echo "deb [signed-by=/etc/apt/keyrings/newc.gpg] https://thehomelesstwig.github.io/newc-rs/apt stable main" | sudo tee /etc/apt/sources.list.d/newc.list
+sudo apt update
+sudo apt install newc
+```
 
 Notes:
 - AUR package (`packaging/aur/`) is binary-based (`-bin` suffix per AUR convention) — installs the released binary directly, no Rust toolchain needed.
-- The `.deb` is *not* a hosted apt repository — `apt install ./file.deb` installs the downloaded file directly (with dependency resolution); there's no `apt update`-able repo to add a source for.
+- The standalone `.deb` from Releases still works too (`sudo apt install ./newc_*_amd64.deb`) if you'd rather not add a repo.
 - winget submission is a PR to Microsoft's community repo and needs maintainer review before `winget install` works for everyone.
 
 ### Desktop launcher (Linux/macOS/Windows)

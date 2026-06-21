@@ -220,6 +220,37 @@ jobs:
               commit -am "Cask: bump to ${VER}"
           git push
 
+      # Self-hosted apt repo (GitHub Pages, served from the gh-pages branch)
+      # via reprepro. Pulls the .deb already built in the `build` job's
+      # GitHub Release rather than rebuilding it.
+      - name: Publish to apt repo
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y reprepro
+
+          gh release download "${GITHUB_REF_NAME}" --repo "${{ github.repository }}" \
+            --pattern '*.deb' --dir /tmp --clobber
+          mv /tmp/*.deb /tmp/newc.deb
+
+          export GNUPGHOME="$(mktemp -d)"
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          git clone --branch gh-pages --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" pages
+          cd pages/apt
+          reprepro includedeb stable /tmp/newc.deb
+
+          cd ..
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              add apt
+          git commit -m "apt: add ${GITHUB_REF_NAME}"
+          git push
+
       # AUR publishing is deferred — AUR account signups are currently closed.
       # Once an account + SSH key exist, uncomment and set AUR_SSH_PRIVATE_KEY
       # (see packaging/RELEASING.md):
