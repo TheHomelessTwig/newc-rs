@@ -1,0 +1,26 @@
+# Maintainer: TheHomelessTwig <thehomelesstwig@outlook.com>
+pkgname=newc-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="GUI-driven C project scaffolding and management tool"
+arch=('x86_64')
+url="https://github.com/TheHomelessTwig/newc-rs"
+license=('MIT')
+provides=('newc')
+conflicts=('newc')
+source=(
+    "newc-${pkgver}::https://github.com/TheHomelessTwig/newc-rs/releases/download/v${pkgver}/newc-x86_64-linux"
+    "newc.desktop::https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/v${pkgver}/packaging/newc.desktop"
+    "newc.svg::https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/v${pkgver}/packaging/newc.svg"
+)
+sha256sums=(
+    'c871e66c0dc668ffc009df3cb67a3b785d3d3d2c522ee7b630d74efa42030d01'
+    '8388994afba34c2288a248c4c674990ff1864101754d25d3bac4c1bdd8d3879e'
+    '93c243fb695cc7e66d7e85eebcff8b9c23bc449606d7b91a66dc8bc9197538ba'
+)
+
+package() {
+    install -Dm755 "${srcdir}/newc-${pkgver}" "${pkgdir}/usr/bin/newc"
+    install -Dm644 "${srcdir}/newc.desktop" "${pkgdir}/usr/share/applications/newc.desktop"
+    install -Dm644 "${srcdir}/newc.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/newc.svg"
+}

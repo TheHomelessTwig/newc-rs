@@ -95,6 +95,19 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
 
+      - name: Build .deb package
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb -p newc --target ${{ matrix.target }} --no-build
+
+      - name: Upload .deb artifact
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        uses: actions/upload-artifact@v4
+        with:
+          name: newc-amd64-deb
+          path: target/${{ matrix.target }}/debian/*.deb
+
   release:
     name: Publish GitHub Release
     needs: build
@@ -110,5 +123,7 @@ jobs:
       - name: Create release and upload binaries
         uses: softprops/action-gh-release@v2
         with:
-          files: newc-*
+          files: |
+            newc-*
+            *.deb
           generate_release_notes: true

@@ -160,20 +160,35 @@ curl -fsSL https://github.com/TheHomelessTwig/newc-rs/releases/latest/download/n
 irm https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/main/packaging/install.ps1 | iex
 ```
 
-### Homebrew (macOS/Linux)
-
-```bash
-brew tap thehomelesstwig/newc
-brew install newc
+```powershell
+# Windows — via winget (pending review: microsoft/winget-pkgs#391124)
+winget install TheHomelessTwig.newc
 ```
 
-### Desktop launcher (Linux/macOS)
+### Package managers
 
-`install.sh` (this repo) and the [dotfiles](https://github.com/TheHomelessTwig/dotfiles) installer both register `newc` with the OS app launcher in addition to installing the CLI binary:
-- **Linux** — `~/.local/share/applications/newc.desktop` + a hicolor SVG icon, so `newc` shows up in any XDG-compliant launcher (rofi, wofi, GNOME/KDE menus, …).
-- **macOS** — a minimal unsigned `/Applications/newc.app` bundle (for personal-use Launchpad/Spotlight access), wrapping the same installed binary.
+| Manager | Command |
+|---|---|
+| Homebrew (macOS/Linux) | `brew tap thehomelesstwig/newc && brew install newc` |
+| AUR (Arch Linux) | `yay -S newc-bin` (or any AUR helper) |
+| apt (Debian/Ubuntu) | download `newc_*_amd64.deb` from [Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest), then `sudo apt install ./newc_*_amd64.deb` |
+| winget (Windows) | `winget install TheHomelessTwig.newc` (pending review) |
 
-On both, `newc` (no args) opens the GUI directly — the CLI remains available from any shell since the binary still lives in the usual `PATH` location (`/usr/local/bin` or Homebrew's bin dir).
+The `.deb` and AUR packages both bundle the desktop launcher entry + icon alongside the binary, same as the install scripts below.
+
+Notes:
+- AUR package (`packaging/aur/`) is binary-based (`-bin` suffix per AUR convention) — installs the released binary directly, no Rust toolchain needed.
+- The `.deb` is *not* a hosted apt repository — `apt install ./file.deb` installs the downloaded file directly (with dependency resolution); there's no `apt update`-able repo to add a source for.
+- winget submission is a PR to Microsoft's community repo and needs maintainer review before `winget install` works for everyone.
+
+### Desktop launcher (Linux/macOS/Windows)
+
+`install.sh` (this repo), the [dotfiles](https://github.com/TheHomelessTwig/dotfiles) installer, and `packaging/install.ps1` all register `newc` with the OS app launcher in addition to installing the CLI binary:
+- **Linux** — `~/.local/share/applications/newc.desktop` + a hicolor SVG icon, so `newc` shows up in any XDG-compliant launcher (rofi, wofi, GNOME/KDE menus, …). Also bundled automatically in the `.deb` and AUR packages.
+- **macOS** — a minimal unsigned `/Applications/newc.app` bundle (for personal-use Launchpad/Spotlight access), wrapping the same installed binary. The Homebrew formula installs this too (`post_install`), so `brew install newc` alone is enough on macOS.
+- **Windows** — a Start Menu shortcut, created by `install.ps1`.
+
+On all three, `newc` (no args) opens the GUI directly — the CLI remains available from any shell since the binary still lives on `PATH` (`/usr/local/bin`, Homebrew's bin dir, or `%ProgramFiles%\newc` on Windows).
 
 ### Build from source
 

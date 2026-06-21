@@ -1,0 +1,17 @@
+pkgbase = newc-bin
+	pkgdesc = GUI-driven C project scaffolding and management tool
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/TheHomelessTwig/newc-rs
+	arch = x86_64
+	license = MIT
+	provides = newc
+	conflicts = newc
+	source = newc-1.0.0::https://github.com/TheHomelessTwig/newc-rs/releases/download/v1.0.0/newc-x86_64-linux
+	source = newc.desktop::https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/v1.0.0/packaging/newc.desktop
+	source = newc.svg::https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/v1.0.0/packaging/newc.svg
+	sha256sums = c871e66c0dc668ffc009df3cb67a3b785d3d3d2c522ee7b630d74efa42030d01
+	sha256sums = 8388994afba34c2288a248c4c674990ff1864101754d25d3bac4c1bdd8d3879e
+	sha256sums = 93c243fb695cc7e66d7e85eebcff8b9c23bc449606d7b91a66dc8bc9197538ba
+
+pkgname = newc-bin
