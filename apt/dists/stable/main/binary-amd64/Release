@@ -1,0 +1,5 @@
+Component: main
+Origin: newc
+Label: newc
+Architecture: amd64
+Description: APT repository for newc (https://github.com/TheHomelessTwig/newc-rs)

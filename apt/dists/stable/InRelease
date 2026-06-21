@@ -1,0 +1,38 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: newc
+Label: newc
+Codename: stable
+Date: Sun, 21 Jun 2026 10:50:50 UTC
+Architectures: amd64
+Components: main
+Description: APT repository for newc (https://github.com/TheHomelessTwig/newc-rs)
+MD5Sum:
+ a3837b74149e590a8045b015c79e8a52 704 main/binary-amd64/Packages
+ ee005ac6ddd9d087fe924a48b8f70a48 503 main/binary-amd64/Packages.gz
+ 21a194c7cc31796284b7e3ea6874ddc9 143 main/binary-amd64/Release
+SHA1:
+ 6a1c7d5f9efad45de57bf31e02b699c375838855 704 main/binary-amd64/Packages
+ 1728c16dc1fc718e744df813ccd5185c0ffe0012 503 main/binary-amd64/Packages.gz
+ eee5c74de3e9e0ab55e42f0dc6030162b639f43c 143 main/binary-amd64/Release
+SHA256:
+ f5a61fd3ba599544b8fbe0b7b93fa89210d376b9b9464a528104cc8e243a5930 704 main/binary-amd64/Packages
+ e7fc13cb3809b05163d24a175ecbcebbf12e17efe98b816f38de84a92f57bbbe 503 main/binary-amd64/Packages.gz
+ 89253067461072c362c771e9811077198950e548ce716d67ce4243d20977523f 143 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEg1YPtwj9NHs86koSXD9jj9krsAMFAmo3wgoACgkQXD9jj9kr
+sAM20g/+IxenMvB/fFSzjRy92B5fdQby3McdVSyZiGduL3j7KIFPN0OTotIY0Le6
+lAyTQXCSSsenCCeGhBy7QpECh7J/LEehkKDVTeI8aPIgtyDD/gLRudbTprms7X8v
+caUlWzlH2OJs77VvVdnSZoSmJy9v87WClGb+Hkm29AkRFRGwe04m3PUN+g1V7P6f
+Smn++0UNZLCObO7U1A7x76t74SrEwEBUOHdsWF7l0gHby9H0p5IPjE9nEu2OL5Ab
+Vy4hvrB6zgjTh1embDWO9lwo8kZEVdYkoJU9tlfB3aoW51jG7gQkTBxBTQXodAod
+HrOBgKbSqjRL/pdKMSo0m33bVmWyCmGdI9P6XYH5D1OqpgCHW3w1eA5fnwpKslY9
+6ZgvDri1F+Ayg2LPItIPto6F/Y86kN32YO59nrY8g3ur5Ox4bSk4c+aA+GDAoZA2
+GGQuuChKw11XzPjUf6Ix0UXP8YGzBy1zmjStufmuhMeJXpd2XndwMva1YrwUosIW
+WWbRO9r/Q6LIkpPFoV4O/4GicPghhAng5gc9a/yqPLU9tzEs14pyIK+emPxYuFuf
+BgY6PTIc+HI6SEv8OgHldx8uVneUIQUM5bV2/egPXaS6HrJEqhbz2mDbsrn3yh1i
+GofFQtErFHQpszq8imM6IbUUftHKDH9c6kTNvNyU29TwWPiPxok=
+=M1Vk
+-----END PGP SIGNATURE-----
