@@ -1,6 +1,6 @@
 # Maintainer: TheHomelessTwig <thehomelesstwig@outlook.com>
 pkgname=newc-bin
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="GUI-driven C project scaffolding and management tool"
 arch=('x86_64')
@@ -14,7 +14,7 @@ source=(
     "newc.svg::https://raw.githubusercontent.com/TheHomelessTwig/newc-rs/v${pkgver}/packaging/newc.svg"
 )
 sha256sums=(
-    'c871e66c0dc668ffc009df3cb67a3b785d3d3d2c522ee7b630d74efa42030d01'
+    'b6b2a0d249cfcbd704bf2c9f506cdb236b390bb9d5d8418d6626f46d6b02e007'
     '8388994afba34c2288a248c4c674990ff1864101754d25d3bac4c1bdd8d3879e'
     '93c243fb695cc7e66d7e85eebcff8b9c23bc449606d7b91a66dc8bc9197538ba'
 )
