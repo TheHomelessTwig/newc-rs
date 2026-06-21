@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use iced::widget::{button, column, container, pane_grid, row, scrollable, text, text_editor, Space};
+use iced::widget::{button, column, container, pane_grid, pick_list, row, scrollable, text, text_editor, Space};
 use iced::{Color, Element, Length};
 use newc_core::sync::extract_function_implementations;
 use crate::highlight::code_view;
@@ -38,6 +38,8 @@ pub struct ModuleDetailState {
     pub highlight_line: Option<usize>,
     /// Function name awaiting delete confirmation; `None` when no confirmation is pending.
     pub delete_func_confirm: Option<String>,
+    /// Most recent `clangd` hover result, shown below the editor in edit mode.
+    pub hover_text: Option<String>,
 }
 
 /// Renders the module detail screen for `module_name`, showing its functions and source.
@@ -111,6 +113,23 @@ pub fn view<'a>(
                 .on_press(Message::ModuleShowCallTree(true))
                 .style(th::btn_secondary)
         },
+        {
+            let mut other_modules: Vec<String> = std::fs::read_dir(project_root.join("src"))
+                .map(|entries| entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("c"))
+                    .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
+                    .filter(|n| n != module_name)
+                    .collect())
+                .unwrap_or_default();
+            other_modules.sort();
+            pick_list(other_modules, state.split_compare_module.clone(), |name| Message::SplitCompareSelect(Some(name)))
+                .placeholder("split with…")
+                .text_size(12)
+        },
+        button(text("×").size(12))
+            .on_press(Message::SplitCompareSelect(None))
+            .style(th::btn_ghost),
     ]
     .spacing(6)
     .align_y(iced::Alignment::Center);
@@ -174,12 +193,27 @@ pub fn view<'a>(
             ]
             .spacing(6)
             .align_y(iced::Alignment::Center),
+            row![
+                button(text("ℹ Hover").size(11))
+                    .on_press(Message::ModuleHoverRequest(module_name.to_string()))
+                    .style(th::btn_secondary),
+            ],
             text_editor(&mds.edit_content)
                 .highlight("c", iced::highlighter::Theme::Base16Mocha)
                 .on_action(Message::ModuleEditAction)
                 .font(iced::Font::MONOSPACE)
-                .size(13)
+                .size(state.config.code_font_size)
                 .height(Length::Fill),
+            {
+                let hover_el: Element<Message> = if let Some(hover) = &mds.hover_text {
+                    container(text(hover.clone()).size(11).color(th::color::CYAN))
+                        .padding(6)
+                        .into()
+                } else {
+                    Space::new().into()
+                };
+                hover_el
+            },
         ]
         .spacing(8)
         .into()
@@ -187,10 +221,11 @@ pub fn view<'a>(
         // View mode: show function source
         let func = funcs.iter().find(|f| &f.name == selected);
         if let Some(f) = func {
-            let lint_warnings: Vec<String> = {
-                let warns = newc_core::lint::lint_file(&f.body);
-                warns.iter().map(|w| format!("[{}] L{}: {}", w.code, w.line_no, w.message)).collect()
-            };
+            let lint_warnings = newc_core::lint::lint_file(&f.body);
+
+            let coverage_label: Option<String> = newc_core::coverage::module_summary(project_root, module_name)
+                .filter(|s| s.total > 0)
+                .map(|s| format!("Coverage: {:.0}% ({}/{} lines)", s.percent(), s.covered, s.total));
 
             let mut col = column![
                 row![
@@ -204,6 +239,9 @@ pub fn view<'a>(
                     button(text("⇄ Move").size(12))
                         .on_press(Message::ModuleMoveStart(f.name.clone()))
                         .style(th::btn_secondary),
+                    button(text("📝 Doc").size(12))
+                        .on_press(Message::ModuleGenerateDoc(f.name.clone()))
+                        .style(th::btn_secondary),
                     button(text("✗ Delete").size(12))
                         .on_press(Message::ModuleDeleteFunc(f.name.clone())),
                 ]
@@ -214,16 +252,65 @@ pub fn view<'a>(
             ]
             .spacing(6);
 
+            if let Some(doc) = newc_core::doc::parse_doc_comment(&f.comment) {
+                if !doc.brief.is_empty() {
+                    col = col.push(text(doc.brief).size(12).color(Color::from_rgb(0.988, 0.988, 0.980)));
+                }
+                for (name, desc) in &doc.params {
+                    col = col.push(
+                        row![
+                            text("  @param").size(11).color(Color::from_rgb(1.0, 0.847, 0.0)),
+                            text(name.clone()).size(11).font(iced::Font::MONOSPACE).color(Color::from_rgb(0.663, 0.863, 0.463)),
+                            text(desc.clone()).size(11).color(Color::from_rgb(0.7, 0.7, 0.7)),
+                        ]
+                        .spacing(6)
+                    );
+                }
+                if let Some(ret) = &doc.returns {
+                    col = col.push(
+                        row![
+                            text("  @return").size(11).color(Color::from_rgb(1.0, 0.847, 0.0)),
+                            text(ret.clone()).size(11).color(Color::from_rgb(0.7, 0.7, 0.7)),
+                        ]
+                        .spacing(6)
+                    );
+                }
+            }
+
+            if let Some(label) = coverage_label {
+                col = col.push(text(label).size(11).color(Color::from_rgb(0.663, 0.863, 0.463)));
+            }
+
             if !lint_warnings.is_empty() {
+                let body_lines: Vec<&str> = f.body.lines().collect();
+                let function_name = f.name.clone();
                 col = col.push(
-                    column(lint_warnings.into_iter().map(|w| {
-                        text(w).size(11).color(Color::from_rgb(1.0, 0.847, 0.4)).into()
-                    }).collect::<Vec<_>>())
+                    column(lint_warnings.iter().map(|w| {
+                        let label = format!("[{}] L{}: {}", w.code, w.line_no, w.message);
+                        let has_fix = body_lines.get(w.line_no.saturating_sub(1))
+                            .is_some_and(|line| newc_core::lint::quick_fix(w.code, line).is_some());
+                        let mut r = row![text(label).size(11).color(Color::from_rgb(1.0, 0.847, 0.4))]
+                            .spacing(6)
+                            .align_y(iced::Alignment::Center);
+                        if has_fix {
+                            r = r.push(
+                                button(text("Fix").size(10))
+                                    .on_press(Message::LintQuickFix {
+                                        module: module_name.to_string(),
+                                        function: function_name.clone(),
+                                        line_no: w.line_no,
+                                        code: w.code.to_string(),
+                                    })
+                                    .style(th::btn_secondary),
+                            );
+                        }
+                        r.into()
+                    }).collect::<Vec<Element<Message>>>())
                     .spacing(2)
                 );
             }
 
-            col = col.push(code_view(&f.body, 13.0, None, None));
+            col = col.push(code_view(&f.body, state.config.code_font_size, None, None));
 
             // Call tree
             if mds.show_call_tree && !mds.call_tree_lines.is_empty() {
@@ -238,21 +325,37 @@ pub fn view<'a>(
         } else {
             text("Function not found.").into()
         }
+    } else if let Some(other_module) = &state.split_compare_module {
+        // Split view — current module's source alongside another module's, side by side.
+        let other_path = project_root.join("src").join(format!("{other_module}.c"));
+        let other_content = std::fs::read_to_string(&other_path).unwrap_or_default();
+        row![
+            column![
+                text(module_name.to_string()).size(12).color(th::color::TEXT_DIM),
+                code_view(&src_content, state.config.code_font_size, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL)),
+            ].spacing(2).width(Length::FillPortion(1)),
+            column![
+                text(other_module.clone()).size(12).color(th::color::TEXT_DIM),
+                code_view(&other_content, state.config.code_font_size, None, None),
+            ].spacing(2).width(Length::FillPortion(1)),
+        ]
+        .spacing(8)
+        .into()
     } else {
         // No selection — show full source with highlighting
-        code_view(&src_content, 12.0, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL))
+        code_view(&src_content, state.config.code_font_size, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL))
     };
 
     let mut layout = column![header, toolbar];
     if let Some(banner) = dead_banner {
         layout = layout.push(banner);
     }
-    if let Some(fname) = &mds.delete_func_confirm {
-        let fname2 = fname.clone();
+    if let Some(pending_delete) = &mds.delete_func_confirm {
+        let pending_delete_name = pending_delete.clone();
         layout = layout.push(
             container(
                 row![
-                    text(format!("Delete `{fname2}`?")).size(12).color(th::color::ACCENT),
+                    text(format!("Delete `{pending_delete_name}`?")).size(12).color(th::color::ACCENT),
                     Space::new().width(Length::Fill),
                     button(text("Confirm").size(11))
                         .on_press(Message::ModuleDeleteFuncConfirm)

@@ -61,17 +61,17 @@ impl canvas::Program<Message> for FlowCanvas {
 
             // Draw explicit edges
             for &(fi, ti) in &self.edges {
-                let n = &self.nodes[fi];
-                let m = &self.nodes[ti];
-                let fx = cx + (n.x + n.w / 2.0) * z;
-                let fy = self.pan_y + (n.y + n.h) * z;
-                let tx = cx + (m.x + m.w / 2.0) * z;
-                let ty = self.pan_y + m.y * z;
+                let from_node = &self.nodes[fi];
+                let to_node = &self.nodes[ti];
+                let fx = cx + (from_node.x + from_node.w / 2.0) * z;
+                let fy = self.pan_y + (from_node.y + from_node.h) * z;
+                let tx = cx + (to_node.x + to_node.w / 2.0) * z;
+                let ty = self.pan_y + to_node.y * z;
 
                 // For loop-back edges (going upward), use an elbow route
                 if ty < fy - 4.0 {
                     // Right-elbow: down from source, across, up to target
-                    let elbow_x = cx + (n.x + n.w + 16.0) * z;
+                    let elbow_x = cx + (from_node.x + from_node.w + 16.0) * z;
                     let mid_y = fy + 10.0 * z;
                     let path = Path::new(|b| {
                         b.move_to(Point::new(fx, fy));
@@ -203,11 +203,11 @@ impl canvas::Program<Message> for FlowCanvas {
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
-                let d = match delta {
+                let zoom_delta = match delta {
                     mouse::ScrollDelta::Lines { y, .. } => *y * 0.1,
                     mouse::ScrollDelta::Pixels { y, .. } => *y * 0.001,
                 };
-                Some(canvas::Action::publish(Message::GraphZoom(d)).and_capture())
+                Some(canvas::Action::publish(Message::GraphZoom(zoom_delta)).and_capture())
             }
             _ => None,
         }

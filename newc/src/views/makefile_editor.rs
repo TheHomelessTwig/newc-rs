@@ -60,7 +60,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
             let flag_btns: Vec<Element<Message>> = FLAGS.iter().map(|(flag, label)| {
                 let active = cflags_line.contains(flag);
-                let f = flag.to_string();
+                let flag_owned = flag.to_string();
                 button(
                     column![
                         text(*label).size(10).color(if active { th::color::GREEN } else { th::color::TEXT_DIM }),
@@ -68,7 +68,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                     ]
                     .spacing(1)
                 )
-                .on_press(Message::MakefileToggleFlag(f))
+                .on_press(Message::MakefileToggleFlag(flag_owned))
                 .style(if active { th::btn_nav_active } else { th::btn_nav_inactive })
                 .into()
             }).collect();

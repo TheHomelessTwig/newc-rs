@@ -9,7 +9,7 @@ use crate::state::{Message, View};
 
 /// Renders the project stats screen with summary totals and a per-module LOC breakdown.
 pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Element<'a, Message> {
-    let s = stats::compute(&project.root);
+    let project_stats = stats::compute(&project.root);
 
     let header = row![
         button(text("← Back"))
@@ -23,14 +23,14 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     .align_y(iced::Alignment::Center);
 
     let summary = column![
-        stat_row("Modules", s.module_stats.len().to_string()),
-        stat_row("Total functions", s.total_functions.to_string()),
-        stat_row("Lines of code (LOC)", s.total_loc.to_string()),
-        stat_row("Total source lines", s.total_source_lines.to_string()),
+        stat_row("Modules", project_stats.module_stats.len().to_string()),
+        stat_row("Total functions", project_stats.total_functions.to_string()),
+        stat_row("Lines of code (LOC)", project_stats.total_loc.to_string()),
+        stat_row("Total source lines", project_stats.total_source_lines.to_string()),
     ]
     .spacing(4);
 
-    let max_loc = s.module_stats.iter().map(|m| m.loc).max().unwrap_or(1).max(1);
+    let max_loc = project_stats.module_stats.iter().map(|m| m.loc).max().unwrap_or(1).max(1);
 
     let module_rows: Vec<Element<Message>> = {
         let mut rows = vec![
@@ -43,7 +43,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             .spacing(4)
             .into(),
         ];
-        for m in &s.module_stats {
+        for m in &project_stats.module_stats {
             let bar_pct = (m.loc as f32 / max_loc as f32 * 100.0) as usize;
             let bar: String = "█".repeat(bar_pct / 5).into();
             rows.push(

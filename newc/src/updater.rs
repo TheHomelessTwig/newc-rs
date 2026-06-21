@@ -9,11 +9,16 @@
 //! systems `install_binary` falls back to `sudo cp` if a direct write fails
 //! (e.g. the binary lives in `/usr/local/bin`). On Windows the replacement is
 //! deferred to a batch script that runs after the process exits.
+//!
+//! HTTP calls shell out to the system `curl` binary rather than linking an HTTP
+//! client crate — avoids pulling a TLS stack (rustls/ring/webpki) into the
+//! dependency tree for two infrequent GET requests. `curl` ships by default on
+//! Linux, macOS, and Windows 10+.
 
 use anyhow::{anyhow, Result};
 use std::io::Write;
 use std::path::Path;
-use std::time::Duration;
+use std::process::Command;
 
 const REPO: &str = "TheHomelessTwig/newc-rs";
 
@@ -39,20 +44,32 @@ pub(crate) fn semver_gt(a: &str, b: &str) -> bool {
     parse(a) > parse(b)
 }
 
-fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(15))
-        .build()
+fn curl_get_to_stdout(url: &str, extra_headers: &[&str]) -> Result<std::process::Output> {
+    let mut cmd = Command::new("curl");
+    cmd.arg("-sL")
+        .arg("-H")
+        .arg(format!("User-Agent: newc/{}", current_version()));
+    for h in extra_headers {
+        cmd.arg("-H").arg(*h);
+    }
+    cmd.arg(url);
+    let output = cmd
+        .output()
+        .map_err(|e| anyhow!("failed to run curl: {e} (is curl installed?)"))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "curl exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(output)
 }
 
 fn fetch_latest_tag() -> Result<String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let body: serde_json::Value = agent()
-        .get(&url)
-        .set("User-Agent", &format!("newc/{}", current_version()))
-        .set("Accept", "application/vnd.github.v3+json")
-        .call()?
-        .into_json()?;
+    let output = curl_get_to_stdout(&url, &["Accept: application/vnd.github.v3+json"])?;
+    let body: serde_json::Value = serde_json::from_slice(&output.stdout)?;
 
     body["tag_name"]
         .as_str()
@@ -65,15 +82,18 @@ fn download_asset(tag: &str, asset: &str) -> Result<std::path::PathBuf> {
     print!("Downloading {asset}... ");
     std::io::stdout().flush()?;
 
-    let response = agent()
-        .get(&url)
-        .set("User-Agent", &format!("newc/{}", current_version()))
-        .call()?;
-
     let tmp = std::env::temp_dir().join("newc-update");
-    {
-        let mut file = std::fs::File::create(&tmp)?;
-        std::io::copy(&mut response.into_reader(), &mut file)?;
+    let status = Command::new("curl")
+        .arg("-sL")
+        .arg("-H")
+        .arg(format!("User-Agent: newc/{}", current_version()))
+        .arg("-o")
+        .arg(&tmp)
+        .arg(&url)
+        .status()
+        .map_err(|e| anyhow!("failed to run curl: {e} (is curl installed?)"))?;
+    if !status.success() {
+        return Err(anyhow!("curl exited with {status} downloading {asset}"));
     }
     #[cfg(unix)]
     {

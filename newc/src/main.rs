@@ -14,6 +14,7 @@ mod app;
 mod highlight;
 mod state;
 mod build_runner;
+mod lsp;
 mod updater;
 mod theme;
 pub mod views;
@@ -27,8 +28,8 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            let cwd = std::env::current_dir().ok();
-            let initial = cwd.filter(|p| newc_core::project::Project::is_newc_project(p));
+            let current_dir = std::env::current_dir().ok();
+            let initial = current_dir.filter(|dir| newc_core::project::Project::is_newc_project(dir));
             launch_gui(initial)
         }
         Some(Command::Gui { path }) => {

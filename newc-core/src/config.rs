@@ -39,6 +39,9 @@ pub struct AppConfig {
     /// Style argument passed to `clang-format --style=`.
     #[serde(default = "default_clang_format_style")]
     pub clang_format_style: String,
+    /// Monospace font size (logical pixels) used by all code views and editors.
+    #[serde(default = "default_code_font_size")]
+    pub code_font_size: f32,
 }
 
 impl Default for AppConfig {
@@ -50,12 +53,17 @@ impl Default for AppConfig {
             theme: default_theme(),
             workspaces: Vec::new(),
             clang_format_style: default_clang_format_style(),
+            code_font_size: default_code_font_size(),
         }
     }
 }
 
 fn default_clang_format_style() -> String {
     "file".to_string()
+}
+
+fn default_code_font_size() -> f32 {
+    13.0
 }
 
 fn default_terminal() -> String {
@@ -107,6 +115,13 @@ fn which(bin: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// A named set of extra compiler flags selectable in the build panel.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BuildProfile {
+    pub name: String,
+    pub cflags: String,
+}
+
 /// Per-project setting overrides stored in `<project>/.newc_config.toml`.
 /// Any `Some` value overrides the corresponding global `AppConfig` field.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -114,6 +129,9 @@ pub struct ProjectConfig {
     pub editor: Option<String>,
     pub terminal: Option<String>,
     pub clang_format_style: Option<String>,
+    /// Named build profiles (extra CFLAGS) selectable in the build panel.
+    #[serde(default)]
+    pub build_profiles: Vec<BuildProfile>,
 }
 
 impl ProjectConfig {

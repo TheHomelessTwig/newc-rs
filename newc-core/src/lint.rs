@@ -52,6 +52,65 @@ pub struct LintWarning {
     pub message: String,
 }
 
+/// Return a mechanically rewritten version of `line` that resolves a lint
+/// warning with the given rule `code`, or `None` if no safe automatic
+/// rewrite exists for that rule (most rules require human judgement about
+/// buffer sizes, format strings, etc. — only pure function-name swaps are
+/// offered here; callers should still review the result).
+pub fn quick_fix(code: &str, line: &str) -> Option<String> {
+    match code {
+        "L001" if line.contains("gets(") => Some(line.replacen("gets(", "fgets(", 1)),
+        "L002" if line.contains("strcpy(") => Some(line.replacen("strcpy(", "strncpy(", 1)),
+        "L006" if line.contains("sprintf(") && !line.contains("vsprintf(") && !line.contains("snprintf(") => {
+            Some(line.replacen("sprintf(", "snprintf(", 1))
+        }
+        _ => None,
+    }
+}
+
+/// Apply [`quick_fix`] to one line inside a specific function's body and write
+/// the result back to `<module>.c`.
+///
+/// `line_no` is 1-based and relative to the function body (as reported by
+/// [`lint_file`] when called on just that body), not the whole file.
+///
+/// # Errors
+/// Returns an error if the function or line is not found, no automatic fix
+/// exists for `code`, or on IO failure.
+pub fn apply_fix_in_function(
+    root: &std::path::Path,
+    module: &str,
+    fname: &str,
+    line_no: usize,
+    code: &str,
+) -> crate::error::Result<()> {
+    let src_path = root.join("src").join(format!("{module}.c"));
+    let content = std::fs::read_to_string(&src_path)?;
+
+    let funcs = crate::sync::extract_function_implementations(&content);
+    let func = funcs.iter().find(|f| f.name == fname).ok_or_else(|| {
+        crate::error::NewcError::Other(format!("function '{fname}' not found in {module}"))
+    })?;
+
+    let body_lines: Vec<&str> = func.body.lines().collect();
+    let old_line = *body_lines.get(line_no.saturating_sub(1)).ok_or_else(|| {
+        crate::error::NewcError::Other("line out of range".to_string())
+    })?;
+    let fixed_line = quick_fix(code, old_line).ok_or_else(|| {
+        crate::error::NewcError::Other(format!("no automatic fix for {code}"))
+    })?;
+
+    let mut new_body_lines = body_lines;
+    new_body_lines[line_no - 1] = &fixed_line;
+    let new_body = new_body_lines.join("\n");
+
+    let old_full = format!("{}\n{}", func.signature, func.body);
+    let new_full = format!("{}\n{}", func.signature, new_body);
+    let updated = content.replacen(&old_full, &new_full, 1);
+    std::fs::write(&src_path, updated)?;
+    Ok(())
+}
+
 /// Lint a `.c` source file, returning all warnings found.
 ///
 /// Checks rules L001–L017. Comments are skipped; blank lines are ignored.

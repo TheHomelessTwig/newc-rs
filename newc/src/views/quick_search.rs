@@ -20,7 +20,6 @@ pub struct QuickSearchState {
 
 /// A single result entry in the quick-search overlay.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub enum QuickSearchResult {
     /// A function from the function library.
     Function { name: String, module: String, description: String },
@@ -66,17 +65,17 @@ pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
             }
         };
 
-        let msg = match result {
+        let select_message = match result {
             QuickSearchResult::Function { name, module, .. } => {
                 Message::QuickSearchSelectFunc { name: name.clone(), header: module.clone() }
             }
             QuickSearchResult::Project { path, .. } => {
-                let p = path.clone();
-                Message::OpenProject(p)
+                let project_path = path.clone();
+                Message::OpenProject(project_path)
             }
         };
 
-        button(content).on_press(msg).width(Length::Fill).into()
+        button(content).on_press(select_message).width(Length::Fill).into()
     }).collect();
 
     column![

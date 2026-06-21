@@ -209,7 +209,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
                 text(snippet.desc).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
-                code_view(snippet.code, 13.0, None, None),
+                code_view(snippet.code, state.config.code_font_size, None, None),
             ]
             .spacing(8)
             .into()

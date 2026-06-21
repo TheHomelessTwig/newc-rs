@@ -23,29 +23,34 @@ Pure Rust logic. No dependency on `iced` or any GUI toolkit.
 | Module | Responsibility |
 |---|---|
 | `analysis` | BFS dead-code reachability from `main()` |
+| `build` | Shared Make/CMake target logic (`cmake_configure_args`, presets, help text) |
 | `build_history` | Per-project build log (JSON) |
-| `config` | `AppConfig` — serialise/deserialise user settings |
+| `config` | `AppConfig`/`ProjectConfig` — serialise/deserialise user + per-project settings |
+| `coverage` | `gcov` `.gcov` report parsing (line + per-function coverage %) |
 | `cref` | C standard library reference data |
 | `diag` | Compiler diagnostic line parser (gcc/clang format) |
+| `doc` | Doxygen stub generation + comment parsing |
 | `error` | `NewcError` + `Result<T>` alias |
-| `export` | ZIP bundle generation |
+| `export` | ZIP bundle generation, assignment packer, `compile_commands.json` |
 | `function_lib` | Function library: load/save/groups/search/dependency resolution/`detect_requires` |
-| `git` | `std::process::Command` wrappers for git operations |
-| `grep` | Project-wide substring search across `.c`/`.h` files |
+| `git` | `std::process::Command` wrappers for git operations (incl. stash) |
+| `grep` | Project-wide search, preview/apply replace across `.c`/`.h` files |
 | `header` | `.h` file read/write with `SYNC_IGNORE_START/END` block preservation |
-| `lint` | Static C linter — 15 pattern-based rules (L001–L015) |
+| `lint` | Static C linter — 17 pattern-based rules (L001–L017) + mechanical quick-fixes |
 | `main_builder` | `MainBlock` enum, `MainBuilderState`, C code generation |
 | `meta` | Project metadata (`course`, `assignment`, `due_date`, marks) |
 | `module` | Module add/remove filesystem operations + C identifier validation |
 | `notes` | Plain-text project notes read/write |
 | `project` | `Project` struct, discovery, `is_newc_project()`, `BuildSystem` detection (Make/CMake) |
 | `project_template` | 11 built-in project templates + builder functions |
+| `refactor` | Project-wide function rename, move-between-modules |
 | `report` | Markdown project report generation |
 | `scaffold` | Project directory creation, Makefile/CMakeLists.txt generation, `DefaultModule` enum |
 | `stats` | LOC and function-count metrics |
 | `sync` | Prototype extraction and `.h` regeneration |
-| `templates` | C file content for all built-in modules |
+| `templates` | C file content for all built-in modules, Unity test harness, CMake presets |
 | `user_template` | User-defined template save/load |
+| `valgrind` | `--xml=yes` memcheck report parsing |
 
 ### Key types
 
@@ -93,6 +98,18 @@ pub struct AppConfig {
     pub theme: String,
     pub clang_format_style: String,
     pub workspaces: Vec<Workspace>,
+    pub code_font_size: f32,
+}
+```
+
+**`ProjectConfig`** (`config.rs`, per-project overrides in `.newc_config.toml`):
+
+```rust
+pub struct ProjectConfig {
+    pub editor: Option<String>,
+    pub terminal: Option<String>,
+    pub clang_format_style: Option<String>,
+    pub build_profiles: Vec<BuildProfile>,  // { name, cflags }
 }
 ```
 
@@ -218,6 +235,10 @@ Views do not perform I/O or mutation — they produce an element tree that iced 
 ### Async build (`build_runner.rs`)
 
 `BuildRunner` owns a background thread that reads `Child` stdout/stderr and sends `BuildLine` values via a channel. The `subscription()` polls via `iced::time::every()` — `PollBuildOutput` drains the channel into `state.build_lines` each tick.
+
+### clangd hover (`lsp.rs`)
+
+`LspClient::spawn()` starts `clangd` as a background subprocess (`None` if not on `PATH`) and talks JSON-RPC over stdin/stdout using `Content-Length`-framed messages — only `initialize`, `textDocument/didOpen`, and `textDocument/hover` are implemented. A writer thread owns stdin and a reader thread owns stdout; hover results flow back via an `mpsc` channel drained each `update()` tick, same pattern as `BuildRunner`.
 
 ### Syntax highlighter (`highlight.rs`)
 

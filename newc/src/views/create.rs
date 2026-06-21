@@ -131,6 +131,8 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             .on_toggle(|v| Message::CreateInclude("files".into(), v)),
         checkbox(state.create_include_test_utils).label("test_utils")
             .on_toggle(|v| Message::CreateInclude("test_utils".into(), v)),
+        checkbox(state.create_use_unity).label("unity (test harness)")
+            .on_toggle(|v| Message::CreateInclude("unity".into(), v)),
     ]
     .spacing(12)
     .wrap();

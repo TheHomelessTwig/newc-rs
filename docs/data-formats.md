@@ -13,6 +13,7 @@ terminal = "foot"
 editor = "nvim"
 theme = "dark"                # "dark" | "light"
 clang_format_style = "file"   # passed to clang-format -style=
+code_font_size = 13.0         # monospace size for code views and editors
 
 scan_dirs = [
     "~/projects",
@@ -44,6 +45,31 @@ paths = [
 | `clang_format_style` | `"file"` |
 | `scan_dirs` | `["~/projects"]` |
 | `workspaces` | `[]` |
+| `code_font_size` | `13.0` |
+
+---
+
+## `<project>/.newc_config.toml`
+
+Per-project overrides of the global config, plus named build profiles. Any
+key left unset falls back to the global `config.toml` value.
+
+```toml
+editor = "code"
+terminal = "kitty"
+clang_format_style = "LLVM"
+
+[[build_profiles]]
+name = "asan"
+cflags = "-fsanitize=address,undefined -g"
+
+[[build_profiles]]
+name = "tiny"
+cflags = "-Os -DNDEBUG"
+```
+
+Selected via a dropdown in the build panel; the chosen profile's `cflags` is
+passed as `make <target> EXTRA_CFLAGS="..."` (Make projects only).
 
 ---
 
@@ -299,6 +325,11 @@ implemented as `add_custom_target` wrappers around an `add_executable(main ...)`
 | `release` | Build with `-O2` (CMake: configure `-DCMAKE_BUILD_TYPE=Release`, the default) |
 | `strict` | Build with all warnings as errors (CMake: configure `-DSTRICT=ON`, clean rebuild) |
 | `valgrind` | Run the built executable under Valgrind |
+| `valgrind-xml` | Same as `valgrind`, writes structured XML to `vg.xml` for the GUI to parse |
 | `analyse` | Run clang static analysis (syntax-only) |
-| `test` | Run the built executable (only present if the `test_utils` module was included at scaffold time) |
+| `cppcheck` | Run cppcheck static analysis (requires `cppcheck` installed) |
+| `coverage` | Build with gcov instrumentation, run, and emit `.gcov` reports (CMake: configure `-DCOVERAGE=ON`) |
+| `test` | Run the built executable (only present if the `test_utils` or `unity` module was included at scaffold time) |
 | `clean` | Remove `build/` directory (or `cmake --build build --target clean`) |
+
+A CMake project also gets a `CMakePresets.json` (debug/release/strict/coverage) mirroring the same `-D` flags; the build runner uses `cmake --preset <name>` instead of hand-built `-D` args when that file is present.

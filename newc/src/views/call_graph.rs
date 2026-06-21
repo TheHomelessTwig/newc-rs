@@ -91,11 +91,11 @@ impl canvas::Program<Message> for CallGraphCanvas {
             for edge in &self.data.edges {
                 let from = self.data.nodes.iter().find(|n| n.id == edge.from);
                 let to = self.data.nodes.iter().find(|n| n.id == edge.to);
-                if let (Some(f), Some(t)) = (from, to) {
-                    let fx = cx + f.x * z + (f.w * z) / 2.0;
-                    let fy = cy + f.y * z + f.h * z;
-                    let tx = cx + t.x * z + (t.w * z) / 2.0;
-                    let ty = cy + t.y * z;
+                if let (Some(from_node), Some(to_node)) = (from, to) {
+                    let fx = cx + from_node.x * z + (from_node.w * z) / 2.0;
+                    let fy = cy + from_node.y * z + from_node.h * z;
+                    let tx = cx + to_node.x * z + (to_node.w * z) / 2.0;
+                    let ty = cy + to_node.y * z;
 
                     let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
                     frame.stroke(
@@ -508,13 +508,13 @@ pub fn graph_to_svg(data: &CallGraphData) -> String {
     );
 
     for edge in &data.edges {
-        let f = data.nodes.iter().find(|n| n.id == edge.from);
-        let t = data.nodes.iter().find(|n| n.id == edge.to);
-        if let (Some(f), Some(t)) = (f, t) {
-            let fx = ox + f.x + f.w / 2.0;
-            let fy = oy + f.y + f.h;
-            let tx = ox + t.x + t.w / 2.0;
-            let ty = oy + t.y;
+        let from_node = data.nodes.iter().find(|n| n.id == edge.from);
+        let to_node = data.nodes.iter().find(|n| n.id == edge.to);
+        if let (Some(from_node), Some(to_node)) = (from_node, to_node) {
+            let fx = ox + from_node.x + from_node.w / 2.0;
+            let fy = oy + from_node.y + from_node.h;
+            let tx = ox + to_node.x + to_node.w / 2.0;
+            let ty = oy + to_node.y;
             out.push_str(&format!(
                 "<line x1=\"{:.1}\" y1=\"{:.1}\" x2=\"{:.1}\" y2=\"{:.1}\" stroke=\"#78DCE8\" stroke-width=\"1.5\" opacity=\"0.6\"/>",
                 fx, fy, tx, ty

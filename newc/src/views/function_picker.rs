@@ -71,8 +71,8 @@ pub fn view<'a>(
         }
         let name = fd.name.clone();
         let name2 = fd.name.clone();
-        let cb = checkbox(fd.checked).on_toggle(move |v| {
-            if v {
+        let select_checkbox = checkbox(fd.checked).on_toggle(move |checked| {
+            if checked {
                 Message::LibrarySelect(Some(name.clone()))
             } else {
                 Message::LibrarySelect(None)
@@ -82,7 +82,7 @@ pub fn view<'a>(
         func_rows.push(
             row![
                 Space::new().width(20),
-                cb,
+                select_checkbox,
                 text(name2).color(label_color).size(13),
                 text(fd.description).size(11).color(th::color::TEXT_DIM),
             ]

@@ -47,11 +47,11 @@ impl canvas::Program<Message> for DepGraphCanvas {
             for edge in &self.data.edges {
                 let from = self.data.nodes.iter().find(|n| n.id == edge.from);
                 let to = self.data.nodes.iter().find(|n| n.id == edge.to);
-                if let (Some(f), Some(t)) = (from, to) {
-                    let fx = cx + f.x * z + (f.w * z) / 2.0;
-                    let fy = cy + f.y * z + (f.h * z) / 2.0;
-                    let tx = cx + t.x * z + (t.w * z) / 2.0;
-                    let ty = cy + t.y * z + (t.h * z) / 2.0;
+                if let (Some(from_node), Some(to_node)) = (from, to) {
+                    let fx = cx + from_node.x * z + (from_node.w * z) / 2.0;
+                    let fy = cy + from_node.y * z + (from_node.h * z) / 2.0;
+                    let tx = cx + to_node.x * z + (to_node.w * z) / 2.0;
+                    let ty = cy + to_node.y * z + (to_node.h * z) / 2.0;
 
                     let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
                     frame.stroke(&path, Stroke::default()
@@ -158,11 +158,11 @@ impl canvas::Program<Message> for DepGraphCanvas {
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
-                let d = match delta {
+                let zoom_delta = match delta {
                     mouse::ScrollDelta::Lines { y, .. } => *y * 0.1,
                     mouse::ScrollDelta::Pixels { y, .. } => *y * 0.001,
                 };
-                Some(canvas::Action::publish(Message::GraphZoom(d)).and_capture())
+                Some(canvas::Action::publish(Message::GraphZoom(zoom_delta)).and_capture())
             }
             _ => None,
         }
@@ -217,8 +217,8 @@ fn build_dep_map(project: &Project) -> HashMap<String, Vec<String>> {
         if module.source.exists() {
             if let Ok(src) = std::fs::read_to_string(&module.source) {
                 for line in src.lines() {
-                    let t = line.trim();
-                    if let Some(rest) = t.strip_prefix("#include \"") {
+                    let trimmed = line.trim();
+                    if let Some(rest) = trimmed.strip_prefix("#include \"") {
                         let hdr = rest.trim_end_matches('"').trim_end_matches(".h").to_string();
                         if hdr != module.name && module_names.contains(&hdr) && !deps.contains(&hdr) {
                             deps.push(hdr);

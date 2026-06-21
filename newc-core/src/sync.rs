@@ -175,9 +175,9 @@ pub fn sync_module(root: &Path, name: &str) -> Result<()> {
     }
 
     let source_content = fs::read_to_string(&src)?;
-    let sigs = extract_signatures(&source_content);
+    let funcs = extract_function_implementations(&source_content);
 
-    if sigs.is_empty() {
+    if funcs.is_empty() {
         return Err(NewcError::Other(format!(
             "No functions found in {}, skipping.",
             src.display()
@@ -187,11 +187,20 @@ pub fn sync_module(root: &Path, name: &str) -> Result<()> {
     let guard = name.to_uppercase() + "_H";
     let preserved = extract_preserved(&hdr);
 
-    let protos: String = sigs
+    // Carry Doxygen-style comments (/** ... */) forward into the regenerated
+    // header above each prototype; plain comments are left in the .c file only.
+    let protos: String = funcs
         .iter()
-        .map(|s| format!("{s};"))
+        .map(|f| {
+            let sig = f.signature.split_whitespace().collect::<Vec<_>>().join(" ");
+            if f.comment.trim_start().starts_with("/**") {
+                format!("{}\n{sig};", f.comment)
+            } else {
+                format!("{sig};")
+            }
+        })
         .collect::<Vec<_>>()
-        .join("\n");
+        .join("\n\n");
 
     let new_header = if preserved.trim().is_empty() {
         format!(

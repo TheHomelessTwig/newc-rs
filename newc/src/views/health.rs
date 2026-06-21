@@ -238,10 +238,10 @@ fn max_source_mtime(root: &std::path::Path) -> u64 {
                 let ext = e.path().extension().and_then(|x| x.to_str()).unwrap_or("").to_string();
                 if ext == "c" || ext == "h" {
                     if let Ok(meta) = e.metadata() {
-                        if let Ok(t) = meta.modified() {
-                            if let Ok(d) = t.duration_since(std::time::UNIX_EPOCH) {
-                                let s = d.as_secs();
-                                if s > max { max = s; }
+                        if let Ok(mtime) = meta.modified() {
+                            if let Ok(elapsed) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                                let secs_since_epoch = elapsed.as_secs();
+                                if secs_since_epoch > max { max = secs_since_epoch; }
                             }
                         }
                     }

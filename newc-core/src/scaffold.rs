@@ -37,6 +37,9 @@ pub enum DefaultModule {
     LinkedList,
     Files,
     TestUtils,
+    /// Unity-style test harness (see [`crate::templates::unity_h`]) — an
+    /// alternative to `TestUtils` for users who prefer that macro API.
+    UnityTest,
 }
 
 impl DefaultModule {
@@ -56,6 +59,7 @@ impl DefaultModule {
             Self::LinkedList => "linked_list",
             Self::Files => "files",
             Self::TestUtils => "test_utils",
+            Self::UnityTest => "unity",
         }
     }
 }
@@ -96,7 +100,8 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     )?;
 
     // Build file — use test variant if test_utils module is included
-    let has_tests = opts.modules.contains(&DefaultModule::TestUtils);
+    let has_tests = opts.modules.contains(&DefaultModule::TestUtils)
+        || opts.modules.contains(&DefaultModule::UnityTest);
     match opts.build_system {
         BuildSystem::Make => {
             let makefile = if has_tests { templates::MAKEFILE_WITH_TEST } else { templates::MAKEFILE };
@@ -105,6 +110,7 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
         BuildSystem::CMake => {
             let cmake = if has_tests { templates::CMAKE_LISTS_WITH_TEST } else { templates::CMAKE_LISTS };
             fs::write(root.join("CMakeLists.txt"), cmake)?;
+            fs::write(root.join("CMakePresets.json"), templates::CMAKE_PRESETS)?;
         }
     }
 
@@ -148,6 +154,10 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
             DefaultModule::TestUtils => {
                 fs::write(root.join("include").join("test_utils.h"), templates::test_utils_h(author, &date))?;
                 fs::write(root.join("src").join("test_utils.c"), templates::test_utils_c(author, &date))?;
+            }
+            DefaultModule::UnityTest => {
+                fs::write(root.join("include").join("unity.h"), templates::unity_h(author, &date))?;
+                fs::write(root.join("src").join("unity.c"), templates::unity_c(author, &date))?;
             }
         }
     }

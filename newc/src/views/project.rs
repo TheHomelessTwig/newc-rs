@@ -1,6 +1,6 @@
 //! Project detail screen — metadata badges, build controls, code tools, and module table.
 
-use iced::widget::{button, column, container, row, scrollable, text, Space};
+use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
 use iced::{Background, Border, Element, Length};
 use newc_core::project::Project;
 
@@ -213,6 +213,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 button(text("Export ZIP").size(12))
                     .on_press(Message::ExportZip)
                     .style(th::btn_secondary),
+                button(text("compile_commands.json").size(12))
+                    .on_press(Message::ExportCompileCommands)
+                    .style(th::btn_secondary),
                 button(text("Save Template").size(12))
                     .on_press(Message::ShowSaveTemplate(true))
                     .style(th::btn_secondary),
@@ -222,6 +225,20 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             ]
             .spacing(4)
             .wrap(),
+            row![
+                text("Pack submission:").size(12).color(th::color::TEXT_DIM),
+                text_input("student name", &state.submission_student_input)
+                    .on_input(Message::SubmissionStudentInput)
+                    .width(160),
+                text_input("assignment #", &state.submission_assignment_input)
+                    .on_input(Message::SubmissionAssignmentInput)
+                    .width(100),
+                button(text("Pack").size(12))
+                    .on_press(Message::PackSubmission)
+                    .style(th::btn_secondary),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(6)
         .padding(10),

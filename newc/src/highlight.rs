@@ -9,7 +9,7 @@
 //! keywords (type and flow), function calls (identifier followed by `(`), and
 //! operators. It does not parse the full C grammar.
 
-use iced::widget::{column, container, rich_text, scrollable};
+use iced::widget::{column, container, rich_text, row, scrollable, text};
 use iced::widget::text::Span as TSpan;
 use iced::{Color, Element, Length};
 use crate::state::Message;
@@ -34,6 +34,7 @@ const NUMBER:    Color = Color::from_rgb(0.671, 0.616, 0.949); // #AB9DF2 lavend
 const COMMENT:   Color = Color::from_rgb(0.447, 0.439, 0.447); // #727072 gray
 const OPERATOR:  Color = Color::from_rgb(1.000, 0.380, 0.533); // #FF6188 coral
 const DEFAULT:   Color = Color::from_rgb(0.988, 0.988, 0.980); // #FCFCFA near-white
+const GUTTER:    Color = Color::from_rgb(0.447, 0.439, 0.447); // #727072 gray, dimmed line numbers
 
 static TYPE_KEYWORDS: &[&str] = &[
     "auto", "bool", "char", "const", "double", "enum", "extern", "float",
@@ -83,15 +84,17 @@ pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>
         if span.text == "\n" {
             lines.push(Vec::new());
         } else {
-            let t = span.text.replace('\t', "    ");
+            let expanded_text = span.text.replace('\t', "    ");
             if let Some(last) = lines.last_mut() {
-                last.push((t, span.color));
+                last.push((expanded_text, span.color));
             }
         }
     }
     if lines.last().map(|l| l.is_empty()).unwrap_or(false) {
         lines.pop();
     }
+
+    let gutter_width = lines.len().to_string().len().max(2) as f32 * font_size * 0.62 + 8.0;
 
     let line_els: Vec<Element<'a, Message>> = lines.into_iter().enumerate().map(|(i, line)| {
         let tspans: Vec<TSpan<'static>> = if line.is_empty() {
@@ -102,8 +105,16 @@ pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>
             }).collect()
         };
         let line_widget = rich_text(tspans);
+        let gutter = text((i + 1).to_string())
+            .font(iced::Font::MONOSPACE)
+            .size(font_size)
+            .color(GUTTER)
+            .width(Length::Fixed(gutter_width))
+            .align_x(iced::alignment::Horizontal::Right);
+        let line_row = row![gutter, container(line_widget).padding(iced::Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 8.0 })]
+            .width(Length::Fill);
         if highlight_line == Some(i + 1) {
-            container(line_widget)
+            container(line_row)
                 .width(Length::Fill)
                 .style(|_| iced::widget::container::Style {
                     background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.08).into()),
@@ -111,7 +122,7 @@ pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>
                 })
                 .into()
         } else {
-            line_widget.into()
+            line_row.into()
         }
     }).collect();
 

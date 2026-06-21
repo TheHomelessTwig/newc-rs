@@ -87,13 +87,13 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
                 text("Signature").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-                code_view(func.signature, 12.0, None, None),
+                code_view(func.signature, (state.config.code_font_size - 1.0).max(8.0), None, None),
                 text("Description").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
                 text(func.description),
                 text("Returns").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
                 text(func.returns),
                 text("Example").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-                code_view(func.example, 12.0, None, None),
+                code_view(func.example, (state.config.code_font_size - 1.0).max(8.0), None, None),
             ]
             .spacing(8)
             .into()

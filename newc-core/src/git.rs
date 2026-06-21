@@ -326,6 +326,62 @@ pub fn push(root: &Path) -> Result<String> {
     else { Err(NewcError::Other(text)) }
 }
 
+// ── Stash ────────────────────────────────────────────────────────────────────
+
+/// A single entry from `git stash list`.
+#[derive(Debug, Clone)]
+pub struct StashEntry {
+    /// Stash reference, e.g. `"stash@{0}"`.
+    pub reference: String,
+    /// Description git generated for the stash (branch + commit it was made from).
+    pub description: String,
+}
+
+/// Stash the current working-tree changes (`git stash push`).
+///
+/// # Errors
+/// Returns an error containing git's stderr output on failure.
+pub fn stash(root: &Path) -> Result<()> {
+    let out = Command::new("git").args(["stash", "push"]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+/// Apply and drop the most recent stash (`git stash pop`).
+///
+/// # Errors
+/// Returns an error containing git's stderr output on failure (e.g. merge conflict).
+pub fn stash_pop(root: &Path) -> Result<()> {
+    let out = Command::new("git").args(["stash", "pop"]).current_dir(root).output()?;
+    if out.status.success() { Ok(()) }
+    else {
+        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    }
+}
+
+/// List all stash entries, most recent first.
+///
+/// Returns an empty vec if the directory is not a git repository.
+pub fn stash_list(root: &Path) -> Vec<StashEntry> {
+    if !is_repo(root) { return Vec::new(); }
+    let out = Command::new("git")
+        .args(["stash", "list", "--format=%gd|%gs"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    out.lines()
+        .filter_map(|line| {
+            let (reference, description) = line.split_once('|')?;
+            Some(StashEntry { reference: reference.to_string(), description: description.to_string() })
+        })
+        .collect()
+}
+
 /// Pull from the upstream remote.
 ///
 /// # Returns

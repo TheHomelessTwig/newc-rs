@@ -93,7 +93,13 @@ pub enum Message {
     ToggleBuildPanel,
     BuildPanelClear,
     BuildAutoScrollToggle,
+    BuildArgsChanged(String),
+    BuildProfileSelect(Option<String>),
     DiagTabRaw(bool),
+    DiagNavPrev,
+    DiagNavNext,
+    SplitCompareSelect(Option<String>),
+    ModuleHoverRequest(String),
 
     // Create project form
     CreateName(String),
@@ -129,11 +135,9 @@ pub enum Message {
     SettingsDraftTerminal(String),
     SettingsDraftTheme(String),
     SettingsDraftClangStyle(String),
+    SettingsDraftCodeFontSize(f32),
     // Theme — applied immediately (no save needed)
     ThemeSelect(String),
-
-    // Library
-    LibraryAction(crate::views::library::LibraryAction),
 
     // Library state mutations
     LibrarySearch(String),
@@ -177,6 +181,8 @@ pub enum Message {
     GitCommit,
     GitPull,
     GitPush,
+    GitStash,
+    GitStashPop,
     GitNewBranch(String),
     GitCreateBranch,
     GitCheckout(String),
@@ -203,6 +209,12 @@ pub enum Message {
     ModuleMoveTargetInput(String),
     ModuleMoveSubmit,
 
+    // Doxygen stub generation
+    ModuleGenerateDoc(String),
+
+    // Lint quick-fix
+    LintQuickFix { module: String, function: String, line_no: usize, code: String },
+
     // GDB launcher
     LaunchDebugger,
 
@@ -210,12 +222,20 @@ pub enum Message {
     ProjectConfigDraftEditor(String),
     ProjectConfigDraftTerminal(String),
     ProjectConfigDraftClangStyle(String),
+    ProfileNameInput(String),
+    ProfileCflagsInput(String),
+    ProfileAdd,
+    ProfileRemove(String),
     ProjectConfigSave,
     ProjectConfigClear,
 
     // Project actions (wired from project.rs dead buttons)
     OpenInEditor,
     ExportZip,
+    ExportCompileCommands,
+    SubmissionStudentInput(String),
+    SubmissionAssignmentInput(String),
+    PackSubmission,
     GenerateReport,
     RunCheck,
     SyncAll,
@@ -239,6 +259,9 @@ pub enum Message {
     // Search
     SearchQuery(String),
     SearchSubmit,
+    SearchReplaceInput(String),
+    SearchReplacePreview,
+    SearchReplaceApply,
 
     // Usage tracker
     UsageSearch(String),
@@ -250,7 +273,7 @@ pub enum Message {
     ComposerBlockDelete(usize),
     ComposerBlockDuplicate(usize),
     ComposerSelectBlock(usize),
-    ComposerEditField { idx: usize, field: String, value: String },
+    ComposerEditField { block_index: usize, field: String, value: String },
     ComposerAddChildBlock { parent: usize, block: newc_core::main_builder::MainBlock },
     ComposerDeleteChildBlock { parent: usize, child: usize },
     ComposerMoveChildUp { parent: usize, child: usize },
@@ -441,8 +464,12 @@ pub struct AppState {
     pub project_config: Option<ProjectConfig>,
     /// Draft copy of the per-project config being edited before save.
     pub project_config_draft: ProjectConfig,
+    pub profile_name_input: String,
+    pub profile_cflags_input: String,
     /// Accumulated output lines from the current or most recent build.
     pub build_lines: Vec<BuildLine>,
+    /// Parsed `vg.xml` errors after a `valgrind-xml` build target run.
+    pub valgrind_errors: Vec<newc_core::valgrind::ValgrindError>,
     pub build_state: BuildState,
     /// Status bar message and the [`Instant`] it was set (auto-cleared after 4 s).
     pub status: Option<(String, Instant)>,
@@ -460,6 +487,8 @@ pub struct AppState {
     pub create_include_linked_list: bool,
     pub create_include_files: bool,
     pub create_include_test_utils: bool,
+    /// `true` to scaffold the Unity-style test harness instead of `test_utils`.
+    pub create_use_unity: bool,
     pub create_location: String,
     // Module detail / header editor
     pub module_detail_state: ModuleDetailState,
@@ -516,6 +545,9 @@ pub struct AppState {
     // Confirm tidy modal
     pub show_tidy_confirm: bool,
     pub tidy_candidates: Vec<String>,
+    // Assignment submission packer
+    pub submission_student_input: String,
+    pub submission_assignment_input: String,
     /// Module name to insert into when the user navigates from ModuleDetail to Library.
     pub pending_library_insert_module: Option<String>,
     /// Non-empty when the error modal should be displayed.
@@ -557,6 +589,10 @@ pub struct AppState {
     pub build_panel_open: bool,
     pub build_auto_scroll: bool,
     pub build_panel_open_hint: bool,
+    /// CLI args passed to the program when running the `run` target.
+    pub build_run_args: String,
+    /// Name of the currently selected named build profile (see `ProjectConfig::build_profiles`).
+    pub build_profile_active: Option<String>,
     // Workspaces
     pub active_workspace: Option<String>,
     pub show_archived: bool,
@@ -571,8 +607,14 @@ pub struct AppState {
     // Project search
     pub search_query: String,
     pub search_results: Vec<SearchResult>,
+    pub search_replace: String,
+    pub replace_preview: Vec<newc_core::grep::ReplacePreview>,
     // Compiler diagnostics
     pub diagnostics: Vec<Diagnostic>,
+    /// Index into `diagnostics` for the Prev/Next build-error navigation buttons.
+    pub diag_nav_index: usize,
+    /// Other module name to show side-by-side in module_detail's split view, if any.
+    pub split_compare_module: Option<String>,
     pub diag_tab_raw: bool,
     // Health dashboard
     pub health_computed: bool,
@@ -609,7 +651,10 @@ impl AppState {
             config,
             project_config: None,
             project_config_draft: ProjectConfig::default(),
+            profile_name_input: String::new(),
+            profile_cflags_input: String::new(),
             build_lines: Vec::new(),
+            valgrind_errors: Vec::new(),
             build_state: BuildState::Idle,
             status: None,
             create_name: String::new(),
@@ -624,6 +669,7 @@ impl AppState {
             create_include_linked_list: false,
             create_include_files: false,
             create_include_test_utils: false,
+            create_use_unity: false,
             create_location: dirs::home_dir()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default(),
@@ -695,6 +741,8 @@ impl AppState {
             quick_search: QuickSearchState::default(),
             show_tidy_confirm: false,
             tidy_candidates: Vec::new(),
+            submission_student_input: String::new(),
+            submission_assignment_input: String::new(),
             pending_library_insert_module: None,
             error_msg: None,
             cached_stats: None,
@@ -722,6 +770,8 @@ impl AppState {
             build_panel_open: true,
             build_auto_scroll: true,
             build_panel_open_hint: false,
+            build_run_args: String::new(),
+            build_profile_active: None,
             active_workspace: None,
             show_archived: false,
             workspace_input: String::new(),
@@ -732,7 +782,11 @@ impl AppState {
             usage_search: String::new(),
             search_query: String::new(),
             search_results: Vec::new(),
+            search_replace: String::new(),
+            replace_preview: Vec::new(),
             diagnostics: Vec::new(),
+            diag_nav_index: 0,
+            split_compare_module: None,
             diag_tab_raw: true,
             health_computed: false,
             health_snapshot: crate::views::health::HealthSnapshot::default(),
@@ -789,11 +843,11 @@ impl AppState {
     /// Return cached project stats, computing them if the cache is stale or empty.
     pub fn get_or_compute_stats(&mut self) -> Option<&ProjectStats> {
         let root = self.current_project()?.root.clone();
-        if self.cached_stats.as_ref().map(|(p, _)| p) != Some(&root) {
-            let s = newc_core::stats::compute(&root);
-            self.cached_stats = Some((root, s));
+        if self.cached_stats.as_ref().map(|(cached_root, _)| cached_root) != Some(&root) {
+            let computed_stats = newc_core::stats::compute(&root);
+            self.cached_stats = Some((root, computed_stats));
         }
-        self.cached_stats.as_ref().map(|(_, s)| s)
+        self.cached_stats.as_ref().map(|(_, stats)| stats)
     }
 }
 

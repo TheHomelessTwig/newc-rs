@@ -63,7 +63,7 @@ pub fn view<'a>(
             .highlight("c", iced::highlighter::Theme::Base16Mocha)
             .on_action(Message::HeaderEditorAction)
             .font(iced::Font::MONOSPACE)
-            .size(13)
+            .size(state.config.code_font_size)
             .height(Length::Fill),
     ]
     .spacing(8)

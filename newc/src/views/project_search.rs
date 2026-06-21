@@ -32,6 +32,33 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
+    let replace_row = row![
+        text_input("Replace with…", &state.search_replace)
+            .on_input(Message::SearchReplaceInput)
+            .width(360),
+        button(text("Preview")).on_press(Message::SearchReplacePreview).style(th::btn_secondary),
+        button(text("Apply")).on_press(Message::SearchReplaceApply).style(th::btn_danger),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center);
+
+    let preview_section: Option<Element<Message>> = if state.replace_preview.is_empty() {
+        None
+    } else {
+        let rows: Vec<Element<Message>> = state.replace_preview.iter().map(|p| {
+            column![
+                text(format!("{}:{}", p.file, p.line_no)).size(11).color(th::color::TEXT_DIM),
+                text(format!("- {}", p.before)).size(12).font(iced::Font::MONOSPACE).color(th::color::ACCENT),
+                text(format!("+ {}", p.after)).size(12).font(iced::Font::MONOSPACE).color(th::color::GREEN),
+            ]
+            .spacing(1)
+            .into()
+        }).collect();
+        Some(
+            scrollable(column(rows).spacing(6)).height(200).into()
+        )
+    };
+
     if state.search_query.is_empty() {
         return column![
             header,
@@ -45,14 +72,18 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }
 
     if state.search_results.is_empty() {
-        return column![
+        let mut col = column![
             header,
             search_row,
             text("No results.").color(th::color::TEXT_DIM),
+            replace_row,
         ]
         .spacing(10)
-        .padding(16)
-        .into();
+        .padding(16);
+        if let Some(p) = preview_section {
+            col = col.push(p);
+        }
+        return col.into();
     }
 
     let count_label = text(format!("{} result(s)", state.search_results.len()))
@@ -91,16 +122,20 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         .into()
     }).collect();
 
-    column![
+    let mut col = column![
         header,
         search_row,
         count_label,
         col_header,
         scrollable(column(result_rows).spacing(4)).height(Length::Fill),
+        replace_row,
     ]
     .spacing(8)
-    .padding(16)
-    .into()
+    .padding(16);
+    if let Some(p) = preview_section {
+        col = col.push(p);
+    }
+    col.into()
 }
 
 fn highlight_match<'a>(text_str: &str, query: &str) -> Element<'a, Message> {

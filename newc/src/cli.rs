@@ -122,7 +122,7 @@ fn cmd_update(check_only: bool) -> anyhow::Result<()> {
 }
 
 fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) -> anyhow::Result<()> {
-    let cwd = env::current_dir()?;
+    let current_dir = env::current_dir()?;
     let author = scaffold::detect_author();
     let build_system = match build_system.to_lowercase().as_str() {
         "cmake" => BuildSystem::CMake,
@@ -136,7 +136,7 @@ fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) ->
         modules: DefaultModule::all(),
         build_system,
     };
-    scaffold::create_project(&opts, &cwd)?;
+    scaffold::create_project(&opts, &current_dir)?;
     println!("Project created: {name}");
 
     if let Some(tpl_name) = template {
@@ -144,7 +144,7 @@ fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) ->
         let tpl_name_lower = tpl_name.to_lowercase();
         let tpl = templates.iter().find(|t| t.name.to_lowercase() == tpl_name_lower);
         if let Some(tpl) = tpl {
-            let root = cwd.join(name);
+            let root = current_dir.join(name);
             let builder_state = (tpl.builder)();
             let date = chrono::Local::now().format("%d/%m/%Y").to_string();
             let code = builder_state.preview(&author, &date);
@@ -292,15 +292,15 @@ fn cmd_tidy() -> anyhow::Result<()> {
 
 fn cmd_stats() -> anyhow::Result<()> {
     let root = find_project_root()?;
-    let s = stats::compute(&root);
+    let project_stats = stats::compute(&root);
     println!("{:<20} {:>8} {:>8}", "Module", "Funcs", "LOC");
     println!("{}", "-".repeat(38));
-    for m in &s.module_stats {
+    for m in &project_stats.module_stats {
         println!("{:<20} {:>8} {:>8}", m.name, m.functions, m.loc);
     }
     println!("{}", "-".repeat(38));
-    println!("{:<20} {:>8} {:>8}", "TOTAL", s.total_functions, s.total_loc);
-    println!("Source lines (incl. main): {}", s.total_source_lines);
+    println!("{:<20} {:>8} {:>8}", "TOTAL", project_stats.total_functions, project_stats.total_loc);
+    println!("Source lines (incl. main): {}", project_stats.total_source_lines);
     Ok(())
 }
 
@@ -434,9 +434,9 @@ fn run_cmake(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
 }
 
 fn find_project_root() -> anyhow::Result<PathBuf> {
-    let cwd = env::current_dir()?;
-    if newc_core::project::Project::is_newc_project(&cwd) {
-        return Ok(cwd);
+    let current_dir = env::current_dir()?;
+    if newc_core::project::Project::is_newc_project(&current_dir) {
+        return Ok(current_dir);
     }
     Err(anyhow::anyhow!(
         "Not a newc project. Run this command from the project root (directory containing src/, include/, Makefile or CMakeLists.txt)."

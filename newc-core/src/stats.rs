@@ -89,23 +89,23 @@ fn count_loc(content: &str) -> usize {
     let mut in_block_comment = false;
     let mut count = 0;
     for line in content.lines() {
-        let t = line.trim();
-        if t.is_empty() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
             continue;
         }
         if in_block_comment {
-            if t.contains("*/") {
+            if trimmed.contains("*/") {
                 in_block_comment = false;
             }
             continue;
         }
-        if t.starts_with("/*") {
-            if !t.contains("*/") {
+        if trimmed.starts_with("/*") {
+            if !trimmed.contains("*/") {
                 in_block_comment = true;
             }
             continue;
         }
-        if t.starts_with("//") || t.starts_with("*") {
+        if trimmed.starts_with("//") || trimmed.starts_with("*") {
             continue;
         }
         count += 1;

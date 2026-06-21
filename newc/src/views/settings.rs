@@ -19,7 +19,7 @@ fn form_row<'a>(label: &'a str, control: impl Into<Element<'a, Message>>) -> Ele
 
 /// Renders the settings screen with global and per-project configuration sections.
 pub fn view(state: &AppState) -> Element<'_, Message> {
-    let cfg = &state.config_draft;
+    let draft_config = &state.config_draft;
     let current_theme = &state.active_theme;
 
     // ── Editor & Terminal ──────────────────────────────────────────────────────
@@ -28,14 +28,14 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             th::section_title("Editor & Terminal"),
             form_row(
                 "Terminal",
-                text_input("e.g. kitty", &cfg.terminal)
+                text_input("e.g. kitty", &draft_config.terminal)
                     .on_input(Message::SettingsDraftTerminal)
                     .style(th::input_style)
                     .width(280),
             ),
             form_row(
                 "Editor",
-                text_input("e.g. nvim", &cfg.editor)
+                text_input("e.g. nvim", &draft_config.editor)
                     .on_input(Message::SettingsDraftEditor)
                     .style(th::input_style)
                     .width(280),
@@ -105,7 +105,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // ── clang-format style ────────────────────────────────────────────────────
     let clang_styles = ["file", "LLVM", "Google", "Chromium", "GNU", "Microsoft"];
     let clang_btns: Vec<Element<Message>> = clang_styles.iter().map(|s| {
-        let active = cfg.clang_format_style == *s;
+        let active = draft_config.clang_format_style == *s;
         button(text(*s).size(12))
             .on_press(Message::SettingsDraftClangStyle(s.to_string()))
             .style(if active { th::btn_nav_active } else { th::btn_nav_inactive })
@@ -116,6 +116,27 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         column![
             th::section_title("Code Formatting"),
             row(clang_btns).spacing(4).wrap(),
+        ]
+        .spacing(8)
+        .padding(12),
+    )
+    .style(th::section_style);
+
+    // ── Code font size ────────────────────────────────────────────────────────
+    let font_size_section = container(
+        column![
+            th::section_title("Code Font Size"),
+            row![
+                button(text("−").size(14))
+                    .on_press(Message::SettingsDraftCodeFontSize((draft_config.code_font_size - 1.0).max(8.0)))
+                    .style(th::btn_secondary),
+                text(format!("{:.0}px", draft_config.code_font_size)).size(13),
+                button(text("+").size(14))
+                    .on_press(Message::SettingsDraftCodeFontSize((draft_config.code_font_size + 1.0).min(32.0)))
+                    .style(th::btn_secondary),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(8)
         .padding(12),
@@ -163,6 +184,30 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                     &state.config.clang_format_style,
                     draft.clang_format_style.as_deref().unwrap_or(""),
                 ).on_input(Message::ProjectConfigDraftClangStyle).width(180)),
+                th::section_title("Build Profiles"),
+                column(draft.build_profiles.iter().map(|p| {
+                    row![
+                        text(p.name.clone()).size(12).width(120),
+                        text(p.cflags.clone()).size(11).color(th::color::TEXT_DIM),
+                        button(text("Remove").size(10))
+                            .on_press(Message::ProfileRemove(p.name.clone()))
+                            .style(th::btn_danger),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .into()
+                }).collect::<Vec<Element<Message>>>()).spacing(4),
+                row![
+                    text_input("name", &state.profile_name_input)
+                        .on_input(Message::ProfileNameInput).width(120),
+                    text_input("extra CFLAGS", &state.profile_cflags_input)
+                        .on_input(Message::ProfileCflagsInput).width(280),
+                    button(text("Add Profile").size(12))
+                        .on_press(Message::ProfileAdd)
+                        .style(th::btn_secondary),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
                 row![
                     button(text("Save Project Settings").size(12))
                         .on_press(Message::ProjectConfigSave)
@@ -186,6 +231,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         editor_section,
         appearance_section,
         format_section,
+        font_size_section,
         paths_section,
     ]
     .spacing(10)

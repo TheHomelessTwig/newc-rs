@@ -65,20 +65,6 @@ impl LibraryState {
     }
 }
 
-/// Actions that can be produced by the library view (currently unused; kept for future use).
-#[derive(Debug, Clone)]
-pub enum LibraryAction {
-    None,
-    Save(FunctionTemplate),
-    Delete(String),
-    UpdateNotes { name: String, notes: String },
-    ToggleStar(String),
-    OpenImport,
-    CreateGroup { name: String, desc: String },
-    RenameGroup { old: String, new: String },
-    DeleteGroup { name: String, cascade: bool },
-}
-
 /// Renders the function library screen with group sidebar, function list, and detail/edit panel.
 pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Message> {
     let ls = &state.library_state;
@@ -229,7 +215,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
         }
     } else if let Some(sel) = &ls.selected {
         if let Some(f) = lib.all().iter().find(|f| &f.name == sel) {
-            view_func(f, state.pending_library_insert_module.as_deref())
+            view_func(f, state.pending_library_insert_module.as_deref(), state.config.code_font_size)
         } else {
             text("Function not found.").into()
         }
@@ -264,7 +250,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     .into()
 }
 
-fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>) -> Element<'a, Message> {
+fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>, font_size: f32) -> Element<'a, Message> {
     let insert_btn: Option<Element<Message>> = pending_module.map(|m| {
         button(text(format!("→ Insert into {m}")).size(12))
             .on_press(Message::LibraryInsertToModule)
@@ -288,26 +274,26 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>) -> Eleme
         text(f.description.clone()).color(Color::from_rgb(0.85, 0.85, 0.85)),
         {
             let tags_str = f.tags.join(", ");
-            let el: Element<Message> = if !tags_str.is_empty() {
+            let tags_el: Element<Message> = if !tags_str.is_empty() {
                 text(tags_str).size(11).color(Color::from_rgb(0.392, 0.784, 0.588)).into()
             } else {
                 Space::new().into()
             };
-            el
+            tags_el
         },
         text("Prototype").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&f.header_code, 12.0, None, None),
+        code_view(&f.header_code, (font_size - 1.0).max(8.0), None, None),
         text("Implementation").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&f.impl_code, 12.0, None, None),
+        code_view(&f.impl_code, (font_size - 1.0).max(8.0), None, None),
         {
             let req_str = f.requires.join(", ");
-            let el: Element<Message> = if !req_str.is_empty() {
+            let requires_el: Element<Message> = if !req_str.is_empty() {
                 text(format!("Requires: {req_str}")).size(11)
                     .color(Color::from_rgb(0.784, 0.667, 0.392)).into()
             } else {
                 Space::new().into()
             };
-            el
+            requires_el
         },
     ]
     .spacing(8)
@@ -316,22 +302,22 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>) -> Eleme
 
 fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<FunctionTemplate>) -> Element<'a, Message> {
     let ls = &state.library_state;
-    let d = draft.as_ref().or(ls.draft.as_ref());
+    let draft_template = draft.as_ref().or(ls.draft.as_ref());
 
-    let name_val = d.map(|f| f.name.clone()).unwrap_or_default();
-    let module_val = d.map(|f| f.module.clone()).unwrap_or_default();
-    let desc_val = d.map(|f| f.description.clone()).unwrap_or_default();
-    let sig_val = d.map(|f| f.signature.clone()).unwrap_or_default();
-    let tags_val = d.map(|f| f.tags.join(", ")).unwrap_or_default();
-    let header_val = d.map(|f| f.header_code.clone()).unwrap_or_default();
-    let impl_val = d.map(|f| f.impl_code.clone()).unwrap_or_default();
-    let _notes_val = d.map(|f| f.notes.clone()).unwrap_or_default();
+    let name_val = draft_template.map(|f| f.name.clone()).unwrap_or_default();
+    let module_val = draft_template.map(|f| f.module.clone()).unwrap_or_default();
+    let desc_val = draft_template.map(|f| f.description.clone()).unwrap_or_default();
+    let sig_val = draft_template.map(|f| f.signature.clone()).unwrap_or_default();
+    let tags_val = draft_template.map(|f| f.tags.join(", ")).unwrap_or_default();
+    let header_val = draft_template.map(|f| f.header_code.clone()).unwrap_or_default();
+    let impl_val = draft_template.map(|f| f.impl_code.clone()).unwrap_or_default();
+    let _notes_val = draft_template.map(|f| f.notes.clone()).unwrap_or_default();
 
     let title = if ls.adding_new { "New Function" } else { "Edit Function" };
     let is_valid = !name_val.trim().is_empty() && !module_val.trim().is_empty();
     let mut save_btn = button(text("Save"));
     if is_valid {
-        save_btn = save_btn.on_press(Message::LibrarySave(d.cloned().unwrap_or_else(LibraryState::new_draft)));
+        save_btn = save_btn.on_press(Message::LibrarySave(draft_template.cloned().unwrap_or_else(LibraryState::new_draft)));
     }
 
     column![
@@ -372,9 +358,9 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
         ]
         .spacing(8).align_y(iced::Alignment::Center),
         text("Header (.h):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&header_val, 12.0, None, None),
+        code_view(&header_val, (state.config.code_font_size - 1.0).max(8.0), None, None),
         text("Implementation (.c):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
-        code_view(&impl_val, 12.0, None, None),
+        code_view(&impl_val, (state.config.code_font_size - 1.0).max(8.0), None, None),
         text("(Full code editor integration coming in next iteration)")
             .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
         row![
@@ -393,9 +379,9 @@ fn extract_param_names(sig: &str) -> Vec<String> {
     if open >= close { return Vec::new(); }
     let params = &sig[open + 1..close];
     if params.trim() == "void" || params.trim().is_empty() { return Vec::new(); }
-    params.split(',').filter_map(|p| {
-        let p = p.trim();
-        let name = p.split_whitespace().last()?;
+    params.split(',').filter_map(|param| {
+        let param = param.trim();
+        let name = param.split_whitespace().last()?;
         let name = name.trim_start_matches('*');
         let name = name.split('[').next().unwrap_or(name);
         if name.is_empty() || name == "void" { None }
@@ -420,15 +406,15 @@ fn parse_sig(sig: &str) -> (String, Vec<(String, String)>) {
     let params = if inner.is_empty() || inner == "void" {
         Vec::new()
     } else {
-        inner.split(',').filter_map(|p| {
-            let p = p.trim();
-            if p.is_empty() { return None; }
-            if let Some(sp) = p.rfind(|c: char| c.is_whitespace()) {
-                let ptype = p[..sp].trim().to_string();
-                let pname = p[sp..].trim().to_string();
+        inner.split(',').filter_map(|param| {
+            let param = param.trim();
+            if param.is_empty() { return None; }
+            if let Some(sp) = param.rfind(|c: char| c.is_whitespace()) {
+                let ptype = param[..sp].trim().to_string();
+                let pname = param[sp..].trim().to_string();
                 Some((ptype, pname))
             } else {
-                Some((p.to_string(), String::new()))
+                Some((param.to_string(), String::new()))
             }
         }).collect()
     };

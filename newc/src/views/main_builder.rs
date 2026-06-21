@@ -134,9 +134,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }).collect();
 
     // Block editor panel (shown when a block is selected)
-    let editor_panel: Element<Message> = if let Some(idx) = state.composer_selected {
-        if let Some(block) = builder.blocks.get(idx) {
-            build_block_editor(block, idx)
+    let editor_panel: Element<Message> = if let Some(block_index) = state.composer_selected {
+        if let Some(block) = builder.blocks.get(block_index) {
+            build_block_editor(block, block_index)
         } else {
             text("").into()
         }
@@ -195,7 +195,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let right_panel = container(
         column![
             th::section_title("Preview"),
-            code_view(&preview, 12.0, None, None),
+            code_view(&preview, (state.config.code_font_size - 1.0).max(8.0), None, None),
         ]
         .spacing(4)
         .padding(8),
@@ -225,16 +225,16 @@ fn block_type_color(block: &MainBlock) -> Color {
     }
 }
 
-fn build_block_editor<'a>(block: &'a MainBlock, idx: usize) -> Element<'a, Message> {
-    let field_row = |label: &'static str, val: &str, field: &'static str| -> Element<'a, Message> {
-        let val = val.to_string();
+fn build_block_editor<'a>(block: &'a MainBlock, block_index: usize) -> Element<'a, Message> {
+    let field_row = |label: &'static str, initial_value: &str, field: &'static str| -> Element<'a, Message> {
+        let owned_value = initial_value.to_string();
         row![
             text(label).size(11).width(80),
-            text_input("", &val)
-                .on_input(move |v| Message::ComposerEditField {
-                    idx,
+            text_input("", &owned_value)
+                .on_input(move |new_value| Message::ComposerEditField {
+                    block_index,
                     field: field.to_string(),
-                    value: v,
+                    value: new_value,
                 })
                 .size(12)
                 .width(Length::Fill),
@@ -243,7 +243,7 @@ fn build_block_editor<'a>(block: &'a MainBlock, idx: usize) -> Element<'a, Messa
         .into()
     };
 
-    let title = text(format!("Edit block {} — {}", idx + 1, block.label()))
+    let title = text(format!("Edit block {} — {}", block_index + 1, block.label()))
         .size(12)
         .color(th::color::CYAN);
 
@@ -260,7 +260,7 @@ fn build_block_editor<'a>(block: &'a MainBlock, idx: usize) -> Element<'a, Messa
         ],
         MainBlock::IfBlock { condition, body, .. } | MainBlock::WhileLoop { condition, body, .. } => {
             let mut v = vec![field_row("Condition:", condition, "condition")];
-            v.extend(body_editor(idx, body));
+            v.extend(body_editor(block_index, body));
             v
         }
         MainBlock::ForLoop { init, condition, increment, body } => {
@@ -269,7 +269,7 @@ fn build_block_editor<'a>(block: &'a MainBlock, idx: usize) -> Element<'a, Messa
                 field_row("Condition:", condition, "condition"),
                 field_row("Increment:", increment, "increment"),
             ];
-            v.extend(body_editor(idx, body));
+            v.extend(body_editor(block_index, body));
             v
         }
         MainBlock::Comment(c) => vec![field_row("Text:", c, "text")],

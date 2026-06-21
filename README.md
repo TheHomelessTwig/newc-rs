@@ -2,7 +2,7 @@
 
 A Rust GUI application for scaffolding, building, and managing C projects. Built on [iced](https://github.com/iced-rs/iced) 0.14 with a multi-window MVU architecture.
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 ![Language](https://img.shields.io/badge/language-Rust-orange)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
@@ -19,10 +19,16 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
 - **Export** — bundle a project as a ZIP, or generate a Markdown report (stats, module list, build history, notes)
 
 ### Build & Analysis
-- **One-click build** — run `all`, `run`, `debug`, `release`, `strict`, `test`, `valgrind`, `analyse`, or `clean` targets from the GUI, via `make` or `cmake` depending on how the project was scaffolded
-- **Live build output** — streaming stdout/stderr with timing ("Build succeeded in 1.4s")
+- **One-click build** — run `all`, `run`, `debug`, `release`, `strict`, `test`, `valgrind`, `valgrind-xml`, `analyse`, `cppcheck`, `coverage`, or `clean` targets from the GUI, via `make` or `cmake` depending on how the project was scaffolded
+- **Live build output** — streaming stdout/stderr with timing ("Build succeeded in 1.4s"); Prev/Next buttons cycle through compiler errors
+- **Run with arguments** — pass CLI args to the `run` target from a text field in the build panel
+- **Named build profiles** — save extra CFLAGS combos per project, switch via dropdown
 - **Build history** — per-project log of every build (target, result, duration) stored in `.newc_builds.json`
-- **Compiler diagnostics** — gcc/clang output parsed into a colour-coded table; click a row to navigate directly to the source module
+- **Compiler diagnostics** — gcc/clang output parsed into a colour-coded table; click a row, or a clickable line in the raw build log, to navigate directly to the source module
+- **Valgrind XML report** — structured leak/error summary (bytes leaked, error count) instead of raw text, clickable to source
+- **gcov coverage** — per-function line coverage % shown in the module sidebar after a `coverage` build
+- **cppcheck** — second static analysis pass alongside clang `analyse`, surfaced in the same diagnostics panel
+- **`compile_commands.json` export** — for clangd/clang-tidy/IDE integration outside newc
 - **Dead-code analysis** — BFS reachability from `main()`; unreachable functions highlighted
 - **Health dashboard** — single view of dead-code count, missing includes, TODO/FIXMEs, lint warnings, header guard issues, prototype mismatches, and last build status
 
@@ -45,10 +51,14 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
   - `L015` — comparing pointer to non-zero integer
   - `L016` — `strtok()` not re-entrant (use `strtok_r`)
   - `L017` — `= realloc(...)` loses pointer on `NULL` return
-- **Syntax highlighting** — C keywords, strings, numbers, comments, and operators colour-coded in module editor (Monokai Pro palette)
+- **Syntax highlighting** — C keywords, strings, numbers, comments, and operators colour-coded in module editor (Monokai Pro palette), with line numbers
 - **Function call tree** — recursive call graph (depth 5) rendered inline for any selected function
-- **Project-wide search** — regex/case-insensitive grep across all `.c` and `.h` files; click result to navigate to module at line
+- **Project-wide search & replace** — regex/case-insensitive grep across all `.c` and `.h` files; preview then apply a replacement project-wide; click result to navigate to module at line
 - **Refactoring** — rename a function across the entire project, or move a function between modules with automatic header re-sync
+- **Doxygen stub generator** — inserts a `/** @brief/@param/@return */` block above a function in both `.c` and `.h`; parsed comments render as formatted docs in the detail panel
+- **Lint quick-fix** — one-click mechanical fix for select rules (`gets`→`fgets`, `strcpy`→`strncpy`, `sprintf`→`snprintf`)
+- **Split view** — show two module sources side by side
+- **clangd hover** — type/signature info at the cursor in edit mode (requires `clangd` on PATH)
 - **Report generation** — Markdown report (stats, module list, build history, notes) from the project detail screen
 - **Ctrl+P quick search** — fuzzy overlay searching functions and projects; click function to jump to C Reference entry
 
@@ -77,6 +87,7 @@ A visual block-based builder for `src/main.c`:
 - Unified diff view with colour-coded +/- lines
 - Branch management — switch and create branches
 - Commit, push, and pull from the GUI
+- Stash — stash, pop, and list stashed changes
 
 ### Code Snippets
 47 built-in C patterns across 11 categories. Available as a panel or detached OS window (⊞ button in header):
@@ -105,7 +116,11 @@ Searchable reference for ~70 C standard library functions across `stdio.h`, `std
 Format any function using clang-format. Configurable style (file, LLVM, Google, Chromium, GNU, Microsoft) in Settings.
 
 ### Per-project Settings
-Override editor, terminal, and clang-format style on a per-project basis via `.newc_config.toml` in the project root. Editable from the Settings screen when a project is open.
+Override editor, terminal, and clang-format style on a per-project basis via `.newc_config.toml` in the project root. Editable from the Settings screen when a project is open. Also stores named build profiles (extra CFLAGS combos, selectable in the build panel).
+
+### Testing
+- **Unity-style test harness** — optional alternative to `test_utils` at scaffold time (`TEST_ASSERT_*` / `RUN_TEST` macros)
+- **Assignment submission packer** — zip source, headers, build file, notes, and a generated report as `<student>_<project>_A<n>.zip`
 
 ---
 
@@ -117,7 +132,6 @@ Override editor, terminal, and clang-format style on a per-project basis via `.n
 | [Data Formats](docs/data-formats.md) | All TOML/JSON schemas with annotated examples |
 | [Building](docs/building.md) | Platform-specific build instructions (Linux, macOS, Windows, WSL2) |
 | [Contributing](docs/contributing.md) | Dev setup, adding features, lint rules, templates, commit style |
-| [TODOs](TODOs.md) | Known gaps and unimplemented features |
 
 ---
 
@@ -190,7 +204,7 @@ newc build [target]          # run a build target (default: all) — works for M
 newc test                    # alias for `newc build test`
 ```
 
-`newc build` targets: `all`, `run`, `debug`, `release`, `strict`, `valgrind`, `analyse`, `test`, `clean`, `help`. Auto-detects Makefile vs CMakeLists.txt and runs the equivalent `make` or `cmake` invocation with the same flags either way — debug/release/strict drive `CMAKE_BUILD_TYPE`/`STRICT` for CMake projects, reconfiguring as needed.
+`newc build` targets: `all`, `run`, `debug`, `release`, `strict`, `valgrind`, `valgrind-xml`, `analyse`, `cppcheck`, `coverage`, `test`, `clean`, `help`. Auto-detects Makefile vs CMakeLists.txt and runs the equivalent `make` or `cmake` invocation with the same flags either way — debug/release/strict/coverage drive `CMAKE_BUILD_TYPE`/`STRICT`/`COVERAGE` for CMake projects, reconfiguring as needed (via `CMakePresets.json` if present).
 
 All CLI commands except `new` and `gui` require a project root (directory containing `src/`, `include/`, and a `Makefile` or `CMakeLists.txt`). Build system is auto-detected from which file is present.
 
@@ -297,8 +311,10 @@ See [docs/architecture.md](docs/architecture.md) for the full module map and des
 | `notify` | File system watcher |
 | `tokio` | Async runtime for iced subscriptions |
 | `futures` | Stream bridging for file watcher subscription |
-| `ureq` | HTTP for self-update (GitHub Releases) |
 | `anyhow` | Error handling |
+| `zip` | Project export / assignment submission packer |
+
+Self-update shells out to the system `curl` rather than linking an HTTP client (avoids a TLS dependency chain for two infrequent GET requests). Optional external tools, used if present on `PATH`: `valgrind`, `cppcheck`, `gcov`, `clangd` (hover).
 
 ---
 

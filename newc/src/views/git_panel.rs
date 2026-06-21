@@ -127,6 +127,27 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
+    // Stash
+    let stash_entries = git::stash_list(&project.root);
+    let stash_btn_row = row![
+        button(text("Stash").size(12)).on_press(Message::GitStash).style(th::btn_secondary),
+        button(text("Pop").size(12)).on_press(Message::GitStashPop).style(th::btn_secondary),
+    ]
+    .spacing(6);
+    let stash_rows: Vec<Element<Message>> = stash_entries.iter().map(|s| {
+        row![
+            text(s.reference.clone()).size(11).font(iced::Font::MONOSPACE).color(th::color::YELLOW),
+            text(s.description.clone()).size(11).color(th::color::TEXT_DIM),
+        ]
+        .spacing(8)
+        .into()
+    }).collect();
+    let stash_section: Element<Message> = if stash_rows.is_empty() {
+        text("No stashes.").size(12).color(th::color::TEXT_DIM).into()
+    } else {
+        column(stash_rows).spacing(2).into()
+    };
+
     // Log
     let log_entries = git::log(&project.root, 20);
     let log_rows: Vec<Element<Message>> = log_entries.iter().map(|entry| {
@@ -150,6 +171,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         text("Unstaged").size(13).color(th::color::CYAN),
         unstaged_section,
         commit_row,
+        text("Stash").size(13).color(th::color::CYAN),
+        stash_btn_row,
+        stash_section,
         text("Recent commits").size(13).color(th::color::CYAN),
         scrollable(column(log_rows).spacing(2)).height(200),
     ]

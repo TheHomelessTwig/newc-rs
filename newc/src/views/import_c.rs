@@ -114,7 +114,6 @@ use crate::state::Message;
     .into()
 }
 
-#[allow(dead_code)]
 pub fn build_templates(state: &ImportState) -> Vec<FunctionTemplate> {
     state
         .extracted

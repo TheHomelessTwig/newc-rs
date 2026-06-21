@@ -17,7 +17,8 @@ STRICT_FLAGS = -Werror
 # =========================
 # Flags
 # =========================
-CFLAGS = -std=c11 -Iinclude -MMD -MP $(BASE_WARNINGS)
+EXTRA_CFLAGS ?=
+CFLAGS = -std=c11 -Iinclude -MMD -MP $(BASE_WARNINGS) $(EXTRA_CFLAGS)
 LDFLAGS =
 
 DEBUG_CFLAGS  = -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
@@ -30,6 +31,7 @@ RELEASE_LDFLAGS = -O2 -fstack-protector-strong
 # Project structure
 # =========================
 TARGET = main
+ARGS ?=
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -59,7 +61,7 @@ $(BUILD_DIR):
 # Run
 # =========================
 run: all
-	./$(TARGET)
+	./$(TARGET) $(ARGS)
 
 # =========================
 # Build modes
@@ -93,10 +95,32 @@ valgrind: all
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TARGET)
 
 # =========================
+# Valgrind (structured XML report for the GUI)
+# =========================
+valgrind-xml: CFLAGS += -g -O0
+valgrind-xml: all
+	valgrind --xml=yes --xml-file=vg.xml --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TARGET)
+
+# =========================
 # Clang static analysis
 # =========================
 analyse:
 	clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
+# cppcheck static analysis
+# =========================
+cppcheck:
+	cppcheck --enable=all --inconclusive --template=gcc -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
+# Coverage (gcov)
+# =========================
+coverage: CFLAGS += -fprofile-arcs -ftest-coverage -g -O0
+coverage: LDFLAGS += -fprofile-arcs -ftest-coverage
+coverage: clean all
+	./$(TARGET)
+	gcov $(SRCS)
 
 # =========================
 # Help
@@ -111,11 +135,14 @@ help:
 	@echo "  release   Build with optimisations and hardening flags"
 	@echo "  strict    Clean rebuild with -Werror and release optimisations"
 	@echo "  valgrind  Build with -g and run under Valgrind memory checker"
+	@echo "  valgrind-xml  Same as valgrind, writes structured XML to vg.xml"
 	@echo "  analyse   Run clang static analysis (syntax check + extra warnings)"
+	@echo "  cppcheck  Run cppcheck static analysis (requires cppcheck installed)"
+	@echo "  coverage  Build with gcov instrumentation, run, and report line coverage"
 	@echo "  clean     Remove build artefacts and executable"
 	@echo "  help      Show this help message"
 
-.PHONY: all run clean debug release strict valgrind analyse help
+.PHONY: all run clean debug release strict valgrind valgrind-xml analyse cppcheck coverage help
 "#;
 
 pub const GITIGNORE: &str = "build/\nmain\n";
@@ -133,6 +160,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(STRICT "Treat warnings as errors" OFF)
+option(COVERAGE "Build with gcov instrumentation" OFF)
+# Single string passed verbatim to `run` (not word-split like Makefile's $(ARGS)).
+set(ARGS "" CACHE STRING "Arguments forwarded to the run target")
 
 set(BASE_WARNINGS
     -Wall -Wextra -Wpedantic
@@ -160,11 +190,16 @@ if(STRICT)
     target_compile_options(main PRIVATE -Werror)
 endif()
 
+if(COVERAGE)
+    target_compile_options(main PRIVATE --coverage -g -O0)
+    target_link_options(main PRIVATE --coverage)
+endif()
+
 # =========================
 # Run
 # =========================
 add_custom_target(run
-    COMMAND $<TARGET_FILE:main>
+    COMMAND $<TARGET_FILE:main> ${ARGS}
     DEPENDS main
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
@@ -178,6 +213,22 @@ add_custom_target(valgrind
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_custom_target(valgrind-xml
+    COMMAND valgrind --xml=yes --xml-file=${CMAKE_SOURCE_DIR}/vg.xml --leak-check=full --show-leak-kinds=all --track-origins=yes $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Coverage (gcov) — configure with -DCOVERAGE=ON first
+# =========================
+add_custom_target(coverage
+    COMMAND $<TARGET_FILE:main>
+    COMMAND gcov ${SRCS}
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # =========================
 # Clang static analysis
 # =========================
@@ -185,10 +236,46 @@ add_custom_target(analyse
     COMMAND clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -I${CMAKE_SOURCE_DIR}/include ${SRCS}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_custom_target(cppcheck
+    COMMAND cppcheck --enable=all --inconclusive --template=gcc -I${CMAKE_SOURCE_DIR}/include ${SRCS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 "#;
 
 /// CMake equivalent of [`MAKEFILE_WITH_TEST`] — adds a `test` target that runs
 /// the built executable, plus links `-lm`.
+/// `CMakePresets.json` (requires CMake 3.19+) mirroring the `-D` flag
+/// combinations [`crate::build::cmake_configure_args`] would otherwise build
+/// by hand, so `cmake --preset <name>` and the GUI/CLI build runner agree.
+pub const CMAKE_PRESETS: &str = r#"{
+    "version": 3,
+    "cmakeMinimumRequired": { "major": 3, "minor": 19, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "release",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "STRICT": "OFF", "COVERAGE": "OFF" }
+        },
+        {
+            "name": "debug",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "STRICT": "OFF", "COVERAGE": "OFF" }
+        },
+        {
+            "name": "strict",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "STRICT": "ON", "COVERAGE": "OFF" }
+        },
+        {
+            "name": "coverage",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "STRICT": "OFF", "COVERAGE": "ON" }
+        }
+    ]
+}
+"#;
+
 pub const CMAKE_LISTS_WITH_TEST: &str = r#"cmake_minimum_required(VERSION 3.10)
 project(main C)
 
@@ -200,6 +287,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(STRICT "Treat warnings as errors" OFF)
+option(COVERAGE "Build with gcov instrumentation" OFF)
+# Single string passed verbatim to `run` (not word-split like Makefile's $(ARGS)).
+set(ARGS "" CACHE STRING "Arguments forwarded to the run target")
 
 set(BASE_WARNINGS
     -Wall -Wextra -Wpedantic
@@ -228,6 +318,11 @@ if(STRICT)
     target_compile_options(main PRIVATE -Werror)
 endif()
 
+if(COVERAGE)
+    target_compile_options(main PRIVATE --coverage -g -O0)
+    target_link_options(main PRIVATE --coverage)
+endif()
+
 # =========================
 # Test
 # =========================
@@ -241,7 +336,7 @@ add_custom_target(test
 # Run
 # =========================
 add_custom_target(run
-    COMMAND $<TARGET_FILE:main>
+    COMMAND $<TARGET_FILE:main> ${ARGS}
     DEPENDS main
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
@@ -255,11 +350,32 @@ add_custom_target(valgrind
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_custom_target(valgrind-xml
+    COMMAND valgrind --xml=yes --xml-file=${CMAKE_SOURCE_DIR}/vg.xml --leak-check=full --show-leak-kinds=all --track-origins=yes $<TARGET_FILE:main>
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# =========================
+# Coverage (gcov) — configure with -DCOVERAGE=ON first
+# =========================
+add_custom_target(coverage
+    COMMAND $<TARGET_FILE:main>
+    COMMAND gcov ${SRCS}
+    DEPENDS main
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # =========================
 # Clang static analysis
 # =========================
 add_custom_target(analyse
     COMMAND clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -I${CMAKE_SOURCE_DIR}/include ${SRCS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_custom_target(cppcheck
+    COMMAND cppcheck --enable=all --inconclusive --template=gcc -I${CMAKE_SOURCE_DIR}/include ${SRCS}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 "#;
@@ -2253,6 +2369,119 @@ void print_test_summary(void)
     )
 }
 
+/// Header for the Unity-style test harness — a small, self-contained
+/// alternative to [`test_utils_h`] using assertion macro names familiar from
+/// the ThrowTheSwitch/Unity testing framework (`TEST_ASSERT_*`, `RUN_TEST`,
+/// `UNITY_BEGIN`/`UNITY_END`). This is an original minimal implementation
+/// providing that API surface, not a vendored copy of the Unity library.
+pub fn unity_h(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Minimal Unity-style unit test harness (assert macros + runner)
+ *
+ * Date: {date}
+ */
+
+#ifndef UNITY_H
+#define UNITY_H
+
+void unity_begin(void);
+int unity_end(void);
+void unity_run_test(const char *name, void (*test_fn)(void));
+void unity_assert_true(int condition, const char *expr, const char *file, int line);
+void unity_assert_equal_int(int expected, int actual, const char *expr, const char *file, int line);
+void unity_assert_equal_string(const char *expected, const char *actual, const char *expr, const char *file, int line);
+
+#define UNITY_BEGIN() unity_begin()
+#define UNITY_END() unity_end()
+#define RUN_TEST(fn) unity_run_test(#fn, fn)
+#define TEST_ASSERT_TRUE(cond) unity_assert_true((cond), #cond, __FILE__, __LINE__)
+#define TEST_ASSERT_FALSE(cond) unity_assert_true(!(cond), "!(" #cond ")", __FILE__, __LINE__)
+#define TEST_ASSERT_EQUAL_INT(expected, actual) unity_assert_equal_int((expected), (actual), #actual, __FILE__, __LINE__)
+#define TEST_ASSERT_EQUAL_STRING(expected, actual) unity_assert_equal_string((expected), (actual), #actual, __FILE__, __LINE__)
+
+#endif
+"#
+    )
+}
+
+/// Implementation for [`unity_h`].
+pub fn unity_c(author: &str, date: &str) -> String {
+    format!(
+        r#"/*
+ * Author: {author}
+ * Purpose: Minimal Unity-style unit test harness implementation
+ *
+ * Date: {date}
+ */
+
+#include <stdio.h>
+#include <string.h>
+#include "unity.h"
+
+static int g_passed = 0;
+static int g_failed = 0;
+
+void unity_begin(void)
+{{
+	g_passed = 0;
+	g_failed = 0;
+}}
+
+int unity_end(void)
+{{
+	int total = g_passed + g_failed;
+	printf("\n========================================\n");
+	printf("Results: %d / %d passed", g_passed, total);
+	if (g_failed == 0) {{
+		printf(" — ALL PASS\n");
+	}} else {{
+		printf(" — %d FAILED\n", g_failed);
+	}}
+	printf("========================================\n");
+	return g_failed == 0 ? 0 : 1;
+}}
+
+void unity_run_test(const char *name, void (*test_fn)(void))
+{{
+	printf("RUN  %s\n", name);
+	test_fn();
+}}
+
+void unity_assert_true(int condition, const char *expr, const char *file, int line)
+{{
+	if (condition) {{
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s:%d — TEST_ASSERT_TRUE(%s)\n", file, line, expr);
+		g_failed++;
+	}}
+}}
+
+void unity_assert_equal_int(int expected, int actual, const char *expr, const char *file, int line)
+{{
+	if (expected == actual) {{
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s:%d — %s: expected %d, got %d\n", file, line, expr, expected, actual);
+		g_failed++;
+	}}
+}}
+
+void unity_assert_equal_string(const char *expected, const char *actual, const char *expr, const char *file, int line)
+{{
+	if (strcmp(expected, actual) == 0) {{
+		g_passed++;
+	}} else {{
+		printf("  [FAIL] %s:%d — %s: expected \"%s\", got \"%s\"\n", file, line, expr, expected, actual);
+		g_failed++;
+	}}
+}}
+"#
+    )
+}
+
 /// Makefile with an added `test` target that runs ./main and checks exit code.
 pub const MAKEFILE_WITH_TEST: &str = r#"CC = gcc
 
@@ -2270,7 +2499,8 @@ STRICT_FLAGS = -Werror
 # =========================
 # Flags
 # =========================
-CFLAGS = -std=c11 -Iinclude -MMD -MP $(BASE_WARNINGS)
+EXTRA_CFLAGS ?=
+CFLAGS = -std=c11 -Iinclude -MMD -MP $(BASE_WARNINGS) $(EXTRA_CFLAGS)
 LDFLAGS = -lm
 
 DEBUG_CFLAGS  = -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
@@ -2283,6 +2513,7 @@ RELEASE_LDFLAGS = -O2 -fstack-protector-strong
 # Project structure
 # =========================
 TARGET = main
+ARGS ?=
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -2318,7 +2549,7 @@ test: all
 # Run
 # =========================
 run: all
-	./$(TARGET)
+	./$(TARGET) $(ARGS)
 
 # =========================
 # Build modes
@@ -2352,10 +2583,32 @@ valgrind: all
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TARGET)
 
 # =========================
+# Valgrind (structured XML report for the GUI)
+# =========================
+valgrind-xml: CFLAGS += -g -O0
+valgrind-xml: all
+	valgrind --xml=yes --xml-file=vg.xml --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TARGET)
+
+# =========================
 # Clang static analysis
 # =========================
 analyse:
 	clang -Wall -Wextra -Wshadow -Wconversion -fsyntax-only -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
+# cppcheck static analysis
+# =========================
+cppcheck:
+	cppcheck --enable=all --inconclusive --template=gcc -Iinclude $(SRCS) 2>&1 || true
+
+# =========================
+# Coverage (gcov)
+# =========================
+coverage: CFLAGS += -fprofile-arcs -ftest-coverage -g -O0
+coverage: LDFLAGS += -fprofile-arcs -ftest-coverage
+coverage: clean all
+	./$(TARGET)
+	gcov $(SRCS)
 
 # =========================
 # Help
@@ -2371,9 +2624,12 @@ help:
 	@echo "  release   Build with optimisations and hardening flags"
 	@echo "  strict    Clean rebuild with -Werror and release optimisations"
 	@echo "  valgrind  Build with -g and run under Valgrind memory checker"
+	@echo "  valgrind-xml  Same as valgrind, writes structured XML to vg.xml"
 	@echo "  analyse   Run clang static analysis (syntax check + extra warnings)"
+	@echo "  cppcheck  Run cppcheck static analysis (requires cppcheck installed)"
+	@echo "  coverage  Build with gcov instrumentation, run, and report line coverage"
 	@echo "  clean     Remove build artefacts and executable"
 	@echo "  help      Show this help message"
 
-.PHONY: all test run clean debug release strict valgrind analyse help
+.PHONY: all test run clean debug release strict valgrind valgrind-xml analyse cppcheck coverage help
 "#;
