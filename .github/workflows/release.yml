@@ -108,6 +108,46 @@ jobs:
           name: newc-amd64-deb
           path: target/${{ matrix.target }}/debian/*.deb
 
+      # Assembles a real /Applications-ready newc.app for the Homebrew Cask
+      # (and anyone downloading it directly) — using only sips+iconutil
+      # (stock CLI tools, no WindowServer/qlmanage dependency) against the
+      # pre-rendered packaging/newc.png.
+      - name: Assemble newc.app bundle (macOS)
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          set -euo pipefail
+          APP=newc.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp "target/${{ matrix.target }}/release/newc" "$APP/Contents/MacOS/newc"
+          chmod +x "$APP/Contents/MacOS/newc"
+          cp packaging/Info.plist "$APP/Contents/Info.plist"
+
+          ICONSET=newc.iconset
+          mkdir -p "$ICONSET"
+          for sz in 16 32 64 128 256 512 1024; do
+            sips -z "$sz" "$sz" packaging/newc.png --out "$sz.png"
+          done
+          cp 16.png   "$ICONSET/icon_16x16.png"
+          cp 32.png   "$ICONSET/icon_16x16@2x.png"
+          cp 32.png   "$ICONSET/icon_32x32.png"
+          cp 64.png   "$ICONSET/icon_32x32@2x.png"
+          cp 128.png  "$ICONSET/icon_128x128.png"
+          cp 256.png  "$ICONSET/icon_128x128@2x.png"
+          cp 256.png  "$ICONSET/icon_256x256.png"
+          cp 512.png  "$ICONSET/icon_256x256@2x.png"
+          cp 512.png  "$ICONSET/icon_512x512.png"
+          cp 1024.png "$ICONSET/icon_512x512@2x.png"
+          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/newc.icns"
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP" newc-aarch64-macos.app.zip
+
+      - name: Upload .app bundle artifact
+        if: matrix.target == 'aarch64-apple-darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: newc-aarch64-macos-app
+          path: newc-aarch64-macos.app.zip
+
   release:
     name: Publish GitHub Release
     needs: build
@@ -151,6 +191,27 @@ jobs:
           homebrew-tap: TheHomelessTwig/homebrew-newc
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+
+      # bump-homebrew-formula-action only has "limited support" for casks, so
+      # the Cask (Casks/newc.rb, GUI install — distinct from the CLI Formula)
+      # is bumped by hand here instead: it's just two literal fields.
+      - name: Bump Homebrew cask
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          ASSET_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/newc-aarch64-macos.app.zip"
+          SHA=$(curl -fsSL "$ASSET_URL" | sha256sum | cut -d' ' -f1)
+
+          git clone "https://x-access-token:${COMMITTER_TOKEN}@github.com/TheHomelessTwig/homebrew-newc.git" tap
+          cd tap
+          sed -i "s/^  version \".*\"/  version \"${VER}\"/" Casks/newc.rb
+          sed -i "s/^  sha256 \".*\"/  sha256 \"${SHA}\"/" Casks/newc.rb
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -am "Cask: bump to ${VER}"
+          git push
 
       # AUR publishing is deferred — AUR account signups are currently closed.
       # Once an account + SSH key exist, uncomment and set AUR_SSH_PRIVATE_KEY

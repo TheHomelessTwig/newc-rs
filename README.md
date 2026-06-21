@@ -169,7 +169,8 @@ winget install TheHomelessTwig.newc
 
 | Manager | Command |
 |---|---|
-| Homebrew (macOS/Linux) | `brew tap thehomelesstwig/newc && brew install newc` |
+| Homebrew CLI (macOS/Linux) | `brew tap thehomelesstwig/newc && brew install newc` — builds from source via cargo |
+| Homebrew GUI app (macOS, Apple Silicon) | `brew install --cask thehomelesstwig/newc/newc` — prebuilt `.app`, no Rust needed |
 | AUR (Arch Linux) | `yay -S newc-bin` (or any AUR helper) |
 | apt (Debian/Ubuntu) | download `newc_*_amd64.deb` from [Releases](https://github.com/TheHomelessTwig/newc-rs/releases/latest), then `sudo apt install ./newc_*_amd64.deb` |
 | winget (Windows) | `winget install TheHomelessTwig.newc` (pending review) |
@@ -185,7 +186,7 @@ Notes:
 
 `install.sh` (this repo), the [dotfiles](https://github.com/TheHomelessTwig/dotfiles) installer, and `packaging/install.ps1` all register `newc` with the OS app launcher in addition to installing the CLI binary:
 - **Linux** — `~/.local/share/applications/newc.desktop` + a hicolor SVG icon, so `newc` shows up in any XDG-compliant launcher (rofi, wofi, GNOME/KDE menus, …). Also bundled automatically in the `.deb` and AUR packages.
-- **macOS** — a minimal unsigned `/Applications/newc.app` bundle (for personal-use Launchpad/Spotlight access), wrapping the same installed binary. The Homebrew formula installs this too (`post_install`), so `brew install newc` alone is enough on macOS.
+- **macOS** — a minimal unsigned `/Applications/newc.app` bundle (for personal-use Launchpad/Spotlight access). `brew install --cask thehomelesstwig/newc/newc` installs exactly this (prebuilt, Apple Silicon only); the CLI Formula (`brew install newc`) no longer bundles it — install both if you want the launcher *and* a CLI built from source.
 - **Windows** — a Start Menu shortcut, created by `install.ps1`.
 
 On all three, `newc` (no args) opens the GUI directly — the CLI remains available from any shell since the binary still lives on `PATH` (`/usr/local/bin`, Homebrew's bin dir, or `%ProgramFiles%\newc` on Windows).
