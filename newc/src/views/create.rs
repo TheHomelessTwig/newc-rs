@@ -2,7 +2,7 @@
 
 use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
 use iced::Element;
-use newc_core::{module::is_valid_c_ident, project_template};
+use newc_core::{license::License, module::is_valid_c_ident, project_template};
 
 use crate::theme as th;
 use crate::state::{AppState, Message, View};
@@ -103,6 +103,28 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             .spacing(8)
             .align_y(iced::Alignment::Center),
         );
+
+    // ── License picker ───────────────────────────────────────────────────────
+    let mut license_btns: Vec<Element<Message>> = vec![
+        text("License:").width(120).into(),
+        {
+            let mut b = button(text("None").size(12)).on_press(Message::CreateLicense(None));
+            if state.create_license.is_none() {
+                b = b.style(th::btn_primary);
+            } else {
+                b = b.style(th::btn_secondary);
+            }
+            b.into()
+        },
+    ];
+    for l in License::all() {
+        let id = l.spdx_id().to_string();
+        let selected = state.create_license.as_deref() == Some(l.spdx_id());
+        let mut b = button(text(l.spdx_id()).size(12)).on_press(Message::CreateLicense(Some(id)));
+        b = if selected { b.style(th::btn_primary) } else { b.style(th::btn_secondary) };
+        license_btns.push(b.into());
+    }
+    col = col.push(row(license_btns).spacing(6).align_y(iced::Alignment::Center));
 
     if !loc_valid {
         col = col.push(

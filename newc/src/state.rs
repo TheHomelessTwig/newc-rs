@@ -110,6 +110,8 @@ pub enum Message {
     CreateUseCmakeToggle(bool),
     CreateInclude(String, bool),
     CreateTemplate(usize),
+    /// SPDX id to license the new project under, or `None` for no license.
+    CreateLicense(Option<String>),
     CreateSubmit,
 
     // Module actions
@@ -489,6 +491,8 @@ pub struct AppState {
     pub create_include_test_utils: bool,
     /// `true` to scaffold the Unity-style test harness instead of `test_utils`.
     pub create_use_unity: bool,
+    /// SPDX id of the license to apply, or `None` for no license file.
+    pub create_license: Option<String>,
     pub create_location: String,
     // Module detail / header editor
     pub module_detail_state: ModuleDetailState,
@@ -670,6 +674,7 @@ impl AppState {
             create_include_files: false,
             create_include_test_utils: false,
             create_use_unity: false,
+            create_license: None,
             create_location: dirs::home_dir()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default(),

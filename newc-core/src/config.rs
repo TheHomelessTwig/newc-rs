@@ -132,6 +132,9 @@ pub struct ProjectConfig {
     /// Named build profiles (extra CFLAGS) selectable in the build panel.
     #[serde(default)]
     pub build_profiles: Vec<BuildProfile>,
+    /// SPDX identifier of the project's chosen license (e.g. `"MIT"`), if any.
+    /// Stamped into new modules' SPDX header by [`crate::module::add_module`].
+    pub license: Option<String>,
 }
 
 impl ProjectConfig {

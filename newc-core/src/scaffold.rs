@@ -6,7 +6,9 @@ use std::process::Command;
 
 use chrono::Local;
 
+use crate::config::ProjectConfig;
 use crate::error::{NewcError, Result};
+use crate::license::{spdx_line, License};
 use crate::module::is_valid_c_ident;
 use crate::project::BuildSystem;
 use crate::templates;
@@ -24,6 +26,8 @@ pub struct ScaffoldOptions {
     pub modules: Vec<DefaultModule>,
     /// Build file to generate: `Makefile` or `CMakeLists.txt`.
     pub build_system: BuildSystem,
+    /// License to apply: writes `LICENSE` and stamps SPDX headers into generated files.
+    pub license: Option<License>,
 }
 
 /// Built-in module templates that can be included when scaffolding a project.
@@ -93,8 +97,19 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     // Determine which default module names are included (for main.c #includes)
     let include_names: Vec<&str> = opts.modules.iter().map(|m| m.name()).collect();
 
+    // Prefixed onto every generated .c/.h file when a license is chosen.
+    let spdx = opts.license.map(|l| spdx_line(l.spdx_id()));
+    let write_src = |path: std::path::PathBuf, content: String| -> Result<()> {
+        let content = match &spdx {
+            Some(s) => format!("{s}{content}"),
+            None => content,
+        };
+        fs::write(path, content)?;
+        Ok(())
+    };
+
     // main.c
-    fs::write(
+    write_src(
         root.join("src").join("main.c"),
         templates::main_c(author, &date, &include_names),
     )?;
@@ -118,48 +133,58 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     for module in &opts.modules {
         match module {
             DefaultModule::Input => {
-                fs::write(root.join("include").join("input.h"), templates::input_h(author, &date))?;
-                fs::write(root.join("src").join("input.c"), templates::input_c(author, &date))?;
+                write_src(root.join("include").join("input.h"), templates::input_h(author, &date))?;
+                write_src(root.join("src").join("input.c"), templates::input_c(author, &date))?;
             }
             DefaultModule::Math => {
-                fs::write(root.join("include").join("math.h"), templates::math_h(author, &date))?;
-                fs::write(root.join("src").join("math.c"), templates::math_c(author, &date))?;
+                write_src(root.join("include").join("math.h"), templates::math_h(author, &date))?;
+                write_src(root.join("src").join("math.c"), templates::math_c(author, &date))?;
             }
             DefaultModule::Display => {
-                fs::write(
+                write_src(
                     root.join("include").join("display.h"),
                     templates::display_h(author, &date),
                 )?;
-                fs::write(
+                write_src(
                     root.join("src").join("display.c"),
                     templates::display_c(author, &date),
                 )?;
             }
             DefaultModule::Array => {
-                fs::write(root.join("include").join("array.h"), templates::array_h(author, &date))?;
-                fs::write(root.join("src").join("array.c"), templates::array_c(author, &date))?;
+                write_src(root.join("include").join("array.h"), templates::array_h(author, &date))?;
+                write_src(root.join("src").join("array.c"), templates::array_c(author, &date))?;
             }
             DefaultModule::Strings => {
-                fs::write(root.join("include").join("strings.h"), templates::strings_h(author, &date))?;
-                fs::write(root.join("src").join("strings.c"), templates::strings_c(author, &date))?;
+                write_src(root.join("include").join("strings.h"), templates::strings_h(author, &date))?;
+                write_src(root.join("src").join("strings.c"), templates::strings_c(author, &date))?;
             }
             DefaultModule::LinkedList => {
-                fs::write(root.join("include").join("linked_list.h"), templates::linked_list_h(author, &date))?;
-                fs::write(root.join("src").join("linked_list.c"), templates::linked_list_c(author, &date))?;
+                write_src(root.join("include").join("linked_list.h"), templates::linked_list_h(author, &date))?;
+                write_src(root.join("src").join("linked_list.c"), templates::linked_list_c(author, &date))?;
             }
             DefaultModule::Files => {
-                fs::write(root.join("include").join("files.h"), templates::files_h(author, &date))?;
-                fs::write(root.join("src").join("files.c"), templates::files_c(author, &date))?;
+                write_src(root.join("include").join("files.h"), templates::files_h(author, &date))?;
+                write_src(root.join("src").join("files.c"), templates::files_c(author, &date))?;
             }
             DefaultModule::TestUtils => {
-                fs::write(root.join("include").join("test_utils.h"), templates::test_utils_h(author, &date))?;
-                fs::write(root.join("src").join("test_utils.c"), templates::test_utils_c(author, &date))?;
+                write_src(root.join("include").join("test_utils.h"), templates::test_utils_h(author, &date))?;
+                write_src(root.join("src").join("test_utils.c"), templates::test_utils_c(author, &date))?;
             }
             DefaultModule::UnityTest => {
-                fs::write(root.join("include").join("unity.h"), templates::unity_h(author, &date))?;
-                fs::write(root.join("src").join("unity.c"), templates::unity_c(author, &date))?;
+                write_src(root.join("include").join("unity.h"), templates::unity_h(author, &date))?;
+                write_src(root.join("src").join("unity.c"), templates::unity_c(author, &date))?;
             }
         }
+    }
+
+    if let Some(license) = opts.license {
+        let year = Local::now().format("%Y").to_string();
+        fs::write(root.join("LICENSE"), license.license_text(author, &year))?;
+        let cfg = ProjectConfig {
+            license: Some(license.spdx_id().to_string()),
+            ..ProjectConfig::default()
+        };
+        cfg.save_to(&root)?;
     }
 
     if opts.git_init {
@@ -186,6 +211,7 @@ mod tests {
             author: "Test".to_string(),
             modules,
             build_system: BuildSystem::Make,
+            license: None,
         }
     }
 
@@ -221,6 +247,22 @@ mod tests {
         let root = tmp.path().join("proj");
         assert!(root.join("CMakeLists.txt").exists());
         assert!(!root.join("Makefile").exists());
+    }
+
+    #[test]
+    fn license_writes_file_and_stamps_spdx() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut o = opts("proj", vec![DefaultModule::Math]);
+        o.license = Some(crate::license::License::Mit);
+        create_project(&o, tmp.path()).unwrap();
+        let root = tmp.path().join("proj");
+        assert!(root.join("LICENSE").exists());
+        let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
+        assert!(main_c.starts_with("/* SPDX-License-Identifier: MIT */\n"));
+        let math_c = fs::read_to_string(root.join("src/math.c")).unwrap();
+        assert!(math_c.starts_with("/* SPDX-License-Identifier: MIT */\n"));
+        let cfg = crate::config::ProjectConfig::load_from(&root).unwrap();
+        assert_eq!(cfg.license, Some("MIT".to_string()));
     }
 
     #[test]

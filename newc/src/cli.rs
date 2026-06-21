@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 
 use newc_core::{
     analysis, module, project_template,
+    license::License,
     project::BuildSystem,
     scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
 };
@@ -38,6 +39,10 @@ pub enum Command {
         /// Build system to scaffold: `make` (default) or `cmake`
         #[arg(long, value_name = "SYSTEM", default_value = "make")]
         build_system: String,
+        /// License to apply (SPDX id, e.g. MIT, GPL-3.0-only, Apache-2.0, BSD-3-Clause,
+        /// GPL-2.0-only, Unlicense). Writes LICENSE and stamps SPDX headers into modules.
+        #[arg(long, value_name = "SPDX_ID")]
+        license: Option<String>,
     },
     /// Add a new module to the current project
     Add { module: String },
@@ -88,8 +93,8 @@ pub enum Command {
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::New { name, git, template, build_system } => {
-            cmd_new(&name, git, template.as_deref(), &build_system)
+        Command::New { name, git, template, build_system, license } => {
+            cmd_new(&name, git, template.as_deref(), &build_system, license.as_deref())
         }
         Command::Add { module: name } => cmd_add(&name),
         Command::Remove => cmd_remove(),
@@ -121,7 +126,13 @@ fn cmd_update(check_only: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) -> anyhow::Result<()> {
+fn cmd_new(
+    name: &str,
+    git: bool,
+    template: Option<&str>,
+    build_system: &str,
+    license: Option<&str>,
+) -> anyhow::Result<()> {
     let current_dir = env::current_dir()?;
     let author = scaffold::detect_author();
     let build_system = match build_system.to_lowercase().as_str() {
@@ -129,12 +140,22 @@ fn cmd_new(name: &str, git: bool, template: Option<&str>, build_system: &str) ->
         "make" => BuildSystem::Make,
         other => anyhow::bail!("Unknown build system '{other}', expected 'make' or 'cmake'"),
     };
+    let license = match license {
+        Some(id) => Some(License::from_spdx_id(id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unknown license '{id}'. Supported: {}",
+                License::all().iter().map(|l| l.spdx_id()).collect::<Vec<_>>().join(", ")
+            )
+        })?),
+        None => None,
+    };
     let opts = ScaffoldOptions {
         name: name.to_string(),
         git_init: git,
         author: author.clone(),
         modules: DefaultModule::all(),
         build_system,
+        license,
     };
     scaffold::create_project(&opts, &current_dir)?;
     println!("Project created: {name}");

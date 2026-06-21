@@ -289,6 +289,8 @@ impl NewcApp {
                 _ => {}
             },
 
+            Message::CreateLicense(id) => self.state.create_license = id,
+
             Message::CreateSubmit => {
                 self.handle_create_project();
             }
@@ -2104,12 +2106,15 @@ impl NewcApp {
         } else {
             newc_core::project::BuildSystem::Make
         };
+        let license = self.state.create_license.as_deref()
+            .and_then(newc_core::license::License::from_spdx_id);
         let opts = ScaffoldOptions {
             name: name.clone(),
             author: self.state.create_author.clone(),
             git_init: self.state.create_git,
             modules,
             build_system,
+            license,
         };
 
         match create_project(&opts, &parent) {

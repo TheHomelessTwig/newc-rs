@@ -81,12 +81,17 @@ pub fn add_module(root: &Path, name: &str) -> Result<()> {
         return Err(NewcError::ModuleExists(name.to_string()));
     }
 
+    let spdx = crate::config::ProjectConfig::load_from(root)
+        .and_then(|c| c.license)
+        .map(|id| crate::license::spdx_line(&id))
+        .unwrap_or_default();
+
     let guard = name.to_uppercase() + "_H";
     let header_content = format!(
-        "#ifndef {guard}\n#define {guard}\n\n/* SYNC_IGNORE_START */\n\n/* SYNC_IGNORE_END */\n\n#endif\n"
+        "{spdx}#ifndef {guard}\n#define {guard}\n\n/* SYNC_IGNORE_START */\n\n/* SYNC_IGNORE_END */\n\n#endif\n"
     );
     let source_content = format!(
-        "#include <stdio.h>\n#include \"{name}.h\"\n\n/*\n * Function:\n *     ...\n * Input:\n *     ...\n * Output:\n *     ...\n * Algorithm:\n *     ...\n */\n\n"
+        "{spdx}#include <stdio.h>\n#include \"{name}.h\"\n\n/*\n * Function:\n *     ...\n * Input:\n *     ...\n * Output:\n *     ...\n * Algorithm:\n *     ...\n */\n\n"
     );
 
     fs::write(&header, header_content)?;
@@ -231,6 +236,23 @@ mod tests {
         assert!(add_module(&root, "parser").is_err());
         let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
         assert_eq!(main_c.matches("#include \"parser.h\"").count(), 1);
+    }
+
+    #[test]
+    fn add_stamps_spdx_from_project_license() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = make_project(&tmp);
+        crate::config::ProjectConfig {
+            license: Some("MIT".to_string()),
+            ..Default::default()
+        }
+        .save_to(&root)
+        .unwrap();
+        add_module(&root, "parser").unwrap();
+        let header = fs::read_to_string(root.join("include/parser.h")).unwrap();
+        let source = fs::read_to_string(root.join("src/parser.c")).unwrap();
+        assert!(header.starts_with("/* SPDX-License-Identifier: MIT */\n"));
+        assert!(source.starts_with("/* SPDX-License-Identifier: MIT */\n"));
     }
 
     #[test]

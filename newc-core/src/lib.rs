@@ -18,6 +18,7 @@ pub mod function_lib;
 pub mod git;
 pub mod grep;
 pub mod header;
+pub mod license;
 pub mod lint;
 pub mod main_builder;
 pub mod meta;
