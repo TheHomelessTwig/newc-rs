@@ -58,7 +58,14 @@ pub enum Command {
     /// List functions unreachable from main (BFS)
     Check,
     /// Remove unreachable functions (with confirmation)
-    Tidy,
+    Tidy {
+        /// Show what would be removed without changing any files
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip the confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
     /// Print project statistics (function count, LOC per module)
     Stats,
     /// List functions in the project or a specific module
@@ -101,7 +108,7 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::List => cmd_list(),
         Command::Sync { module: name } => cmd_sync(name.as_deref()),
         Command::Check => cmd_check(),
-        Command::Tidy => cmd_tidy(),
+        Command::Tidy { dry_run, yes } => cmd_tidy(dry_run, yes),
         Command::Stats => cmd_stats(),
         Command::Funcs { module } => cmd_funcs(module.as_deref()),
         Command::Gui { .. } => unreachable!("GUI handled in main"),
@@ -259,7 +266,8 @@ fn cmd_check() -> anyhow::Result<()> {
         Ok(unreachable) => {
             println!("Unreachable functions:");
             for f in &unreachable {
-                println!("  {:<30} ({})", f.name, f.source.display());
+                let tag = if f.is_static { " [static]" } else { "" };
+                println!("  {:<30} ({}){tag}", f.name, f.source.display());
             }
             println!("\n{} unreachable function(s) found.", unreachable.len());
         }
@@ -271,7 +279,7 @@ fn cmd_check() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_tidy() -> anyhow::Result<()> {
+fn cmd_tidy(dry_run: bool, yes: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
     let unreachable = match analysis::check(&root) {
         Ok(v) => v,
@@ -289,18 +297,27 @@ fn cmd_tidy() -> anyhow::Result<()> {
 
     println!("The following unreachable functions will be removed:");
     for f in &unreachable {
-        println!("  {:<30} ({})", f.name, f.source.display());
+        let tag = if f.is_static { " [static]" } else { "" };
+        println!("  {:<30} ({}){tag}", f.name, f.source.display());
     }
-    println!();
-    print!("Continue? (Y/N): ");
-    io::stdout().flush()?;
 
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let confirm = input.trim();
-    if confirm != "Y" && confirm != "y" {
-        println!("Aborted.");
+    if dry_run {
+        println!("\nDry run — no files changed.");
         return Ok(());
+    }
+
+    if !yes {
+        println!();
+        print!("Continue? (Y/N): ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let confirm = input.trim();
+        if confirm != "Y" && confirm != "y" {
+            println!("Aborted.");
+            return Ok(());
+        }
     }
 
     let names: Vec<String> = unreachable.iter().map(|f| f.name.clone()).collect();
