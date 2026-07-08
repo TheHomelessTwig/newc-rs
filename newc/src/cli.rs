@@ -132,6 +132,12 @@ pub enum Command {
     InternalGui {
         path: Option<PathBuf>,
     },
+    /// Internal: write man page(s) to a directory (used by the release pipeline)
+    #[command(hide = true)]
+    InternalMan {
+        /// Directory to write newc.1 into
+        out_dir: PathBuf,
+    },
 }
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
@@ -154,7 +160,19 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::Update { check } => cmd_update(check),
         Command::Build { target } => cmd_build(target.as_deref().unwrap_or("all")),
         Command::Test => cmd_build("test"),
+        Command::InternalMan { out_dir } => cmd_man(&out_dir),
     }
+}
+
+fn cmd_man(out_dir: &std::path::Path) -> anyhow::Result<()> {
+    use clap::CommandFactory;
+    std::fs::create_dir_all(out_dir)?;
+    let cmd = Cli::command();
+    let path = out_dir.join("newc.1");
+    let mut file = std::fs::File::create(&path)?;
+    clap_mangen::Man::new(cmd).render(&mut file)?;
+    println!("Wrote {}", path.display());
+    Ok(())
 }
 
 fn cmd_update(check_only: bool) -> anyhow::Result<()> {
@@ -704,10 +722,18 @@ fn run_cmake(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
 
 fn find_project_root() -> anyhow::Result<PathBuf> {
     let current_dir = env::current_dir()?;
-    if newc_core::project::Project::is_newc_project(&current_dir) {
-        return Ok(current_dir);
+    // Walk upward (like git) so commands work from any subdirectory
+    let mut dir: &std::path::Path = &current_dir;
+    loop {
+        if newc_core::project::Project::is_newc_project(dir) {
+            return Ok(dir.to_path_buf());
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => break,
+        }
     }
     Err(anyhow::anyhow!(
-        "Not a newc project. Run this command from the project root (directory containing src/, include/, Makefile or CMakeLists.txt)."
+        "Not a newc project. Run this command from inside a project (directory containing src/, include/, Makefile or CMakeLists.txt)."
     ))
 }
