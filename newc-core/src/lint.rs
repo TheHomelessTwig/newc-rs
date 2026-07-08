@@ -4,9 +4,6 @@
 //! unsafe functions (`gets`, `strcpy`), memory-management errors, format-string
 //! bugs, and style issues.
 
-/// Basic static linter for C source files.
-/// Text/pattern based — no AST. Catches common beginner mistakes.
-
 /// Lint a `.h` header file. Checks for missing include guard (L010).
 pub fn lint_header(content: &str) -> Vec<LintWarning> {
     let mut warnings = Vec::new();
@@ -177,8 +174,8 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         }
 
         // L005: assignment in condition (if (x = y) likely typo)
-        if (t.starts_with("if") || t.starts_with("while")) && t.contains('(') {
-            if let Some(paren_start) = t.find('(') {
+        if (t.starts_with("if") || t.starts_with("while")) && t.contains('(')
+            && let Some(paren_start) = t.find('(') {
                 let inner = &t[paren_start + 1..];
                 // Look for single = not preceded by !, <, >, =, not followed by =
                 if has_assignment_in_condition(inner) {
@@ -188,7 +185,6 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
                     });
                 }
             }
-        }
 
         // L006: sprintf without bounds
         if t.contains("sprintf(") && !t.contains("snprintf(") {
@@ -216,14 +212,13 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         }
 
         // L008: magic numbers (bare integer literals > 9 in expressions, excluding common values)
-        if !t.starts_with("#") && !t.starts_with("//") {
-            if has_magic_number(t) {
+        if !t.starts_with("#") && !t.starts_with("//")
+            && has_magic_number(t) {
                 warnings.push(LintWarning {
                     line_no: lno, severity: LintSeverity::Info, code: "L008",
                     message: "Magic number — consider using a named constant".into(),
                 });
             }
-        }
 
         // L009: fopen without fclose check pattern
         if t.contains("fopen(") {

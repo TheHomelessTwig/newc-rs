@@ -195,8 +195,8 @@ pub fn compute_health(state: &mut AppState, project: &Project) {
     if let Ok(entries) = std::fs::read_dir(&src_dir) {
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
-            if path.extension().and_then(|x| x.to_str()) == Some("c") {
-                if let Ok(content) = std::fs::read_to_string(&path) {
+            if path.extension().and_then(|x| x.to_str()) == Some("c")
+                && let Ok(content) = std::fs::read_to_string(&path) {
                     let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     for w in lint::lint_file(&content) {
                         if w.code == "L010" {
@@ -206,7 +206,6 @@ pub fn compute_health(state: &mut AppState, project: &Project) {
                         }
                     }
                 }
-            }
         }
     }
     snap.header_guard_count = guard_files.len();
@@ -236,16 +235,13 @@ fn max_source_mtime(root: &std::path::Path) -> u64 {
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for e in entries.filter_map(|e| e.ok()) {
                 let ext = e.path().extension().and_then(|x| x.to_str()).unwrap_or("").to_string();
-                if ext == "c" || ext == "h" {
-                    if let Ok(meta) = e.metadata() {
-                        if let Ok(mtime) = meta.modified() {
-                            if let Ok(elapsed) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                if (ext == "c" || ext == "h")
+                    && let Ok(meta) = e.metadata()
+                        && let Ok(mtime) = meta.modified()
+                            && let Ok(elapsed) = mtime.duration_since(std::time::UNIX_EPOCH) {
                                 let secs_since_epoch = elapsed.as_secs();
                                 if secs_since_epoch > max { max = secs_since_epoch; }
                             }
-                        }
-                    }
-                }
             }
         }
     }

@@ -3,9 +3,6 @@
 //! Matches lines of the form `file.c:12:5: error: message` and converts them
 //! into structured [`Diagnostic`] records for display in the GUI build panel.
 
-/// Parse GCC/clang diagnostic output into structured records.
-/// Matches lines like: `file.c:12:5: error: message`
-
 /// Severity level of a compiler diagnostic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiagKind {

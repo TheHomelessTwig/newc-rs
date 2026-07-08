@@ -199,6 +199,24 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Detect the current user's name from `git config user.name`, falling back to `"Author"`.
+pub fn detect_author() -> String {
+    Command::new("git")
+        .args(["config", "user.name"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout).ok()
+            } else {
+                None
+            }
+        })
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Author".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,22 +300,4 @@ mod tests {
         assert!(main_c.contains("#include \"display.h\""));
         assert!(main_c.contains("#include \"array.h\""));
     }
-}
-
-/// Detect the current user's name from `git config user.name`, falling back to `"Author"`.
-pub fn detect_author() -> String {
-    Command::new("git")
-        .args(["config", "user.name"])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout).ok()
-            } else {
-                None
-            }
-        })
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "Author".to_string())
 }

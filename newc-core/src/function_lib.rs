@@ -95,21 +95,19 @@ impl FunctionLibrary {
         }
 
         // Load user groups from ~/.config/newc/groups.toml
-        if let Some(path) = groups_path() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(file) = toml::from_str::<GroupsFile>(&content) {
+        if let Some(path) = groups_path()
+            && let Ok(content) = std::fs::read_to_string(&path)
+                && let Ok(file) = toml::from_str::<GroupsFile>(&content) {
                     for g in file.groups {
                         if !lib.groups.iter().any(|existing| existing.name == g.name) {
                             lib.groups.push(g);
                         }
                     }
                 }
-            }
-        }
 
         // Load user function overrides from ~/.config/newc/functions/*.toml
-        if let Some(user_dir) = user_functions_dir() {
-            if let Ok(entries) = std::fs::read_dir(&user_dir) {
+        if let Some(user_dir) = user_functions_dir()
+            && let Ok(entries) = std::fs::read_dir(&user_dir) {
                 let mut paths: Vec<PathBuf> = entries
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("toml"))
@@ -134,7 +132,6 @@ impl FunctionLibrary {
                     }
                 }
             }
-        }
 
         lib
     }

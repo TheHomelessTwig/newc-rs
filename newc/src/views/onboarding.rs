@@ -28,9 +28,7 @@ pub fn view<'a>(state: &'a AppState, step: usize) -> Element<'a, Message> {
 fn progress_bar<'a>(step: usize) -> Element<'a, Message> {
     let steps = ["Find Projects", "Author", "Theme"];
     let btns: Vec<Element<Message>> = steps.iter().enumerate().map(|(i, label)| {
-        let color = if i == step {
-            th::color::GREEN
-        } else if i < step {
+        let color = if i <= step {
             th::color::GREEN
         } else {
             th::color::TEXT_DIM

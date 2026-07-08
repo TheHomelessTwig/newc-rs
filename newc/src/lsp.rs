@@ -11,7 +11,7 @@
 //! back to a generic single-file view, which still works for hover but
 //! won't see project-wide includes.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -138,7 +138,7 @@ fn writer_loop(mut stdin: ChildStdin, command_receiver: Receiver<ClientCmd>, roo
 
 /// Read one `Content-Length`-framed JSON-RPC message from `reader`.
 /// Returns `None` on EOF or a malformed frame.
-fn read_message(reader: &mut (impl BufRead + Read)) -> Option<Value> {
+fn read_message(reader: &mut impl BufRead) -> Option<Value> {
     let mut content_length: Option<usize> = None;
     loop {
         let mut line = String::new();

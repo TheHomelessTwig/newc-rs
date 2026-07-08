@@ -154,7 +154,7 @@ fn inject_include(main_c: &Path, module_name: &str) -> Result<()> {
         .enumerate()
         .filter(|(_, l)| l.starts_with("#include"))
         .map(|(i, _)| i)
-        .last();
+        .next_back();
 
     let new_content = if let Some(idx) = last_include {
         let mut out = lines[..=idx].join("\n");
@@ -192,6 +192,16 @@ fn remove_include_line(path: &Path, module_name: &str) -> Result<()> {
         fs::write(path, new_content)?;
     }
     Ok(())
+}
+
+fn count_functions_in_source(source: &Path) -> usize {
+    if !source.exists() {
+        return 0;
+    }
+    let Ok(content) = fs::read_to_string(source) else {
+        return 0;
+    };
+    crate::sync::extract_signatures(&content).len()
 }
 
 #[cfg(test)]
@@ -274,14 +284,4 @@ mod tests {
         let main_c = fs::read_to_string(root.join("src/main.c")).unwrap();
         assert!(!main_c.contains("#include \"parser.h\""));
     }
-}
-
-fn count_functions_in_source(source: &Path) -> usize {
-    if !source.exists() {
-        return 0;
-    }
-    let Ok(content) = fs::read_to_string(source) else {
-        return 0;
-    };
-    crate::sync::extract_signatures(&content).len()
 }

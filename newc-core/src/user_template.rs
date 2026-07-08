@@ -71,11 +71,10 @@ pub fn load_all() -> Vec<UserTemplate> {
         .collect();
     paths.sort();
     for path in paths {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(t) = toml::from_str::<UserTemplate>(&content) {
+        if let Ok(content) = std::fs::read_to_string(&path)
+            && let Ok(t) = toml::from_str::<UserTemplate>(&content) {
                 templates.push(t);
             }
-        }
     }
     templates
 }

@@ -38,8 +38,8 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         } else if !line.text.is_empty() {
             // Lines that parse as a compiler diagnostic (file:line[:col]: kind: message)
             // become clickable, jumping straight to that line in the module editor.
-            if matches!(line.kind, LineKind::Stderr | LineKind::Stdout) {
-                if let Some(d) = diag::parse(&[line.text.clone()]).into_iter().next() {
+            if matches!(line.kind, LineKind::Stderr | LineKind::Stdout)
+                && let Some(d) = diag::parse(std::slice::from_ref(&line.text)).into_iter().next() {
                     let module = module_name_from_diag_file(&d.file);
                     return button(text(line.text.as_str()).color(color).size(12))
                         .on_press(Message::DiagJumpTo { module, line: d.line })
@@ -47,7 +47,6 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                         .padding(0)
                         .into();
                 }
-            }
             text(line.text.as_str()).color(color).size(12).into()
         } else {
             Space::new().into()

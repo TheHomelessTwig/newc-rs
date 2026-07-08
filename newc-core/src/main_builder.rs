@@ -144,20 +144,20 @@ impl MainBlock {
                 .join("\n"),
             MainBlock::BlankLine => String::new(),
             MainBlock::IfBlock { condition, body, else_body } => {
-                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 if else_body.is_empty() {
                     format!("\tif ({condition}) {{\n{body_str}\n\t}}")
                 } else {
-                    let else_str = else_body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                    let else_str = else_body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                     format!("\tif ({condition}) {{\n{body_str}\n\t}} else {{\n{else_str}\n\t}}")
                 }
             }
             MainBlock::WhileLoop { condition, body } => {
-                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 format!("\twhile ({condition}) {{\n{body_str}\n\t}}")
             }
             MainBlock::ForLoop { init, condition, increment, body } => {
-                let body_str = body.iter().map(|b| indent_block(b)).collect::<Vec<_>>().join("\n");
+                let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 format!("\tfor ({init}; {condition}; {increment}) {{\n{body_str}\n\t}}")
             }
         }
@@ -240,7 +240,7 @@ fn parse_single_param(p: &str) -> Option<FuncParam> {
 
     // Last whitespace-or-star-bounded token is the name
     let trimmed = p_no_bracket.trim_end();
-    let last_sep = trimmed.rfind(|c: char| c == ' ' || c == '*')?;
+    let last_sep = trimmed.rfind([' ', '*'])?;
     let raw_name = trimmed[last_sep + 1..].trim();
     let type_part = trimmed[..last_sep + 1].trim();
 
@@ -361,11 +361,11 @@ fn parse_globals(source: &str) -> Vec<GlobalVar> {
         let is_static = t.starts_with("static ");
         let t_no_static = if is_static { t.trim_start_matches("static").trim() } else { t };
 
-        if let Some(vd) = try_parse_var_decl(t_no_static) {
-            // Convert VarDecl block to GlobalVar
-            if let MainBlock::VarDecl { type_name, name, init, is_array, array_size } = vd {
-                globals.push(GlobalVar { type_name, name, init, is_array, array_size, is_static });
-            }
+        // Convert VarDecl block to GlobalVar
+        if let Some(MainBlock::VarDecl { type_name, name, init, is_array, array_size }) =
+            try_parse_var_decl(t_no_static)
+        {
+            globals.push(GlobalVar { type_name, name, init, is_array, array_size, is_static });
         }
     }
     globals
