@@ -364,11 +364,10 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        if let Some(f) = module_filter {
-            if !mod_name.eq_ignore_ascii_case(f) {
+        if let Some(f) = module_filter
+            && !mod_name.eq_ignore_ascii_case(f) {
                 continue;
             }
-        }
         let Ok(content) = std::fs::read_to_string(path) else { continue };
         let fns = sync::extract_function_implementations(&content);
         if fns.is_empty() { continue; }

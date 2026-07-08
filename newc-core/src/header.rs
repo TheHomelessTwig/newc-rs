@@ -87,7 +87,7 @@ pub fn write_ignore_block(hdr: &Path, new_content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Section templates the GUI can insert into the `SYNC_IGNORE` block.
+// Section templates the GUI can insert into the `SYNC_IGNORE` block.
 
 /// Return a `typedef struct` skeleton with a placeholder field.
 pub fn struct_template(name: &str) -> String {

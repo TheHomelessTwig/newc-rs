@@ -140,8 +140,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
 fn highlight_match<'a>(text_str: &str, query: &str) -> Element<'a, Message> {
     let lower = text_str.to_lowercase();
-    if !query.is_empty() {
-        if let Some(pos) = lower.find(query) {
+    if !query.is_empty()
+        && let Some(pos) = lower.find(query) {
             let end = (pos + query.len()).min(text_str.len());
             let before  = text_str[..pos].to_string();
             let matched = text_str[pos..end].to_string();
@@ -160,6 +160,5 @@ fn highlight_match<'a>(text_str: &str, query: &str) -> Element<'a, Message> {
             }
             return rich_text(spans).into();
         }
-    }
     rich_text([TSpan::<()>::new(text_str.to_string()).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT)]).into()
 }

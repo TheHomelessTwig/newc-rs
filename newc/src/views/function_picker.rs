@@ -26,7 +26,7 @@ pub fn view<'a>(
     let search_row = row![
         text("Search:").width(70),
         text_input("filter functions…", search)
-            .on_input(|s| Message::LibrarySearch(s))
+            .on_input(Message::LibrarySearch)
             .width(220),
     ]
     .spacing(8)

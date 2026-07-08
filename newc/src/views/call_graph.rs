@@ -143,9 +143,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
                 } else {
                     Color::from_rgb8(0x3D, 0x3A, 0x3F)
                 };
-                let border = if is_sel {
-                    Color::from_rgb8(0xA9, 0xDC, 0x76)
-                } else if node.is_main {
+                let border = if is_sel || node.is_main {
                     Color::from_rgb8(0xA9, 0xDC, 0x76)
                 } else {
                     Color::from_rgba(0.6, 0.6, 0.6, 0.5)
@@ -206,14 +204,13 @@ impl canvas::Program<Message> for CallGraphCanvas {
                 None
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-                if let Some(start) = state.drag_start {
-                    if let Some(pos) = cursor.position_in(bounds) {
+                if let Some(start) = state.drag_start
+                    && let Some(pos) = cursor.position_in(bounds) {
                         let dx = pos.x - start.x;
                         let dy = pos.y - start.y;
                         state.drag_start = Some(pos); // frame-to-frame delta, not total
                         return Some(canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture());
                     }
-                }
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {

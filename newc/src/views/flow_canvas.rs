@@ -192,14 +192,13 @@ impl canvas::Program<Message> for FlowCanvas {
                 None
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-                if let Some(start) = state.drag_start {
-                    if let Some(pos) = cursor.position_in(bounds) {
+                if let Some(start) = state.drag_start
+                    && let Some(pos) = cursor.position_in(bounds) {
                         let dx = pos.x - start.x;
                         let dy = pos.y - start.y;
                         state.drag_start = Some(pos);
                         return Some(canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture());
                     }
-                }
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {

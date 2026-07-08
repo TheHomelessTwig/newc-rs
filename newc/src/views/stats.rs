@@ -45,7 +45,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
         ];
         for m in &project_stats.module_stats {
             let bar_pct = (m.loc as f32 / max_loc as f32 * 100.0) as usize;
-            let bar: String = "█".repeat(bar_pct / 5).into();
+            let bar: String = "█".repeat(bar_pct / 5);
             rows.push(
                 row![
                     text(format!("◆ {}", m.name)).width(160).color(th::color::GREEN),

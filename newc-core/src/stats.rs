@@ -79,7 +79,7 @@ pub fn compute(root: &Path) -> ProjectStats {
     let total_loc = module_stats.iter().map(|m| m.loc).sum::<usize>() + main_loc;
     let total_source_lines = module_stats.iter().map(|m| m.source_lines).sum::<usize>() + main_source;
 
-    module_stats.sort_by(|a, b| b.functions.cmp(&a.functions));
+    module_stats.sort_by_key(|m| std::cmp::Reverse(m.functions));
 
     ProjectStats { total_functions, total_loc, total_source_lines, module_stats }
 }
