@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use newc_core::{
-    analysis, module, project_template,
+    analysis, doc, lint, module, project_template,
     license::License,
     project::BuildSystem,
     scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
@@ -46,17 +46,31 @@ pub enum Command {
     },
     /// Add a new module to the current project
     Add { module: String },
-    /// Interactively remove a module from the current project
-    Remove,
+    /// Remove a module (interactive picker, or by name)
+    Remove {
+        /// Module name to remove; omit for an interactive picker
+        module: Option<String>,
+        /// Skip the confirmation prompt (requires a module name)
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
     /// List all modules in the current project
-    List,
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Sync .h prototypes from .c definitions
     Sync {
         /// Only sync this module; omit to sync all
         module: Option<String>,
     },
     /// List functions unreachable from main (BFS)
-    Check,
+    Check {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Remove unreachable functions (with confirmation)
     Tidy {
         /// Show what would be removed without changing any files
@@ -67,11 +81,33 @@ pub enum Command {
         yes: bool,
     },
     /// Print project statistics (function count, LOC per module)
-    Stats,
+    Stats {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// List functions in the project or a specific module
     Funcs {
         /// Module name to filter by (omit for all)
         module: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Lint C sources for common mistakes (L001-L017); non-zero exit on findings
+    Lint {
+        /// Module name to lint (omit for all sources + headers)
+        module: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Insert Doxygen stub comments above undocumented functions
+    Doc {
+        /// Module to document
+        module: String,
+        /// Only this function; omit to stub every undocumented function
+        function: Option<String>,
     },
     /// Open the GUI, optionally jumping to a project
     Gui {
@@ -104,13 +140,15 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
             cmd_new(&name, git, template.as_deref(), &build_system, license.as_deref())
         }
         Command::Add { module: name } => cmd_add(&name),
-        Command::Remove => cmd_remove(),
-        Command::List => cmd_list(),
+        Command::Remove { module, yes } => cmd_remove(module.as_deref(), yes),
+        Command::List { json } => cmd_list(json),
         Command::Sync { module: name } => cmd_sync(name.as_deref()),
-        Command::Check => cmd_check(),
+        Command::Check { json } => cmd_check(json),
         Command::Tidy { dry_run, yes } => cmd_tidy(dry_run, yes),
-        Command::Stats => cmd_stats(),
-        Command::Funcs { module } => cmd_funcs(module.as_deref()),
+        Command::Stats { json } => cmd_stats(json),
+        Command::Funcs { module, json } => cmd_funcs(module.as_deref(), json),
+        Command::Lint { module, json } => cmd_lint(module.as_deref(), json),
+        Command::Doc { module, function } => cmd_doc(&module, function.as_deref()),
         Command::Gui { .. } => unreachable!("GUI handled in main"),
         Command::InternalGui { .. } => unreachable!("InternalGui handled in main"),
         Command::Update { check } => cmd_update(check),
@@ -195,7 +233,7 @@ fn cmd_add(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_remove() -> anyhow::Result<()> {
+fn cmd_remove(module_name: Option<&str>, yes: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
     let modules = module::list_modules(&root)?;
 
@@ -204,31 +242,65 @@ fn cmd_remove() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("Modules:");
-    for (i, m) in modules.iter().enumerate() {
-        println!("  {}. {}", i + 1, m.name);
+    let name = match module_name {
+        Some(n) => {
+            if !modules.iter().any(|m| m.name == n) {
+                anyhow::bail!(
+                    "No module named '{n}'. Available: {}",
+                    modules.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(", ")
+                );
+            }
+            n.to_string()
+        }
+        None => {
+            println!("Modules:");
+            for (i, m) in modules.iter().enumerate() {
+                println!("  {}. {}", i + 1, m.name);
+            }
+
+            print!("Enter number to remove: ");
+            io::stdout().flush()?;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+            let choice: usize = input.trim().parse().unwrap_or(0);
+
+            if choice < 1 || choice > modules.len() {
+                println!("Invalid selection.");
+                return Ok(());
+            }
+            modules[choice - 1].name.clone()
+        }
+    };
+
+    if module_name.is_some() && !yes {
+        print!("Remove module '{name}'? (Y/N): ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let confirm = input.trim();
+        if confirm != "Y" && confirm != "y" {
+            println!("Aborted.");
+            return Ok(());
+        }
     }
 
-    print!("Enter number to remove: ");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let choice: usize = input.trim().parse().unwrap_or(0);
-
-    if choice < 1 || choice > modules.len() {
-        println!("Invalid selection.");
-        return Ok(());
-    }
-
-    let name = &modules[choice - 1].name;
-    module::remove_module(&root, name)?;
+    module::remove_module(&root, &name)?;
     println!("Removed module '{name}'.");
     Ok(())
 }
 
-fn cmd_list() -> anyhow::Result<()> {
+fn cmd_list(json: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
     let modules = module::list_modules(&root)?;
+
+    if json {
+        let out: Vec<_> = modules
+            .iter()
+            .map(|m| serde_json::json!({ "name": m.name, "functions": m.function_count }))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
 
     if modules.is_empty() {
         println!("No modules found.");
@@ -257,8 +329,27 @@ fn cmd_sync(module_name: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_check() -> anyhow::Result<()> {
+fn cmd_check(json: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
+    if json {
+        let unreachable = match analysis::check(&root) {
+            Ok(v) => v,
+            Err(newc_core::error::NewcError::NoModules) => Vec::new(),
+            Err(e) => return Err(e.into()),
+        };
+        let out: Vec<_> = unreachable
+            .iter()
+            .map(|f| {
+                serde_json::json!({
+                    "name": f.name,
+                    "source": f.source.display().to_string(),
+                    "static": f.is_static,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
     match analysis::check(&root) {
         Ok(unreachable) if unreachable.is_empty() => {
             println!("All module functions are reachable from main.");
@@ -328,9 +419,24 @@ fn cmd_tidy(dry_run: bool, yes: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_stats() -> anyhow::Result<()> {
+fn cmd_stats(json: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
     let project_stats = stats::compute(&root);
+    if json {
+        let out = serde_json::json!({
+            "total_functions": project_stats.total_functions,
+            "total_loc": project_stats.total_loc,
+            "total_source_lines": project_stats.total_source_lines,
+            "modules": project_stats.module_stats.iter().map(|m| serde_json::json!({
+                "name": m.name,
+                "functions": m.functions,
+                "loc": m.loc,
+                "source_lines": m.source_lines,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
     println!("{:<20} {:>8} {:>8}", "Module", "Funcs", "LOC");
     println!("{}", "-".repeat(38));
     for m in &project_stats.module_stats {
@@ -342,7 +448,7 @@ fn cmd_stats() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
+fn cmd_funcs(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
     let root = find_project_root()?;
     let src_dir = root.join("src");
     let Ok(entries) = std::fs::read_dir(&src_dir) else {
@@ -359,6 +465,7 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
         .collect();
     paths.sort();
     let mut any = false;
+    let mut json_out = Vec::new();
     for path in &paths {
         let mod_name = path
             .file_stem()
@@ -371,14 +478,139 @@ fn cmd_funcs(module_filter: Option<&str>) -> anyhow::Result<()> {
         let Ok(content) = std::fs::read_to_string(path) else { continue };
         let fns = sync::extract_function_implementations(&content);
         if fns.is_empty() { continue; }
-        println!("[{mod_name}]");
-        for f in &fns {
-            println!("  {}", f.signature);
+        if json {
+            json_out.push(serde_json::json!({
+                "module": mod_name,
+                "functions": fns.iter().map(|f| f.signature.clone()).collect::<Vec<_>>(),
+            }));
+        } else {
+            println!("[{mod_name}]");
+            for f in &fns {
+                println!("  {}", f.signature);
+            }
         }
         any = true;
     }
-    if !any {
+    if json {
+        println!("{}", serde_json::to_string_pretty(&json_out)?);
+    } else if !any {
         println!("No functions found.");
+    }
+    Ok(())
+}
+
+fn cmd_lint(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
+    let root = find_project_root()?;
+
+    // Collect lint targets: every .c in src/ and .h in include/
+    let mut targets: Vec<(PathBuf, bool)> = Vec::new();
+    for (dir, ext) in [("src", "c"), ("include", "h")] {
+        let Ok(entries) = std::fs::read_dir(root.join(dir)) else { continue };
+        for e in entries.filter_map(|e| e.ok()) {
+            let path = e.path();
+            if path.extension().and_then(|x| x.to_str()) == Some(ext) {
+                targets.push((path, ext == "h"));
+            }
+        }
+    }
+    targets.sort();
+
+    let mut findings = Vec::new();
+    for (path, is_header) in &targets {
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(f) = module_filter
+            && !stem.eq_ignore_ascii_case(f) {
+                continue;
+            }
+        let Ok(content) = std::fs::read_to_string(path) else { continue };
+        let warnings = if *is_header {
+            lint::lint_header(&content)
+        } else {
+            lint::lint_file(&content)
+        };
+        let rel = path.strip_prefix(&root).unwrap_or(path).to_path_buf();
+        for w in warnings {
+            findings.push((rel.clone(), w));
+        }
+    }
+
+    if json {
+        let out: Vec<_> = findings
+            .iter()
+            .map(|(path, w)| {
+                serde_json::json!({
+                    "file": path.display().to_string(),
+                    "line": w.line_no,
+                    "code": w.code,
+                    "severity": severity_str(&w.severity),
+                    "message": w.message,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else if findings.is_empty() {
+        println!("No lint findings.");
+    } else {
+        for (path, w) in &findings {
+            println!(
+                "{}:{}: [{}] {}: {}",
+                path.display(),
+                w.line_no,
+                w.code,
+                severity_str(&w.severity),
+                w.message
+            );
+        }
+        println!("\n{} finding(s).", findings.len());
+    }
+
+    if findings.is_empty() {
+        Ok(())
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn severity_str(sev: &lint::LintSeverity) -> &'static str {
+    match sev {
+        lint::LintSeverity::Error => "error",
+        lint::LintSeverity::Warning => "warning",
+        lint::LintSeverity::Info => "info",
+    }
+}
+
+fn cmd_doc(module: &str, function: Option<&str>) -> anyhow::Result<()> {
+    let root = find_project_root()?;
+    let src_path = root.join("src").join(format!("{module}.c"));
+    if !src_path.exists() {
+        anyhow::bail!("No module named '{module}' (src/{module}.c not found)");
+    }
+
+    match function {
+        Some(fname) => {
+            doc::insert_stub(&root, module, fname)?;
+            println!("Inserted Doxygen stub above '{fname}' in src/{module}.c");
+        }
+        None => {
+            let content = std::fs::read_to_string(&src_path)?;
+            let undocumented: Vec<String> = sync::extract_function_implementations(&content)
+                .iter()
+                .filter(|f| f.comment.trim().is_empty())
+                .map(|f| f.name.clone())
+                .collect();
+            if undocumented.is_empty() {
+                println!("All functions in '{module}' already have comments.");
+                return Ok(());
+            }
+            for fname in &undocumented {
+                doc::insert_stub(&root, module, fname)?;
+                println!("Inserted Doxygen stub above '{fname}'");
+            }
+            println!("{} stub(s) inserted in src/{module}.c", undocumented.len());
+        }
     }
     Ok(())
 }
