@@ -213,10 +213,15 @@ jobs:
           sed -i "s/^  sha256 \".*\"/  sha256 \"${TAR_SHA}\"/" Formula/newc.rb
           sed -i "s/^  version \".*\"/  version \"${VER}\"/" Casks/newc.rb
           sed -i "s/^  sha256 \".*\"/  sha256 \"${APP_SHA}\"/" Casks/newc.rb
-          git -c user.name="github-actions[bot]" \
-              -c user.email="github-actions[bot]@users.noreply.github.com" \
-              commit -am "Bump Formula + Cask to ${VER}"
-          git push
+          # Idempotent: a re-run of the same tag may produce no changes
+          if git diff --quiet; then
+            echo "Tap already at ${VER} — nothing to commit."
+          else
+            git -c user.name="github-actions[bot]" \
+                -c user.email="github-actions[bot]@users.noreply.github.com" \
+                commit -am "Bump Formula + Cask to ${VER}"
+            git push
+          fi
 
       # Self-hosted apt repo (GitHub Pages, served from the gh-pages branch)
       # via reprepro. Pulls the .deb already built in the `build` job's
@@ -244,10 +249,15 @@ jobs:
 
           cd ..
           git add apt
-          git -c user.name="github-actions[bot]" \
-              -c user.email="github-actions[bot]@users.noreply.github.com" \
-              commit -m "apt: add ${GITHUB_REF_NAME}"
-          git push
+          # Idempotent: reprepro skips a version it already has, leaving nothing staged
+          if git diff --cached --quiet; then
+            echo "apt repo already has ${GITHUB_REF_NAME} — nothing to commit."
+          else
+            git -c user.name="github-actions[bot]" \
+                -c user.email="github-actions[bot]@users.noreply.github.com" \
+                commit -m "apt: add ${GITHUB_REF_NAME}"
+            git push
+          fi
 
       # AUR publishing is deferred — AUR account signups are currently closed.
       # Once an account + SSH key exist, uncomment and set AUR_SSH_PRIVATE_KEY
