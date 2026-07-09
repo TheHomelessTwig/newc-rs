@@ -37,7 +37,7 @@ use crate::state::Message;
         button(text("Browse .c file…")).on_press(Message::ImportPickFile).style(th::btn_secondary),
         text(if imp.path_label.is_empty() { "" } else { &imp.path_label })
             .size(12)
-            .color(th::color::TEXT_DIM),
+            .color(th::color::text_dim()),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -79,7 +79,7 @@ use crate::state::Message;
                         text(func.name.as_str()).size(13).font(iced::Font::MONOSPACE),
                         text(func.signature.as_str())
                             .size(11)
-                            .color(th::color::TEXT_DIM)
+                            .color(th::color::text_dim())
                             .font(iced::Font::MONOSPACE),
                     ]
                     .spacing(2),

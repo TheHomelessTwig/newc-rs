@@ -29,9 +29,9 @@ fn progress_bar<'a>(step: usize) -> Element<'a, Message> {
     let steps = ["Find Projects", "Author", "Theme"];
     let btns: Vec<Element<Message>> = steps.iter().enumerate().map(|(i, label)| {
         let color = if i <= step {
-            th::color::GREEN
+            th::color::green()
         } else {
-            th::color::TEXT_DIM
+            th::color::text_dim()
         };
         text(format!("{}. {}", i + 1, label)).size(13).color(color).into()
     }).collect();
@@ -44,7 +44,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
     let project_list: Element<Message> = if found.is_empty() {
         text("No newc projects found in ~/projects/, ~/uni/, or ~/school/.")
             .size(13)
-            .color(th::color::TEXT_DIM)
+            .color(th::color::text_dim())
             .into()
     } else {
         let rows: Vec<Element<Message>> = found.iter().enumerate().map(|(i, (path, sel))| {
@@ -55,7 +55,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
             let path_str = path.display().to_string();
             row![
                 checkbox(*sel).label(label).on_toggle(move |_| Message::OnboardingToggleProject(i)),
-                text(path_str).size(11).color(th::color::TEXT_DIM),
+                text(path_str).size(11).color(th::color::text_dim()),
             ]
             .spacing(8)
             .into()
@@ -64,7 +64,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
     };
 
     column![
-        text("Welcome to newc").size(28).color(th::color::GREEN),
+        text("Welcome to newc").size(28).color(th::color::green()),
         text("A C project manager with GUI. Let's set things up.").size(14),
         Space::new().height(12),
         text("Found newc projects — select which to import:").size(14),
@@ -81,7 +81,7 @@ fn step0<'a>(state: &'a AppState) -> Element<'a, Message> {
 
 fn step1<'a>(state: &'a AppState) -> Element<'a, Message> {
     column![
-        text("Your name").size(22).color(th::color::GREEN),
+        text("Your name").size(22).color(th::color::green()),
         text("Used in generated file headers and main.c author fields.").size(13),
         Space::new().height(16),
         row![
@@ -108,9 +108,9 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
     let theme_btns: Vec<Element<Message>> = ALL_THEMES.iter().map(|(key, label)| {
         let is_active = state.active_theme == *key;
         let color = if is_active {
-            th::color::GREEN
+            th::color::green()
         } else {
-            th::color::TEXT
+            th::color::text()
         };
         button(text(*label).size(12).color(color))
             .on_press(Message::ThemeSelect(key.to_string()))
@@ -118,7 +118,7 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
     }).collect();
 
     column![
-        text("Choose a theme").size(22).color(th::color::GREEN),
+        text("Choose a theme").size(22).color(th::color::green()),
         text("Can be changed any time in Settings.").size(13),
         Space::new().height(12),
         scrollable(
@@ -138,7 +138,7 @@ fn step2<'a>(state: &'a AppState) -> Element<'a, Message> {
 
 fn step_done<'a>() -> Element<'a, Message> {
     column![
-        text("All done!").size(28).color(th::color::GREEN),
+        text("All done!").size(28).color(th::color::green()),
         button(text("Go to Home")).on_press(Message::OnboardingFinish),
     ]
     .spacing(16)

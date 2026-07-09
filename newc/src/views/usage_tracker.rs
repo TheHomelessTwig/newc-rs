@@ -17,7 +17,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .style(th::btn_ghost),
         text(format!("Usage — {}", project.name))
             .size(18)
-            .color(th::color::PURPLE),
+            .color(th::color::purple()),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -44,7 +44,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             header,
             search_row,
             text("No library function usage found.")
-                .color(th::color::TEXT_DIM),
+                .color(th::color::text_dim()),
         ]
         .spacing(8)
         .padding(16)
@@ -66,15 +66,15 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let rows: Vec<Element<Message>> = entries.into_iter().map(|e| {
         row![
             Space::new().width(8),
-            text(e.fname).width(200).size(12).font(iced::Font::MONOSPACE).color(th::color::CYAN),
-            text(e.files).size(12).color(th::color::TEXT_DIM),
+            text(e.fname).width(200).size(12).font(iced::Font::MONOSPACE).color(th::color::cyan()),
+            text(e.files).size(12).color(th::color::text_dim()),
         ]
         .spacing(4)
         .into()
     }).collect();
 
     let content = if rows.is_empty() {
-        column![text("No matches.").color(th::color::TEXT_DIM)]
+        column![text("No matches.").color(th::color::text_dim())]
     } else {
         column(rows).spacing(4)
     };

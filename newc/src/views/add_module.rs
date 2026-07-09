@@ -20,7 +20,7 @@ pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Elem
                 .style(th::btn_ghost),
             text(format!("+ Add Module — {}", project.name))
                 .size(18)
-                .color(th::color::GREEN),
+                .color(th::color::green()),
         ]
         .spacing(10)
         .align_y(iced::Alignment::Center),
@@ -40,7 +40,7 @@ pub fn view<'a>(state: &'a crate::state::AppState, project: &'a Project) -> Elem
         col = col.push(
             text("Must be a valid C identifier (letters, digits, underscores; no spaces)")
                 .size(12)
-                .color(th::color::ACCENT),
+                .color(th::color::accent()),
         );
     }
 

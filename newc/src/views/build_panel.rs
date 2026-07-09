@@ -21,11 +21,11 @@ fn module_name_from_diag_file(file: &str) -> String {
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let lines: Vec<Element<Message>> = state.build_lines.iter().map(|line| {
         let color = match line.kind {
-            LineKind::Stdout => th::color::TEXT,
-            LineKind::Stderr => th::color::ACCENT,
-            LineKind::Info => th::color::CYAN,
-            LineKind::Done { exit_code: Some(0), .. } => th::color::GREEN,
-            LineKind::Done { .. } => th::color::ACCENT,
+            LineKind::Stdout => th::color::text(),
+            LineKind::Stderr => th::color::accent(),
+            LineKind::Info => th::color::cyan(),
+            LineKind::Done { exit_code: Some(0), .. } => th::color::green(),
+            LineKind::Done { .. } => th::color::accent(),
         };
         if let LineKind::Done { exit_code, duration_ms } = line.kind {
             let timing = format!("{:.1}s", duration_ms as f64 / 1000.0);
@@ -54,7 +54,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     }).collect();
 
     let log_content = if lines.is_empty() {
-        column![text("No build output.").size(12).color(th::color::TEXT_DIM)]
+        column![text("No build output.").size(12).color(th::color::text_dim())]
     } else {
         column(lines).spacing(2)
     };
@@ -80,19 +80,19 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             );
             if let (Some(file), Some(line)) = (&e.file, e.line) {
                 let module = module_name_from_diag_file(file);
-                button(text(label).size(11).color(th::color::ACCENT))
+                button(text(label).size(11).color(th::color::accent()))
                     .on_press(Message::DiagJumpTo { module, line })
                     .style(th::btn_ghost)
                     .padding(0)
                     .into()
             } else {
-                text(label).size(11).color(th::color::ACCENT).into()
+                text(label).size(11).color(th::color::accent()).into()
             }
         }).collect();
         Some(
             column![
                 text(format!("Valgrind: {} error(s), {} byte(s) leaked", summary.error_count, summary.total_leaked_bytes))
-                    .size(12).color(th::color::YELLOW),
+                    .size(12).color(th::color::yellow()),
                 scrollable(column(rows).spacing(2)).height(100),
             ]
             .spacing(4)

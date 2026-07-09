@@ -56,7 +56,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         col = col.push(
             text("Must be a valid C identifier (letters, digits, underscores; no spaces)")
                 .size(12)
-                .color(th::color::ACCENT),
+                .color(th::color::accent()),
         );
     }
 
@@ -98,7 +98,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 text("Use CMake:").width(120),
                 checkbox(state.create_use_cmake)
                     .on_toggle(Message::CreateUseCmakeToggle),
-                text("(unchecked = Makefile)").size(11).color(th::color::TEXT_DIM),
+                text("(unchecked = Makefile)").size(11).color(th::color::text_dim()),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
@@ -130,7 +130,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         col = col.push(
             text("Location path does not exist.")
                 .size(12)
-                .color(th::color::ACCENT),
+                .color(th::color::accent()),
         );
     }
 

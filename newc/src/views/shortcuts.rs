@@ -25,15 +25,15 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     let table: Vec<Element<Message>> = rows.iter().map(|(key, desc)| {
         row![
-            text(*key).color(th::color::YELLOW).width(240),
-            text(*desc).color(th::color::TEXT),
+            text(*key).color(th::color::yellow()).width(240),
+            text(*desc).color(th::color::text()),
         ]
         .spacing(12)
         .into()
     }).collect();
 
     let inner = column![
-        text("Keyboard Shortcuts").size(18).color(th::color::TEXT),
+        text("Keyboard Shortcuts").size(18).color(th::color::text()),
         column(table).spacing(6),
         button(text("Close")).on_press(Message::ShowShortcuts(false)).style(th::btn_ghost),
     ]

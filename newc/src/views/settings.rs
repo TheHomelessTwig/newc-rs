@@ -9,7 +9,7 @@ use crate::theme as th;
 
 fn form_row<'a>(label: &'a str, control: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
     row![
-        text(label).size(12).color(th::color::TEXT_DIM).width(150),
+        text(label).size(12).color(th::color::text_dim()).width(150),
         control.into(),
     ]
     .spacing(8)
@@ -89,7 +89,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     let appearance_section = container(
         column![
             th::section_title("Appearance"),
-            th::hint_text("Nightfly is the closest built-in theme to Monokai Pro."),
+            th::hint_text("Themes restyle the whole app, including code colours."),
             row![
                 column(col1).spacing(4),
                 column(col2).spacing(4),
@@ -165,7 +165,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     if let Some(ver) = &state.update_available {
         update_rows = update_rows.push(
             row![
-                text(format!("v{ver} available")).size(12).color(th::color::ACCENT),
+                text(format!("v{ver} available")).size(12).color(th::color::accent()),
                 button(text("Install Update").size(12))
                     .on_press(Message::UpdateInstall(ver.clone()))
                     .style(th::btn_primary),
@@ -218,7 +218,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 column(draft.build_profiles.iter().map(|p| {
                     row![
                         text(p.name.clone()).size(12).width(120),
-                        text(p.cflags.clone()).size(11).color(th::color::TEXT_DIM),
+                        text(p.cflags.clone()).size(11).color(th::color::text_dim()),
                         button(text("Remove").size(10))
                             .on_press(Message::ProfileRemove(p.name.clone()))
                             .style(th::btn_danger),

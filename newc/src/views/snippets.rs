@@ -1,7 +1,8 @@
 //! C snippet browser — categorised ready-to-copy code snippets with syntax highlighting.
 
 use iced::widget::{button, column, pane_grid, row, scrollable, text, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
+use crate::theme as th;
 use crate::highlight::code_view;
 
 /// Identifies which pane of the Snippets resizable pane-grid is being rendered.
@@ -190,7 +191,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
             button(text(snippet.name).size(13))
                 .on_press(Message::SnippetsSelect(Some(i)))
                 .width(Length::Fill),
-            text(snippet.desc).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+            text(snippet.desc).size(11).color(th::color::text_dim()),
         ]
         .spacing(2)
         .into()
@@ -208,16 +209,16 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
-                text(snippet.desc).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                text(snippet.desc).size(12).color(th::color::text_dim()),
                 code_view(snippet.code, state.config.code_font_size, None, None),
             ]
             .spacing(8)
             .into()
         } else {
-            text("Select a snippet").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+            text("Select a snippet").color(th::color::text_dim()).into()
         }
     } else {
-        text("Select a snippet").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+        text("Select a snippet").color(th::color::text_dim()).into()
     };
 
     let header_row: Element<Message> = if state.snippets_window.is_none() {

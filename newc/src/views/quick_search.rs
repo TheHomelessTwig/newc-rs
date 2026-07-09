@@ -6,6 +6,7 @@ use iced::widget::{button, column, row, scrollable, text, text_input, Space};
 use iced::{Color, Element, Length};
 use newc_core::function_lib::FunctionLibrary;
 
+use crate::theme as th;
 use crate::state::{AppState, Message};
 
 /// Persistent state for the quick-search overlay.
@@ -46,9 +47,9 @@ pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
                 let _path_for_fn = state.known_projects.first().cloned().unwrap_or_default();
                 row![
                     text(name.clone()).font(iced::Font::MONOSPACE),
-                    text(format!("({module})")).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                    text(format!("({module})")).size(11).color(th::color::text_dim()),
                     Space::new().width(Length::Fill),
-                    text(description.clone()).size(11).color(Color::from_rgb(0.85, 0.85, 0.85)),
+                    text(description.clone()).size(11).color(th::color::text()),
                 ]
                 .spacing(6)
                 .into()
@@ -56,9 +57,9 @@ pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
             QuickSearchResult::Project { name, path } => {
                 let _path_clone = path.clone();
                 row![
-                    text("⌂ ").color(Color::from_rgb(1.0, 0.847, 0.4)),
+                    text("⌂ ").color(th::color::yellow()),
                     text(name.clone()),
-                    text(path.display().to_string()).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                    text(path.display().to_string()).size(11).color(th::color::text_dim()),
                 ]
                 .spacing(6)
                 .into()
@@ -84,17 +85,17 @@ pub fn view<'a>(state: &'a AppState) -> Element<'a, Message> {
             .width(Length::Fill),
         scrollable(
             if results.is_empty() {
-                column![text("No results").color(Color::from_rgb(0.5, 0.5, 0.5))]
+                column![text("No results").color(th::color::text_dim())]
             } else {
                 column(result_rows).spacing(2)
             }
         ).height(330),
         row![
             text("↑↓ navigate  Enter select  Esc close")
-                .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                .size(11).color(th::color::text_dim()),
             Space::new().width(Length::Fill),
             text(format!("{} results", results.len()))
-                .size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                .size(11).color(th::color::text_dim()),
         ]
         .spacing(8),
     ]

@@ -10,6 +10,7 @@ use iced::widget::{button, column, row, text, Space};
 use iced::{Color, Element, Length, Point, Rectangle, Size, mouse};
 use newc_core::project::Project;
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 use crate::views::call_graph::{GraphNode, GraphEdge, CallGraphData, CanvasState};
 
@@ -37,7 +38,7 @@ impl canvas::Program<Message> for DepGraphCanvas {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry<iced::Renderer>> {
         let geo = self.cache.draw(renderer, bounds.size(), |frame| {
-            frame.fill_rectangle(Point::ORIGIN, bounds.size(), Color::from_rgb8(0x1E, 0x1C, 0x1F));
+            frame.fill_rectangle(Point::ORIGIN, bounds.size(), th::color::bg_deep());
 
             let cx = bounds.width / 2.0 + self.pan_x;
             let cy = bounds.height / 2.0 + self.pan_y;
@@ -55,7 +56,7 @@ impl canvas::Program<Message> for DepGraphCanvas {
 
                     let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
                     frame.stroke(&path, Stroke::default()
-                        .with_color(Color::from_rgba(0.471, 0.863, 0.910, 0.5))
+                        .with_color(th::color::cyan().scale_alpha(0.5))
                         .with_width(1.5 * z));
 
                     // Arrowhead
@@ -75,7 +76,7 @@ impl canvas::Program<Message> for DepGraphCanvas {
                         b.line_to(Point::new(ax - px, ay - py));
                         b.close();
                     });
-                    frame.fill(&arrow, Color::from_rgb(0.471, 0.863, 0.910));
+                    frame.fill(&arrow, th::color::cyan());
                 }
             }
 
@@ -93,9 +94,9 @@ impl canvas::Program<Message> for DepGraphCanvas {
                     Color::from_rgb8(0x3D, 0x3A, 0x3F)
                 };
                 let border = if is_sel {
-                    Color::from_rgb8(0xFF, 0xD8, 0x66)
+                    th::color::yellow()
                 } else {
-                    Color::from_rgb8(0xFC, 0xFC, 0xFA)
+                    th::color::text()
                 };
 
                 let rect = Path::rectangle(Point::new(nx, ny), Size::new(nw, nh));
@@ -107,7 +108,7 @@ impl canvas::Program<Message> for DepGraphCanvas {
                     content: format!("◆ {}", node.id),
                     position: Point::new(nx + 6.0 * z, ny + nh / 2.0 - fs * 0.5),
                     size: fs.into(),
-                    color: Color::from_rgb8(0xA9, 0xDC, 0x76),
+                    color: th::color::green(),
                     ..canvas::Text::default()
                 });
             }
@@ -248,12 +249,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         button(text("← Back"))
             .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
         text(format!("Dependency Graph — {}", project.name))
-            .size(16).color(Color::from_rgb(0.663, 0.863, 0.463)),
+            .size(16).color(th::color::green()),
         Space::new().width(Length::Fill),
         button(text("Reset").size(12)).on_press(Message::GraphReset),
         button(text("Export").size(12)).on_press(Message::GraphExport),
         text("Scroll: zoom  Drag: pan  Click: select").size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+            .color(th::color::text_dim()),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -270,10 +271,10 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             if deps.is_empty() { "none".into() } else { deps.join(", ") },
             if depended_by.is_empty() { "none".into() } else { depended_by.join(", ") },
         ))
-        .size(12).color(Color::from_rgb(0.471, 0.863, 0.910)).into()
+        .size(12).color(th::color::cyan()).into()
     } else {
         text(format!("{} modules, {} dependencies", graph_data.nodes.len(), graph_data.edges.len()))
-            .size(12).color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+            .size(12).color(th::color::text_dim()).into()
     };
 
     let canvas_widget = Canvas::new(DepGraphCanvas {

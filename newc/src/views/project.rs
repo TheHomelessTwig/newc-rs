@@ -18,7 +18,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         return container(
             column![
                 text(format!("Remove module '{mod_name}'?"))
-                    .size(15).color(th::color::ACCENT),
+                    .size(15).color(th::color::accent()),
                 th::hint_text("This permanently deletes the .c and .h files."),
                 row![
                     button(text("Remove").size(12))
@@ -45,10 +45,10 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .style(th::btn_ghost),
         text(format!("◆ {}", project.name))
             .size(18)
-            .color(th::color::GREEN),
+            .color(th::color::green()),
         text(project.root.display().to_string())
             .size(11)
-            .color(th::color::TEXT_HINT),
+            .color(th::color::text_hint()),
         Space::new().width(Length::Fill),
         button(text("Open in Editor").size(12))
             .on_press(Message::OpenInEditor)
@@ -61,7 +61,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let mut meta_row: Vec<Element<Message>> = vec![];
     if !meta.course.is_empty() {
         meta_row.push(
-            container(text(format!("📚 {}", meta.course)).size(11).color(th::color::CYAN))
+            container(text(format!("📚 {}", meta.course)).size(11).color(th::color::cyan()))
                 .padding([2, 6])
                 .style(th::section_style)
                 .into()
@@ -69,7 +69,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }
     if !meta.assignment.is_empty() {
         meta_row.push(
-            container(text(format!("📝 {}", meta.assignment)).size(11).color(th::color::TEXT))
+            container(text(format!("📝 {}", meta.assignment)).size(11).color(th::color::text()))
                 .padding([2, 6])
                 .style(th::section_style)
                 .into()
@@ -77,13 +77,13 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }
     if let Some(days) = meta.days_until_due() {
         let (badge, color) = if days < 0 {
-            (format!("⚠ Overdue by {} days", -days), th::color::ACCENT)
+            (format!("⚠ Overdue by {} days", -days), th::color::accent())
         } else if days == 0 {
-            ("⚠ Due today".into(), th::color::YELLOW)
+            ("⚠ Due today".into(), th::color::yellow())
         } else if days <= 3 {
-            (format!("⏰ Due in {days} days"), th::color::YELLOW)
+            (format!("⏰ Due in {days} days"), th::color::yellow())
         } else {
-            (format!("📅 Due in {days} days ({})", meta.due_date), th::color::TEXT_DIM)
+            (format!("📅 Due in {days} days ({})", meta.due_date), th::color::text_dim())
         };
         meta_row.push(
             container(text(badge).size(11).color(color))
@@ -94,7 +94,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }
     if let Some(m) = meta.marks_display() {
         meta_row.push(
-            container(text(format!("🎯 {m}")).size(11).color(th::color::GREEN))
+            container(text(format!("🎯 {m}")).size(11).color(th::color::green()))
                 .padding([2, 6])
                 .style(th::section_style)
                 .into()
@@ -155,7 +155,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         build_btns.push(btn.into());
     }
     if build_running {
-        build_btns.push(text("⟳ building…").size(12).color(th::color::YELLOW).into());
+        build_btns.push(text("⟳ building…").size(12).color(th::color::yellow()).into());
     }
 
     let build_section = container(
@@ -226,7 +226,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .spacing(4)
             .wrap(),
             row![
-                text("Pack submission:").size(12).color(th::color::TEXT_DIM),
+                text("Pack submission:").size(12).color(th::color::text_dim()),
                 text_input("student name", &state.submission_student_input)
                     .on_input(Message::SubmissionStudentInput)
                     .width(160),
@@ -249,17 +249,17 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let module_section = {
         let col_header = container(
             row![
-                text("Module").size(11).width(180).color(th::color::TEXT_DIM),
-                text("fns").size(11).width(40).color(th::color::TEXT_DIM),
-                text("size").size(11).width(52).color(th::color::TEXT_DIM),
+                text("Module").size(11).width(180).color(th::color::text_dim()),
+                text("fns").size(11).width(40).color(th::color::text_dim()),
+                text("size").size(11).width(52).color(th::color::text_dim()),
                 Space::new().width(Length::Fill),
             ]
             .spacing(4)
             .padding([4, 8]),
         )
         .style(|_| iced::widget::container::Style {
-            background: Some(Background::Color(th::color::BG_DEEP)),
-            border: Border { color: th::color::BORDER_DIM, width: 0.0, radius: 0.0.into() },
+            background: Some(Background::Color(th::color::bg_deep())),
+            border: Border { color: th::color::border_dim(), width: 0.0, radius: 0.0.into() },
             ..Default::default()
         });
 
@@ -275,9 +275,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
             let rows: Vec<Element<Message>> = mod_data.into_iter().enumerate().map(|(i, m)| {
                 let fn_color = match m.fn_count {
-                    0 => th::color::TEXT_HINT,
-                    1..=3 => th::color::YELLOW,
-                    _ => th::color::GREEN,
+                    0 => th::color::text_hint(),
+                    1..=3 => th::color::yellow(),
+                    _ => th::color::green(),
                 };
                 let m_name = m.name.clone();
                 let m_name2 = m.name.clone();
@@ -285,9 +285,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 let row_style = if i % 2 == 0 { th::stripe_even } else { th::stripe_odd };
                 container(
                     row![
-                        text(format!("◆ {}", m.name)).size(12).width(180).color(th::color::GREEN),
+                        text(format!("◆ {}", m.name)).size(12).width(180).color(th::color::green()),
                         text(m.fn_count.to_string()).size(12).width(40).color(fn_color),
-                        text(fmt_bytes(m.src_bytes)).size(11).width(52).color(th::color::TEXT_DIM),
+                        text(fmt_bytes(m.src_bytes)).size(11).width(52).color(th::color::text_dim()),
                         Space::new().width(Length::Fill),
                         button(text("Edit").size(11))
                             .on_press(Message::Navigate(View::ModuleDetail { project: proj, module_name: m_name }))
