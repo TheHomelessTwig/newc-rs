@@ -165,3 +165,54 @@ pub fn search(root: &Path, query: &str) -> Vec<SearchResult> {
 
     results
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().to_path_buf();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("include")).unwrap();
+        fs::write(root.join("src/util.c"), "int add(int a, int b)\n{\n    return a + b;\n}\n").unwrap();
+        fs::write(root.join("include/util.h"), "int add(int a, int b);\n").unwrap();
+        (tmp, root)
+    }
+
+    #[test]
+    fn search_is_case_insensitive_and_reports_module() {
+        let (_tmp, root) = fixture();
+        let results = search(&root, "ADD");
+        assert!(results.iter().any(|r| r.file == "util.c" && r.module.as_deref() == Some("util")));
+        assert!(results.iter().any(|r| r.file == "util.h"));
+    }
+
+    #[test]
+    fn invalid_regex_falls_back_to_literal() {
+        let (_tmp, root) = fixture();
+        // "add(" is an invalid regex (unclosed group) — must match literally
+        let results = search(&root, "add(");
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn preview_does_not_write() {
+        let (_tmp, root) = fixture();
+        let previews = preview_replacements(&root, "add", "sum");
+        assert!(!previews.is_empty());
+        assert!(previews[0].after.contains("sum"));
+        let content = fs::read_to_string(root.join("src/util.c")).unwrap();
+        assert!(content.contains("add"));
+    }
+
+    #[test]
+    fn apply_writes_and_counts_files() {
+        let (_tmp, root) = fixture();
+        let n = apply_replacements(&root, "add", "sum").unwrap();
+        assert_eq!(n, 2);
+        let content = fs::read_to_string(root.join("src/util.c")).unwrap();
+        assert!(content.contains("sum") && !content.contains("add"));
+    }
+}

@@ -125,3 +125,66 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
         }
     path.to_path_buf()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn make_project(dir: &Path) {
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("include")).unwrap();
+        fs::write(dir.join("src/main.c"), "int main(void)\n{\n    return 0;\n}\n").unwrap();
+        fs::write(dir.join("Makefile"), "all:\n").unwrap();
+    }
+
+    #[test]
+    fn is_newc_project_requires_all_markers() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        assert!(!Project::is_newc_project(tmp.path()));
+        make_project(tmp.path());
+        assert!(Project::is_newc_project(tmp.path()));
+        fs::remove_dir_all(tmp.path().join("include")).unwrap();
+        assert!(!Project::is_newc_project(tmp.path()));
+    }
+
+    #[test]
+    fn detect_prefers_makefile_then_cmake() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        make_project(tmp.path());
+        assert_eq!(BuildSystem::detect(tmp.path()), BuildSystem::Make);
+        fs::remove_file(tmp.path().join("Makefile")).unwrap();
+        fs::write(tmp.path().join("CMakeLists.txt"), "").unwrap();
+        assert_eq!(BuildSystem::detect(tmp.path()), BuildSystem::CMake);
+    }
+
+    #[test]
+    fn open_rejects_non_project() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        assert!(Project::open(tmp.path().to_path_buf()).is_err());
+    }
+
+    #[test]
+    fn open_reads_name_from_directory() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().join("myproj");
+        make_project(&root);
+        let p = Project::open(root).unwrap();
+        assert_eq!(p.name, "myproj");
+    }
+
+    #[test]
+    fn discover_finds_nested_projects() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let nested = tmp.path().join("uni").join("proj1");
+        make_project(&nested);
+        let found = Project::discover(&[tmp.path().to_path_buf()]);
+        assert_eq!(found, vec![nested]);
+    }
+
+    #[test]
+    fn expand_tilde_leaves_absolute_paths() {
+        let p = Path::new("/tmp/x");
+        assert_eq!(expand_tilde(p), p.to_path_buf());
+    }
+}
