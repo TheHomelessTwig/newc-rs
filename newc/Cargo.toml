@@ -1,6 +1,6 @@
 [package]
 name = "newc"
-version = "1.0.5"
+version = "1.1.0"
 edition = "2024"
 description = "GUI-driven C project scaffolding and management tool"
 license = "MIT"
