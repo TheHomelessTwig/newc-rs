@@ -52,7 +52,8 @@ A Rust GUI application for scaffolding, building, and managing C projects. Built
   - `L015` — comparing pointer to non-zero integer
   - `L016` — `strtok()` not re-entrant (use `strtok_r`)
   - `L017` — `= realloc(...)` loses pointer on `NULL` return
-- **Syntax highlighting** — C keywords, strings, numbers, comments, and operators colour-coded in module editor (Monokai Pro palette), with line numbers
+- **Syntax highlighting** — C keywords, strings, numbers, comments, and operators colour-coded in module editor, with line numbers; code colours follow the UI theme (Monokai Pro on dark themes, a light scheme on light ones)
+- **23 UI themes** — Monokai Pro (default) plus iced's built-ins (Dracula, Nord, Catppuccin, Tokyo Night, Gruvbox, Solarized, …); every surface restyles, light themes included. Window size and pane splits persist across launches
 - **Function call tree** — recursive call graph (depth 5) rendered inline for any selected function
 - **Project-wide search & replace** — regex/case-insensitive grep across all `.c` and `.h` files; preview then apply a replacement project-wide; click result to navigate to module at line
 - **Refactoring** — rename a function across the entire project, or move a function between modules with automatic header re-sync
@@ -240,22 +241,34 @@ newc new <name> --license MIT          # write LICENSE + stamp SPDX headers (MIT
 
 newc add <module>            # add a new module (.c + .h)
 newc remove                  # interactively remove a module
+newc remove <module> --yes   # remove by name, no prompt (scriptable)
 newc list                    # list all modules
 newc sync [module]           # regenerate .h prototypes from .c definitions
 newc check                   # list functions unreachable from main()
 newc tidy                    # remove unreachable functions (with confirmation)
+newc tidy --dry-run          # show what tidy would remove, change nothing
+newc tidy --yes              # skip the confirmation prompt
 
 newc stats                   # print function count and LOC per module
 newc funcs [module]          # list function signatures
-newc search <query>          # search all .c and .h files
+newc search <query>          # search all .c and .h files (regex, case-insensitive)
+newc lint [module]           # run the L001–L017 linter; exits non-zero on findings (CI-friendly)
+newc doc <module> [function] # insert Doxygen stub comments above undocumented functions
 
 newc build [target]          # run a build target (default: all) — works for Makefile or CMakeLists.txt
 newc test                    # alias for `newc build test`
 ```
 
+`list`, `stats`, `funcs`, `check`, `search`, and `lint` accept `--json` for machine-readable output:
+
+```bash
+newc stats --json | jq '.total_loc'
+newc check --json | jq '.[].name'
+```
+
 `newc build` targets: `all`, `run`, `debug`, `release`, `strict`, `valgrind`, `valgrind-xml`, `analyse`, `cppcheck`, `coverage`, `test`, `clean`, `help`. Auto-detects Makefile vs CMakeLists.txt and runs the equivalent `make` or `cmake` invocation with the same flags either way — debug/release/strict/coverage drive `CMAKE_BUILD_TYPE`/`STRICT`/`COVERAGE` for CMake projects, reconfiguring as needed (via `CMakePresets.json` if present).
 
-All CLI commands except `new` and `gui` require a project root (directory containing `src/`, `include/`, and a `Makefile` or `CMakeLists.txt`). Build system is auto-detected from which file is present.
+All CLI commands except `new` and `gui` need to run inside a project (directory containing `src/`, `include/`, and a `Makefile` or `CMakeLists.txt`) — any subdirectory works; newc walks up to find the project root, like git. Build system is auto-detected from which file is present. A man page ships with the `.deb` package (`man newc`).
 
 ---
 
@@ -324,11 +337,13 @@ requires = []
 | Shortcut | Action |
 |---|---|
 | `Ctrl+P` | Quick search (projects and functions) |
+| `Ctrl+B` | Build (all target) |
+| `Ctrl+R` | Refresh current project |
 | `Ctrl+Z` | Undo (Composer) |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Redo (Composer) |
-| `Ctrl+S` | Save (notes, module editor, build file editor) |
+| `Ctrl+S` | Save (notes, module editor, header editor, build file editor) |
 | `?` | Open keyboard shortcuts panel |
-| `Esc` | Close modal / cancel |
+| `Esc` | Close topmost overlay (quick search, shortcuts, error) |
 | `↑` `↓` | Navigate quick-search results |
 | `Enter` | Confirm quick-search selection |
 

@@ -97,6 +97,14 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Search all .c and .h files (regex, case-insensitive; invalid regex treated literally)
+    Search {
+        /// Pattern to search for
+        query: String,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Lint C sources for common mistakes (L001-L017); non-zero exit on findings
     Lint {
         /// Module name to lint (omit for all sources + headers)
@@ -164,6 +172,7 @@ pub fn run(cmd: Command) -> anyhow::Result<()> {
         Command::Tidy { dry_run, yes } => cmd_tidy(dry_run, yes),
         Command::Stats { json } => cmd_stats(json),
         Command::Funcs { module, json } => cmd_funcs(module.as_deref(), json),
+        Command::Search { query, json } => cmd_search(&query, json),
         Command::Lint { module, json } => cmd_lint(module.as_deref(), json),
         Command::Doc { module, function } => cmd_doc(&module, function.as_deref()),
         Command::Gui { .. } => unreachable!("GUI handled in main"),
@@ -550,6 +559,37 @@ fn cmd_funcs(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
     } else if !any {
         println!("No functions found.");
     }
+    Ok(())
+}
+
+fn cmd_search(query: &str, json: bool) -> anyhow::Result<()> {
+    let root = find_project_root()?;
+    let results = newc_core::grep::search(&root, query);
+
+    if json {
+        let out: Vec<_> = results
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "file": r.file,
+                    "line": r.line_no,
+                    "text": r.text,
+                    "module": r.module,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+
+    if results.is_empty() {
+        println!("No matches.");
+        return Ok(());
+    }
+    for r in &results {
+        println!("{}:{}: {}", r.file, r.line_no, r.text);
+    }
+    println!("\n{} match(es).", results.len());
     Ok(())
 }
 

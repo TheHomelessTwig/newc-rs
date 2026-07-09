@@ -253,7 +253,9 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 cargo test --workspace
 ```
 
-Tests live in `newc-core` (lint, sync, module, scaffold, updater). No display required.
+Tests live in `newc-core` (lint, sync, module, scaffold, analysis, project, grep, refactor) and `newc` (updater, lsp). No display required.
+
+CI on every PR runs `cargo test --workspace`, `cargo clippy --all-targets --workspace -- -D warnings`, and `cargo fmt --check` on Linux, plus `cargo build --workspace` on Windows and macOS. Run all three locally before pushing.
 
 For GUI changes, build and run manually:
 

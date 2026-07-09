@@ -256,9 +256,9 @@ Used in `module_detail.rs` via `code_view()` which groups spans into lines and r
 
 ### Styling (`theme.rs`)
 
-Central styling module — all color constants, container styles, button styles, and typography helpers. Views import `use crate::theme as th` and use `th::btn_primary`, `th::color::ACCENT`, etc. rather than hardcoding colors.
+Central styling module — colour accessors, container styles, button styles, and typography helpers. Views import `use crate::theme as th` and use `th::btn_primary`, `th::color::accent()`, etc. rather than hardcoding colors.
 
-Palette: Monokai Pro dark (`BG_DEEP` #1A171C → `TEXT` #FCFCFA, accent coral `#FF6188`).
+Colours resolve from the active iced theme's `extended_palette()` into a process-wide `ResolvedColors` snapshot (`static CURRENT: RwLock<…>`), refreshed by `th::set_theme()` on startup and every theme change — so all 23 picker themes (light included) restyle every custom surface. The default "Monokai Pro" theme bypasses derivation and uses its hand-tuned palette verbatim. `highlight.rs` selects a dark (Monokai) or light code palette via `th::is_dark()`.
 
 ### Toast overlay
 
