@@ -1,17 +1,17 @@
 Package: newc
-Version: 1.0.5-1
+Version: 1.1.0-1
 Architecture: amd64
 Homepage: https://github.com/TheHomelessTwig/newc-rs
 Maintainer: TheHomelessTwig <thehomelesstwig@outlook.com>
-Installed-Size: 24238
+Installed-Size: 21463
 Depends: libc6 (>= 2.39)
 Priority: optional
 Section: devel
-Filename: pool/main/n/newc/newc_1.0.5-1_amd64.deb
-Size: 7195996
-SHA256: 3e1503b5e6d4840a2f15ab7c1b516229a85f880b054e038cfb039b874efd1cfb
-SHA1: 07cb28ebc1b3e0079e54a2b815bd4f65e95199fd
-MD5sum: e97709a91b0d52afafdf6c150ef90196
+Filename: pool/main/n/newc/newc_1.1.0-1_amd64.deb
+Size: 6976520
+SHA256: 5898fed99f597f350ea36df38d1c9ff742dffe3fb534c22f2383d65796025bd3
+SHA1: 85ca51eca90972ec34a57ad060dfac8384517ab6
+MD5sum: 80c5197c10722ba19cc290cc1ea43bfc
 Description: GUI-driven C project scaffolding and management tool
  newc scaffolds C projects (Makefile/CMake), manages modules, and provides a GUI
  (function library, build runner, static analysis) plus a CLI for the same

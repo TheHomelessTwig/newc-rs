@@ -1,19 +1,19 @@
 Origin: newc
 Label: newc
 Codename: stable
-Date: Sun, 21 Jun 2026 10:50:50 UTC
+Date: Thu, 09 Jul 2026 09:38:14 UTC
 Architectures: amd64
 Components: main
 Description: APT repository for newc (https://github.com/TheHomelessTwig/newc-rs)
 MD5Sum:
- a3837b74149e590a8045b015c79e8a52 704 main/binary-amd64/Packages
- ee005ac6ddd9d087fe924a48b8f70a48 503 main/binary-amd64/Packages.gz
+ 4c6d3b626dc74592a7c3cf66bacf45ad 704 main/binary-amd64/Packages
+ cafc37d6eb93e8439beac4d78f1eb350 504 main/binary-amd64/Packages.gz
  21a194c7cc31796284b7e3ea6874ddc9 143 main/binary-amd64/Release
 SHA1:
- 6a1c7d5f9efad45de57bf31e02b699c375838855 704 main/binary-amd64/Packages
- 1728c16dc1fc718e744df813ccd5185c0ffe0012 503 main/binary-amd64/Packages.gz
+ 463f040cc1007ddda199a3942a9b9c8e2bd247a7 704 main/binary-amd64/Packages
+ b3df71a1f4deb10b3fc2bccdc1dbd320cf978504 504 main/binary-amd64/Packages.gz
  eee5c74de3e9e0ab55e42f0dc6030162b639f43c 143 main/binary-amd64/Release
 SHA256:
- f5a61fd3ba599544b8fbe0b7b93fa89210d376b9b9464a528104cc8e243a5930 704 main/binary-amd64/Packages
- e7fc13cb3809b05163d24a175ecbcebbf12e17efe98b816f38de84a92f57bbbe 503 main/binary-amd64/Packages.gz
+ f3e715798b22b260b15dd8f4407356b394d05c7a29baee9ebc13b32d8e0721f5 704 main/binary-amd64/Packages
+ 5f66951767b915d9eb54b882cf57827507abebb3ed3fcb7e9065644683111f52 504 main/binary-amd64/Packages.gz
  89253067461072c362c771e9811077198950e548ce716d67ce4243d20977523f 143 main/binary-amd64/Release
