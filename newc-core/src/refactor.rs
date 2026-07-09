@@ -9,8 +9,10 @@ use crate::analysis::remove_function_from_source_pub;
 use crate::error::Result;
 use crate::sync::{extract_function_implementations, sync_module};
 
-/// Replace every occurrence of `old_name(` with `new_name(` in all `.c` and `.h`
-/// files under the project.
+/// Replace every call/definition/prototype of `old_name` with `new_name` in all
+/// `.c` and `.h` files under the project. Matches at word boundaries, so a
+/// function whose name merely contains `old_name` (e.g. `do_old_name`) is
+/// left alone.
 ///
 /// # Returns
 /// The number of files that were modified.
@@ -18,7 +20,8 @@ use crate::sync::{extract_function_implementations, sync_module};
 /// # Errors
 /// Returns an IO error if any file cannot be read or written.
 pub fn rename_function(root: &Path, old_name: &str, new_name: &str) -> Result<usize> {
-    let pattern = format!("{old_name}(");
+    let re = regex::Regex::new(&format!(r"\b{}\s*\(", regex::escape(old_name)))
+        .expect("escaped identifier is a valid regex");
     let replacement = format!("{new_name}(");
     let mut count = 0;
 
@@ -29,8 +32,8 @@ pub fn rename_function(root: &Path, old_name: &str, new_name: &str) -> Result<us
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
             if ext != "c" && ext != "h" { continue; }
             let content = std::fs::read_to_string(&path)?;
-            if content.contains(&pattern) {
-                std::fs::write(&path, content.replace(&pattern, &replacement))?;
+            if re.is_match(&content) {
+                std::fs::write(&path, re.replace_all(&content, replacement.as_str()).as_ref())?;
                 count += 1;
             }
         }
@@ -82,4 +85,60 @@ pub fn move_function(root: &Path, from_module: &str, to_module: &str, fname: &st
     sync_module(root, to_module)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().to_path_buf();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("include")).unwrap();
+        fs::write(
+            root.join("src/util.c"),
+            "int foo(void)\n{\n    return 1;\n}\n\nint do_foo(void)\n{\n    return foo();\n}\n",
+        )
+        .unwrap();
+        fs::write(root.join("include/util.h"), "int foo(void);\n\nint do_foo(void);\n").unwrap();
+        fs::write(root.join("src/other.c"), "int bar(void)\n{\n    return 2;\n}\n").unwrap();
+        fs::write(root.join("include/other.h"), "int bar(void);\n").unwrap();
+        (tmp, root)
+    }
+
+    #[test]
+    fn rename_leaves_similar_names_alone() {
+        let (_tmp, root) = fixture();
+        rename_function(&root, "foo", "renamed").unwrap();
+        let src = fs::read_to_string(root.join("src/util.c")).unwrap();
+        assert!(src.contains("int renamed(void)"));
+        assert!(src.contains("return renamed();"));
+        // do_foo must be untouched — its name only contains "foo"
+        assert!(src.contains("int do_foo(void)"));
+        let hdr = fs::read_to_string(root.join("include/util.h")).unwrap();
+        assert!(hdr.contains("renamed(void);"));
+        assert!(hdr.contains("do_foo(void);"));
+    }
+
+    #[test]
+    fn move_function_transfers_and_resyncs_headers() {
+        let (_tmp, root) = fixture();
+        move_function(&root, "util", "other", "foo").unwrap();
+        let src = fs::read_to_string(root.join("src/util.c")).unwrap();
+        assert!(!src.contains("int foo(void)"));
+        let tgt = fs::read_to_string(root.join("src/other.c")).unwrap();
+        assert!(tgt.contains("int foo(void)"));
+        let tgt_hdr = fs::read_to_string(root.join("include/other.h")).unwrap();
+        assert!(tgt_hdr.contains("foo(void);"));
+        let src_hdr = fs::read_to_string(root.join("include/util.h")).unwrap();
+        assert!(!src_hdr.contains("int foo(void);"));
+    }
+
+    #[test]
+    fn move_missing_function_errors() {
+        let (_tmp, root) = fixture();
+        assert!(move_function(&root, "util", "other", "nope").is_err());
+    }
 }
