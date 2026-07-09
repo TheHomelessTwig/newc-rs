@@ -67,8 +67,9 @@ impl NewcApp {
         }
 
         // Open the main window (daemon mode has no automatic window)
+        let (w, h) = state.config.window_size.unwrap_or((1200.0, 780.0));
         let (main_id, open_task) = iced::window::open(iced::window::Settings {
-            size: iced::Size::new(1200.0, 780.0),
+            size: iced::Size::new(w.max(900.0), h.max(550.0)),
             min_size: Some(iced::Size::new(900.0, 550.0)),
             position: iced::window::Position::Default,
             ..Default::default()
@@ -518,12 +519,15 @@ impl NewcApp {
                     let downloads = dirs::download_dir()
                         .or_else(|| dirs::home_dir().map(|h| h.join("Downloads")))
                         .unwrap_or_else(|| std::path::PathBuf::from("."));
-                    match newc_core::export::export_zip(&root, &name, &downloads) {
-                        Ok(path) => self.state.push_toast(crate::state::Toast::success(
-                            format!("Exported → {}", path.display())
-                        )),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
-                    }
+                    // Archive creation can walk + compress a build/ dir; keep it off the UI thread
+                    return Task::perform(
+                        async move {
+                            newc_core::export::export_zip(&root, &name, &downloads)
+                                .map(|path| format!("Exported → {}", path.display()))
+                                .map_err(|e| e.to_string())
+                        },
+                        Message::ArchiveDone,
+                    );
                 }
             }
 
@@ -552,12 +556,14 @@ impl NewcApp {
                         let downloads = dirs::download_dir()
                             .or_else(|| dirs::home_dir().map(|h| h.join("Downloads")))
                             .unwrap_or_else(|| std::path::PathBuf::from("."));
-                        match newc_core::export::pack_submission(&root, &name, &student, &assignment, &downloads) {
-                            Ok(path) => self.state.push_toast(crate::state::Toast::success(
-                                format!("Packed → {}", path.display())
-                            )),
-                            Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
-                        }
+                        return Task::perform(
+                            async move {
+                                newc_core::export::pack_submission(&root, &name, &student, &assignment, &downloads)
+                                    .map(|path| format!("Packed → {}", path.display()))
+                                    .map_err(|e| e.to_string())
+                            },
+                            Message::ArchiveDone,
+                        );
                     }
                 }
             }
@@ -1711,10 +1717,8 @@ impl NewcApp {
                 }
                 self.state.toasts.retain(|t| !t.is_expired());
             }
-            Message::ToastDismiss(i) => {
-                if i < self.state.toasts.len() {
-                    self.state.toasts.remove(i);
-                }
+            Message::ToastDismiss(id) => {
+                self.state.toasts.retain(|t| t.id != id);
             }
 
             // Graph canvas
@@ -1801,7 +1805,50 @@ impl NewcApp {
                 if self.state.library_window == Some(id) { self.state.library_window = None; }
                 if self.state.cref_window    == Some(id) { self.state.cref_window    = None; }
                 if self.state.snippets_window== Some(id) { self.state.snippets_window= None; }
+                if self.state.main_window == Some(id) {
+                    // Persist window size + pane splits for next launch
+                    let ratios = &mut self.state.config.pane_ratios;
+                    ratios.insert("library".into(), pane_split_ratios(&self.state.library_panes));
+                    ratios.insert("cref".into(), pane_split_ratios(&self.state.cref_panes));
+                    ratios.insert("snippets".into(), pane_split_ratios(&self.state.snippets_panes));
+                    ratios.insert("module".into(), pane_split_ratios(&self.state.module_panes));
+                    let _ = self.state.config.save();
+                }
             }
+
+            Message::WindowResized(id, size) => {
+                if self.state.main_window == Some(id) {
+                    self.state.config.window_size = Some((size.width, size.height));
+                }
+            }
+
+            Message::SaveShortcut => match &self.state.view {
+                View::ModuleDetail { .. } if self.state.module_detail_state.edit_mode => {
+                    if let Some(name) = self.state.module_detail_state.selected_func.clone() {
+                        let new_impl = self.state.module_detail_state.edit_content.text();
+                        return self.update(Message::ModuleSaveFunc { name, new_impl });
+                    }
+                }
+                View::HeaderEditor { .. } => return self.update(Message::HeaderSave),
+                View::MakefileEditor(_) => return self.update(Message::MakefileSave),
+                View::ProjectNotes(_) => return self.update(Message::NotesSave),
+                _ => {}
+            },
+
+            Message::EscapePressed => {
+                if self.state.quick_search.open {
+                    return self.update(Message::QuickSearchClose);
+                } else if self.state.show_shortcuts {
+                    self.state.show_shortcuts = false;
+                } else if self.state.error_msg.is_some() {
+                    self.state.error_msg = None;
+                }
+            }
+
+            Message::ArchiveDone(result) => match result {
+                Ok(path) => self.state.push_toast(crate::state::Toast::success(path)),
+                Err(e) => self.state.push_toast(crate::state::Toast::error(e)),
+            },
 
             Message::None => {}
             _ => {}
@@ -1837,21 +1884,33 @@ impl NewcApp {
         let sidebar = self.sidebar();
         let mut central = self.central_panel();
 
-        // Overlay: error modal (shown on top of central content)
+        // Overlay: error modal (Stack over existing content with dim backdrop)
         if let Some(err) = &self.state.error_msg {
             let err_clone = err.clone();
-            central = container(
+            let backdrop = container(Space::new())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.6).into()),
+                    ..Default::default()
+                });
+            let card = container(
                 column![
-                    text("Error").size(16).color(th::color::accent()),
+                    text("Error").size(16).color(th::color::red()),
                     text(err_clone),
-                    button(text("Dismiss")).on_press(Message::ErrorDismiss),
+                    button(text("Dismiss")).on_press(Message::ErrorDismiss).style(th::btn_secondary),
                 ]
                 .spacing(8)
                 .padding(20),
             )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into();
+            .style(th::card_raised_style)
+            .max_width(520);
+            let panel = container(card).center(Length::Fill);
+            central = Stack::new()
+                .push(central)
+                .push(backdrop)
+                .push(panel)
+                .into();
         }
 
         // Overlay: shortcuts (Stack over existing content with semi-transparent backdrop)
@@ -1914,16 +1973,16 @@ impl NewcApp {
             return main_col;
         }
 
-        let toast_widgets: Vec<Element<Message>> = self.state.toasts.iter().enumerate()
+        let toast_widgets: Vec<Element<Message>> = self.state.toasts.iter()
             .rev() // newest on bottom
-            .map(|(i, t)| {
+            .map(|t| {
                 container(
                     row![
                         text(t.message.clone()).size(12).color(th::color::text()),
                         Space::new().width(Length::Fill),
                         button(text("×").size(10).color(th::color::text_dim()))
                             .style(th::btn_ghost)
-                            .on_press(Message::ToastDismiss(i)),
+                            .on_press(Message::ToastDismiss(t.id)),
                     ]
                     .spacing(8)
                     .align_y(Alignment::Center)
@@ -1995,13 +2054,17 @@ impl NewcApp {
         // Window close events — clear window ID from state
         subs.push(iced::window::close_events().map(Message::WindowClosed));
 
+        // Track main-window size for persistence
+        subs.push(iced::window::resize_events().map(|(id, size)| Message::WindowResized(id, size)));
+
         // Global keyboard shortcuts
         subs.push(iced::event::listen_with(|event, _status, _window| {
             if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) = event {
                 if key.as_ref() == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
-                    return Some(Message::QuickSearchClose);
+                    return Some(Message::EscapePressed);
                 }
                 match (modifiers.control(), modifiers.shift(), key.as_ref()) {
+                    (true, false, iced::keyboard::Key::Character("s")) => Some(Message::SaveShortcut),
                     (true, _, iced::keyboard::Key::Character("b")) => Some(Message::BuildStart("all".into())),
                     (true, _, iced::keyboard::Key::Character("r")) => Some(Message::RefreshProject),
                     (true, true, iced::keyboard::Key::Character("z")) => Some(Message::ComposerRedo),
@@ -2388,6 +2451,22 @@ pub fn monokai_pro_theme() -> Theme {
 /// Resolve a theme name string (as stored in config) to an iced [`Theme`].
 ///
 /// Falls back to `Theme::Dark` for unknown names.
+/// Collect every split ratio of a pane grid in layout-traversal order,
+/// for persistence via [`newc_core::config::AppConfig::pane_ratios`].
+fn pane_split_ratios<T>(state: &iced::widget::pane_grid::State<T>) -> Vec<f32> {
+    use iced::widget::pane_grid::Node;
+    fn walk(node: &Node, out: &mut Vec<f32>) {
+        if let Node::Split { ratio, a, b, .. } = node {
+            out.push(*ratio);
+            walk(a, out);
+            walk(b, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(state.layout(), &mut out);
+    out
+}
+
 pub fn theme_from_name(name: &str) -> Theme {
     match name {
         "light" => Theme::Light,

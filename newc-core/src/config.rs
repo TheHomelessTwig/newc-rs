@@ -42,6 +42,13 @@ pub struct AppConfig {
     /// Monospace font size (logical pixels) used by all code views and editors.
     #[serde(default = "default_code_font_size")]
     pub code_font_size: f32,
+    /// Last main-window size `(width, height)`; restored on launch.
+    #[serde(default)]
+    pub window_size: Option<(f32, f32)>,
+    /// Pane-split ratios per view ("library", "cref", "snippets", "module"),
+    /// in layout-traversal order; restored on launch.
+    #[serde(default)]
+    pub pane_ratios: std::collections::HashMap<String, Vec<f32>>,
 }
 
 impl Default for AppConfig {
@@ -54,6 +61,8 @@ impl Default for AppConfig {
             workspaces: Vec::new(),
             clang_format_style: default_clang_format_style(),
             code_font_size: default_code_font_size(),
+            window_size: None,
+            pane_ratios: std::collections::HashMap::new(),
         }
     }
 }
