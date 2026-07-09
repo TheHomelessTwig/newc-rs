@@ -25,7 +25,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .style(th::btn_ghost),
         text(format!("main() Composer — {}", project.name))
             .size(18)
-            .color(th::color::GREEN),
+            .color(th::color::green()),
         Space::new().width(Length::Fill),
         button(text("↩ Undo").size(12))
             .on_press_maybe(if !state.composer_undo.is_empty() {
@@ -96,13 +96,13 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let label = block_label(block);
         let is_sel = state.composer_selected == Some(i);
         let label_color = if is_sel {
-            Color::from_rgb(0.663, 0.863, 0.463)
+            th::color::green()
         } else {
             Color::WHITE
         };
         let is_this_dragging = state.composer_drag == Some(i);
         let any_drag = state.composer_drag.is_some();
-        let drag_color = if is_this_dragging { Color::from_rgb(1.0, 0.847, 0.4) } else if any_drag { Color::from_rgb(0.5, 0.75, 0.5) } else { Color::from_rgb(0.35, 0.35, 0.35) };
+        let drag_color = if is_this_dragging { th::color::yellow() } else if any_drag { th::color::green() } else { th::color::text_hint() };
         let block_bg = if is_this_dragging { Color::from_rgba(1.0, 0.847, 0.4, 0.15) } else { block_type_color(block) };
         // While dragging: ⣿ click = drop here; otherwise start drag
         let drag_msg = if any_drag && !is_this_dragging {
@@ -142,7 +142,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         }
     } else {
         text("Click a block to edit its fields.").size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5))
+            .color(th::color::text_dim())
             .into()
     };
 
@@ -173,7 +173,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .on_input(Message::CreateAuthor)
             .width(200),
         Space::new().height(4),
-        text("#include modules:").size(11).color(th::color::TEXT_DIM),
+        text("#include modules:").size(11).color(th::color::text_dim()),
         include_row,
         Space::new().height(4),
         block_controls,
@@ -181,7 +181,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         scrollable(
             if block_rows.is_empty() {
                 column![text("No blocks yet. Add a block above.").size(12)
-                    .color(Color::from_rgb(0.5, 0.5, 0.5))]
+                    .color(th::color::text_dim())]
             } else {
                 column(block_rows).spacing(4)
             }
@@ -245,7 +245,7 @@ fn build_block_editor<'a>(block: &'a MainBlock, block_index: usize) -> Element<'
 
     let title = text(format!("Edit block {} — {}", block_index + 1, block.label()))
         .size(12)
-        .color(th::color::CYAN);
+        .color(th::color::cyan());
 
     let fields: Vec<Element<Message>> = match block {
         MainBlock::VarDecl { type_name, name, init, .. } => vec![
@@ -284,7 +284,7 @@ fn build_block_editor<'a>(block: &'a MainBlock, block_index: usize) -> Element<'
 
 fn body_editor<'a>(parent: usize, body: &'a [MainBlock]) -> Vec<Element<'a, Message>> {
     let mut items: Vec<Element<Message>> = vec![
-        text("Body blocks:").size(11).color(th::color::TEXT_DIM).into(),
+        text("Body blocks:").size(11).color(th::color::text_dim()).into(),
     ];
     for (ci, child) in body.iter().enumerate() {
         let label = child.label().to_string();
@@ -304,7 +304,7 @@ fn body_editor<'a>(parent: usize, body: &'a [MainBlock]) -> Vec<Element<'a, Mess
     }
     // Add block buttons for body
     let add_btns = row![
-        text("+ body:").size(10).color(th::color::TEXT_HINT),
+        text("+ body:").size(10).color(th::color::text_hint()),
         button(text("var").size(9)).on_press(Message::ComposerAddChildBlock {
             parent,
             block: MainBlock::VarDecl { type_name: "int".into(), name: "x".into(), init: String::new(), is_array: false, array_size: String::new() },

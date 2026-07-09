@@ -55,6 +55,7 @@ impl NewcApp {
     /// shown when no `.onboarded` marker exists.
     pub fn new(initial_path: Option<PathBuf>) -> (Self, Task<Message>) {
         let mut state = AppState::new();
+        crate::theme::set_theme(&theme_from_name(&state.active_theme));
 
         // Merge discovered projects
         let scan_paths = state.config.scan_paths();
@@ -368,6 +369,7 @@ impl NewcApp {
             Message::SettingsSave => {
                 self.state.config = self.state.config_draft.clone();
                 self.state.active_theme = self.state.config.theme.clone();
+                crate::theme::set_theme(&theme_from_name(&self.state.active_theme));
                 if let Err(e) = self.state.config.save() {
                     self.state.set_error(e.to_string());
                 } else {
@@ -392,6 +394,7 @@ impl NewcApp {
                 self.state.active_theme = name.clone();
                 self.state.config.theme = name.clone();
                 self.state.config_draft.theme = name;
+                crate::theme::set_theme(&theme_from_name(&self.state.active_theme));
                 let _ = self.state.config.save();
             }
 
@@ -1839,7 +1842,7 @@ impl NewcApp {
             let err_clone = err.clone();
             central = container(
                 column![
-                    text("Error").size(16).color(Color::from_rgb(1.0, 0.376, 0.533)),
+                    text("Error").size(16).color(th::color::accent()),
                     text(err_clone),
                     button(text("Dismiss")).on_press(Message::ErrorDismiss),
                 ]
@@ -1916,9 +1919,9 @@ impl NewcApp {
             .map(|(i, t)| {
                 container(
                     row![
-                        text(t.message.clone()).size(12).color(th::color::TEXT),
+                        text(t.message.clone()).size(12).color(th::color::text()),
                         Space::new().width(Length::Fill),
-                        button(text("×").size(10).color(th::color::TEXT_DIM))
+                        button(text("×").size(10).color(th::color::text_dim()))
                             .style(th::btn_ghost)
                             .on_press(Message::ToastDismiss(i)),
                     ]
@@ -2175,14 +2178,14 @@ impl NewcApp {
             base_build_label.to_string()
         };
         let build_color = match &self.state.build_state {
-            BuildState::Running => th::color::YELLOW,
-            BuildState::Done { exit_code: Some(0) } => th::color::GREEN,
-            BuildState::Done { .. } => th::color::ACCENT,
-            _ => th::color::TEXT_DIM,
+            BuildState::Running => th::color::yellow(),
+            BuildState::Done { exit_code: Some(0) } => th::color::green(),
+            BuildState::Done { .. } => th::color::accent(),
+            _ => th::color::text_dim(),
         };
 
         let bar = row![
-            text("newc").size(15).color(th::color::ACCENT),
+            text("newc").size(15).color(th::color::accent()),
             Space::new().width(8),
             nav("Home",     is_home,     Message::Navigate(View::Home)),
             nav("New",      is_create,   Message::Navigate(View::CreateProject)),
@@ -2225,10 +2228,10 @@ impl NewcApp {
             th::separator(),
             container(
                 row![
-                    text(format!("◆ {project_name}{branch_str}")).size(11).color(th::color::GREEN),
+                    text(format!("◆ {project_name}{branch_str}")).size(11).color(th::color::green()),
                     Space::new().width(Length::Fill),
-                    text(status_msg).size(11).color(th::color::TEXT_DIM),
-                    text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(10).color(th::color::TEXT_HINT),
+                    text(status_msg).size(11).color(th::color::text_dim()),
+                    text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(10).color(th::color::text_hint()),
                 ]
                 .spacing(12)
                 .align_y(Alignment::Center)
@@ -2264,8 +2267,8 @@ impl NewcApp {
                 container(
                     button(
                         column![
-                            text(name).size(12).color(if active { th::color::ACCENT } else { th::color::TEXT }),
-                            text(root.to_string_lossy().as_ref().to_string()).size(10).color(th::color::TEXT_HINT),
+                            text(name).size(12).color(if active { th::color::accent() } else { th::color::text() }),
+                            text(root.to_string_lossy().as_ref().to_string()).size(10).color(th::color::text_hint()),
                         ]
                         .spacing(1)
                     )
@@ -2309,7 +2312,7 @@ impl NewcApp {
                 .style(th::panel_style),
             container(iced::widget::Space::new().width(1).height(Length::Fill))
                 .style(|_| iced::widget::container::Style {
-                    background: Some(Background::Color(th::color::BORDER_DIM)),
+                    background: Some(Background::Color(th::color::border_dim())),
                     ..Default::default()
                 }),
         ]
@@ -2372,12 +2375,12 @@ pub fn monokai_pro_theme() -> Theme {
     Theme::Custom(Arc::new(theme::Custom::new(
         "Monokai Pro".to_string(),
         Palette {
-            background: Color::from_rgb8(0x2D, 0x2A, 0x2E),
+            background: th::color::bg_base(),
             text:       Color::from_rgb8(0xFC, 0xFC, 0xFA),
-            primary:    Color::from_rgb8(0xFF, 0x61, 0x88),
+            primary:    th::color::accent(),
             success:    Color::from_rgb8(0xA9, 0xDC, 0x76),
             warning:    Color::from_rgb8(0xFF, 0xD8, 0x66),
-            danger:     Color::from_rgb8(0xFF, 0x61, 0x88),
+            danger:     th::color::accent(),
         },
     )))
 }

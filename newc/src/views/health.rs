@@ -45,7 +45,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .style(th::btn_ghost),
         text(format!("♥ Health — {}", project.name))
             .size(18)
-            .color(th::color::ACCENT),
+            .color(th::color::accent()),
         Space::new().width(Length::Fill),
         button(text("Refresh")).on_press(Message::RefreshProject).style(th::btn_secondary),
     ]
@@ -72,35 +72,35 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let todo_rows: Vec<Element<Message>> = snap.todos.iter().map(|(file, ln, txt)| {
             row![
                 text(format!("{file}:{ln}")).size(11).font(iced::Font::MONOSPACE)
-                    .color(th::color::TEXT_DIM).width(180),
-                text(txt.clone()).size(11).color(th::color::YELLOW),
+                    .color(th::color::text_dim()).width(180),
+                text(txt.clone()).size(11).color(th::color::yellow()),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("◈ TODOs & FIXMEs").size(14).color(th::color::YELLOW).into());
+        detail_sections.push(text("◈ TODOs & FIXMEs").size(14).color(th::color::yellow()).into());
         detail_sections.push(column(todo_rows).spacing(2).into());
     }
 
     if !snap.dead_code_funcs.is_empty() {
         let rows: Vec<Element<Message>> = snap.dead_code_funcs.iter().map(|f| {
             text(format!("  {f}")).size(12).font(iced::Font::MONOSPACE)
-                .color(th::color::ORANGE).into()
+                .color(th::color::orange()).into()
         }).collect();
-        detail_sections.push(text("⚠ Unreachable Functions").size(14).color(th::color::ACCENT).into());
+        detail_sections.push(text("⚠ Unreachable Functions").size(14).color(th::color::accent()).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
     if !snap.lint_warnings.is_empty() {
         let rows: Vec<Element<Message>> = snap.lint_warnings.iter().map(|(file, code, msg)| {
             row![
-                text(format!("[{code}]")).size(11).width(60).color(th::color::TEXT_DIM),
-                text(format!("{file}: {msg}")).size(11).color(th::color::ORANGE),
+                text(format!("[{code}]")).size(11).width(60).color(th::color::text_dim()),
+                text(format!("{file}: {msg}")).size(11).color(th::color::orange()),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("⚠ Lint Warnings").size(14).color(th::color::YELLOW).into());
+        detail_sections.push(text("⚠ Lint Warnings").size(14).color(th::color::yellow()).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
@@ -108,18 +108,18 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let rows: Vec<Element<Message>> = snap.proto_mismatches.iter().map(|(func, detail)| {
             row![
                 text(func.clone()).size(12).font(iced::Font::MONOSPACE).width(160),
-                text(detail.clone()).size(11).color(th::color::ACCENT),
+                text(detail.clone()).size(11).color(th::color::accent()),
             ]
             .spacing(8)
             .into()
         }).collect();
-        detail_sections.push(text("⚠ Prototype Mismatches").size(14).color(th::color::ACCENT).into());
+        detail_sections.push(text("⚠ Prototype Mismatches").size(14).color(th::color::accent()).into());
         detail_sections.push(column(rows).spacing(2).into());
     }
 
     if detail_sections.is_empty() {
         detail_sections.push(
-            text("✓ All checks passed!").color(th::color::GREEN).into()
+            text("✓ All checks passed!").color(th::color::green()).into()
         );
     }
 
@@ -135,12 +135,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
 fn health_card<'a>(title: &'a str, value: &'a str, ok: bool) -> Element<'a, Message> {
     use iced::widget::container;
-    let color = if ok { th::color::GREEN } else { th::color::ACCENT };
+    let color = if ok { th::color::green() } else { th::color::accent() };
     let icon = if ok { "✓" } else { "⚠" };
     container(
         column![
             text(format!("{icon} {title}")).size(11).color(color),
-            text(value).size(12).color(th::color::TEXT),
+            text(value).size(12).color(th::color::text()),
         ]
         .spacing(2)
         .padding(8),

@@ -16,7 +16,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .style(th::btn_ghost),
         text(format!("Search — {}", project.name))
             .size(18)
-            .color(th::color::YELLOW),
+            .color(th::color::yellow()),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -47,9 +47,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     } else {
         let rows: Vec<Element<Message>> = state.replace_preview.iter().map(|p| {
             column![
-                text(format!("{}:{}", p.file, p.line_no)).size(11).color(th::color::TEXT_DIM),
-                text(format!("- {}", p.before)).size(12).font(iced::Font::MONOSPACE).color(th::color::ACCENT),
-                text(format!("+ {}", p.after)).size(12).font(iced::Font::MONOSPACE).color(th::color::GREEN),
+                text(format!("{}:{}", p.file, p.line_no)).size(11).color(th::color::text_dim()),
+                text(format!("- {}", p.before)).size(12).font(iced::Font::MONOSPACE).color(th::color::accent()),
+                text(format!("+ {}", p.after)).size(12).font(iced::Font::MONOSPACE).color(th::color::green()),
             ]
             .spacing(1)
             .into()
@@ -64,7 +64,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             header,
             search_row,
             text("Enter a query and press Enter or click Search.")
-                .color(th::color::TEXT_DIM),
+                .color(th::color::text_dim()),
         ]
         .spacing(10)
         .padding(16)
@@ -75,7 +75,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let mut col = column![
             header,
             search_row,
-            text("No results.").color(th::color::TEXT_DIM),
+            text("No results.").color(th::color::text_dim()),
             replace_row,
         ]
         .spacing(10)
@@ -88,12 +88,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 
     let count_label = text(format!("{} result(s)", state.search_results.len()))
         .size(12)
-        .color(th::color::TEXT_DIM);
+        .color(th::color::text_dim());
 
     let col_header = row![
-        text("File").width(180).color(th::color::TEXT),
-        text("Line").width(60).color(th::color::TEXT),
-        text("Text").color(th::color::TEXT),
+        text("File").width(180).color(th::color::text()),
+        text("Line").width(60).color(th::color::text()),
+        text("Text").color(th::color::text()),
     ]
     .spacing(8);
 
@@ -103,7 +103,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         let file_btn = button(
             text(result.file.as_str())
                 .size(12)
-                .color(th::color::CYAN)
+                .color(th::color::cyan())
                 .font(iced::Font::MONOSPACE),
         )
         .on_press_maybe(result.module.as_ref().map(|m| {
@@ -115,7 +115,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         row![
             file_btn.width(180),
             text(result.line_no.to_string()).size(12).width(60)
-                .color(th::color::TEXT_DIM),
+                .color(th::color::text_dim()),
             highlighted,
         ]
         .spacing(8)
@@ -148,17 +148,17 @@ fn highlight_match<'a>(text_str: &str, query: &str) -> Element<'a, Message> {
             let after   = text_str[end..].to_string();
             let mut spans: Vec<TSpan<'static>> = Vec::new();
             if !before.is_empty() {
-                spans.push(TSpan::new(before).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT));
+                spans.push(TSpan::new(before).font(iced::Font::MONOSPACE).size(12).color(th::color::text()));
             }
             spans.push(
                 TSpan::new(matched).font(iced::Font::MONOSPACE).size(12)
-                    .color(th::color::YELLOW)
+                    .color(th::color::yellow())
                     .background(Color::from_rgba(1.0, 0.847, 0.0, 0.18)),
             );
             if !after.is_empty() {
-                spans.push(TSpan::new(after).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT));
+                spans.push(TSpan::new(after).font(iced::Font::MONOSPACE).size(12).color(th::color::text()));
             }
             return rich_text(spans).into();
         }
-    rich_text([TSpan::<()>::new(text_str.to_string()).font(iced::Font::MONOSPACE).size(12).color(th::color::TEXT)]).into()
+    rich_text([TSpan::<()>::new(text_str.to_string()).font(iced::Font::MONOSPACE).size(12).color(th::color::text())]).into()
 }

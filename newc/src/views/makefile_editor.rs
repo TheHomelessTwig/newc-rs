@@ -63,8 +63,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 let flag_owned = flag.to_string();
                 button(
                     column![
-                        text(*label).size(10).color(if active { th::color::GREEN } else { th::color::TEXT_DIM }),
-                        text(*flag).size(9).font(iced::Font::MONOSPACE).color(if active { th::color::CYAN } else { th::color::TEXT_HINT }),
+                        text(*label).size(10).color(if active { th::color::green() } else { th::color::text_dim() }),
+                        text(*flag).size(9).font(iced::Font::MONOSPACE).color(if active { th::color::cyan() } else { th::color::text_hint() }),
                     ]
                     .spacing(1)
                 )

@@ -66,7 +66,7 @@ pub fn view<'a>(
         if fd.module != current_module {
             current_module = fd.module.clone();
             func_rows.push(
-                text(fd.module).size(13).color(th::color::CYAN).into(),
+                text(fd.module).size(13).color(th::color::cyan()).into(),
             );
         }
         let name = fd.name.clone();
@@ -78,13 +78,13 @@ pub fn view<'a>(
                 Message::LibrarySelect(None)
             }
         });
-        let label_color = if fd.is_dep { th::color::PURPLE } else { th::color::TEXT };
+        let label_color = if fd.is_dep { th::color::purple() } else { th::color::text() };
         func_rows.push(
             row![
                 Space::new().width(20),
                 select_checkbox,
                 text(name2).color(label_color).size(13),
-                text(fd.description).size(11).color(th::color::TEXT_DIM),
+                text(fd.description).size(11).color(th::color::text_dim()),
             ]
             .spacing(6)
             .align_y(iced::Alignment::Center)
@@ -101,7 +101,7 @@ pub fn view<'a>(
     column![
         search_row,
         scrollable(column(func_rows).spacing(4)).height(260),
-        text(sel_summary).size(12).color(th::color::TEXT_DIM),
+        text(sel_summary).size(12).color(th::color::text_dim()),
     ]
     .spacing(8)
     .into()

@@ -17,7 +17,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             .style(th::btn_ghost),
         text(format!("Stats — {}", project.name))
             .size(18)
-            .color(th::color::GREEN),
+            .color(th::color::green()),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -35,9 +35,9 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     let module_rows: Vec<Element<Message>> = {
         let mut rows = vec![
             row![
-                text("Module").width(160).color(th::color::PURPLE),
-                text("fns").width(60).color(th::color::PURPLE),
-                text("LOC").width(60).color(th::color::PURPLE),
+                text("Module").width(160).color(th::color::purple()),
+                text("fns").width(60).color(th::color::purple()),
+                text("LOC").width(60).color(th::color::purple()),
                 text("").width(160),
             ]
             .spacing(4)
@@ -48,10 +48,10 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             let bar: String = "█".repeat(bar_pct / 5);
             rows.push(
                 row![
-                    text(format!("◆ {}", m.name)).width(160).color(th::color::GREEN),
-                    text(m.functions.to_string()).width(60).color(th::color::YELLOW),
-                    text(m.loc.to_string()).width(60).color(th::color::YELLOW),
-                    text(bar).size(10).color(th::color::GREEN).width(160),
+                    text(format!("◆ {}", m.name)).width(160).color(th::color::green()),
+                    text(m.functions.to_string()).width(60).color(th::color::yellow()),
+                    text(m.loc.to_string()).width(60).color(th::color::yellow()),
+                    text(bar).size(10).color(th::color::green()).width(160),
                 ]
                 .spacing(4)
                 .into(),
@@ -63,15 +63,15 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     column![
         header,
         Space::new().height(8),
-        text("Summary").size(14).color(th::color::CYAN),
+        text("Summary").size(14).color(th::color::cyan()),
         summary,
         Space::new().height(8),
-        text("Per-module breakdown").size(14).color(th::color::CYAN),
+        text("Per-module breakdown").size(14).color(th::color::cyan()),
         column(module_rows).spacing(4),
         Space::new().height(8),
         text("LOC = non-blank, non-comment lines in src/*.c files.")
             .size(11)
-            .color(th::color::TEXT_DIM),
+            .color(th::color::text_dim()),
     ]
     .spacing(8)
     .padding(16)
@@ -80,8 +80,8 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
 
 fn stat_row(label: &'static str, value: String) -> Element<'static, Message> {
     row![
-        text(label).width(220).color(th::color::CYAN),
-        text(value).color(th::color::PURPLE),
+        text(label).width(220).color(th::color::cyan()),
+        text(value).color(th::color::purple()),
     ]
     .spacing(8)
     .into()

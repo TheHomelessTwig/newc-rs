@@ -58,7 +58,7 @@ pub fn view<'a>(
         .align_y(iced::Alignment::Center),
         text("Editing SYNC_IGNORE block — structs, enums, defines, etc.")
             .size(12)
-            .color(th::color::TEXT_DIM),
+            .color(th::color::text_dim()),
         text_editor(&ed.te_content)
             .highlight("c", iced::highlighter::Theme::Base16Mocha)
             .on_action(Message::HeaderEditorAction)

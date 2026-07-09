@@ -8,13 +8,13 @@ use crate::theme as th;
 
 fn project_card_style(_: &iced::Theme, status: button::Status) -> button::Style {
     let bg = match status {
-        button::Status::Hovered | button::Status::Pressed => th::color::BG_RAISED,
-        _ => th::color::BG_CARD,
+        button::Status::Hovered | button::Status::Pressed => th::color::bg_raised(),
+        _ => th::color::bg_card(),
     };
     button::Style {
         background: Some(Background::Color(bg)),
-        border: Border { color: th::color::BORDER_DIM, width: 1.0, radius: 6.0.into() },
-        text_color: th::color::TEXT,
+        border: Border { color: th::color::border_dim(), width: 1.0, radius: 6.0.into() },
+        text_color: th::color::text(),
         ..Default::default()
     }
 }
@@ -176,7 +176,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         .into()
     } else {
         let cards: Vec<Element<Message>> = proj_data.into_iter().map(|p| {
-            let name_color = if p.missing { th::color::ACCENT } else { th::color::GREEN };
+            let name_color = if p.missing { th::color::accent() } else { th::color::green() };
             let label = if p.missing {
                 format!("⚠ {} (missing)", p.name)
             } else {
@@ -185,7 +185,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             let path_clone = p.path.clone();
             let inner = column![
                 text(label).size(13).color(name_color),
-                text(p.path_str).size(11).color(th::color::TEXT_HINT),
+                text(p.path_str).size(11).color(th::color::text_hint()),
             ]
             .spacing(3)
             .padding([6, 4]);

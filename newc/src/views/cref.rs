@@ -4,6 +4,7 @@ use iced::widget::{button, column, pane_grid, row, scrollable, text, text_input}
 use iced::{Color, Element, Length};
 use newc_core::cref;
 
+use crate::theme as th;
 use crate::highlight::code_view;
 use crate::state::Message;
 
@@ -60,7 +61,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
                     text(func.name).size(12).color(Color::WHITE),
                     text(format!("<{}>", func.header))
                         .size(10)
-                        .color(Color::from_rgb(0.5, 0.5, 0.5)),
+                        .color(th::color::text_dim()),
                 ]
                 .spacing(4),
             )
@@ -71,7 +72,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         );
     }
     if results.is_empty() {
-        fn_btns.push(text("No results.").size(12).color(Color::from_rgb(0.5, 0.5, 0.5)).into());
+        fn_btns.push(text("No results.").size(12).color(th::color::text_dim()).into());
     }
     let fn_panel = scrollable(column(fn_btns).spacing(2))
         .height(Length::Fill)
@@ -82,19 +83,19 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         if let Some(func) = cref::all_functions().iter().find(|f| f.name == name) {
             column![
                 row![
-                    text(func.name).size(16).color(Color::from_rgb(1.0, 0.796, 0.42)),
+                    text(func.name).size(16).color(th::color::orange()),
                     text(format!("<{}>", func.header))
-                        .color(Color::from_rgb(0.471, 0.863, 0.910)),
+                        .color(th::color::cyan()),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
-                text("Signature").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+                text("Signature").size(12).color(th::color::cyan()),
                 code_view(func.signature, (state.config.code_font_size - 1.0).max(8.0), None, None),
-                text("Description").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+                text("Description").size(12).color(th::color::cyan()),
                 text(func.description),
-                text("Returns").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+                text("Returns").size(12).color(th::color::cyan()),
                 text(func.returns),
-                text("Example").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+                text("Example").size(12).color(th::color::cyan()),
                 code_view(func.example, (state.config.code_font_size - 1.0).max(8.0), None, None),
             ]
             .spacing(8)
@@ -104,7 +105,7 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         }
     } else {
         text("Select a function")
-            .color(Color::from_rgb(0.5, 0.5, 0.5))
+            .color(th::color::text_dim())
             .into()
     };
 

@@ -17,7 +17,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             .style(th::btn_ghost),
         text(format!("Build History — {}", project.name))
             .size(18)
-            .color(th::color::GREEN),
+            .color(th::color::green()),
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
@@ -27,7 +27,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             header,
             Space::new().height(16),
             text("No build history yet. Run a build first.")
-                .color(th::color::TEXT_DIM),
+                .color(th::color::text_dim()),
         ]
         .spacing(8)
         .padding(16)
@@ -36,21 +36,21 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
 
     let count_label = text(format!("{} build records (last 100 kept)", records.len()))
         .size(12)
-        .color(th::color::TEXT_DIM);
+        .color(th::color::text_dim());
 
     let col_header = row![
-        text("Timestamp").width(180).color(th::color::TEXT),
-        text("Target").width(120).color(th::color::TEXT),
-        text("Result").width(100).color(th::color::TEXT),
-        text("Duration").width(80).color(th::color::TEXT),
+        text("Timestamp").width(180).color(th::color::text()),
+        text("Target").width(120).color(th::color::text()),
+        text("Result").width(100).color(th::color::text()),
+        text("Duration").width(80).color(th::color::text()),
     ]
     .spacing(8);
 
     let rows: Vec<Element<Message>> = records.iter().rev().map(|rec| {
         let result_color = if rec.succeeded() {
-            th::color::GREEN
+            th::color::green()
         } else {
-            th::color::ACCENT
+            th::color::accent()
         };
         let result_text = if rec.succeeded() {
             "✓ OK".to_string()

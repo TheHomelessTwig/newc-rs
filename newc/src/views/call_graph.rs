@@ -10,6 +10,7 @@ use iced::widget::{button, column, row, text, Space};
 use iced::{Color, Element, Length, Point, Rectangle, Size, mouse};
 use newc_core::{project::Project, sync::extract_function_implementations};
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 
 // ── Graph data ─────────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
             frame.fill_rectangle(
                 Point::ORIGIN,
                 bounds.size(),
-                Color::from_rgb8(0x1E, 0x1C, 0x1F),
+                th::color::bg_deep(),
             );
 
             let cx = bounds.width / 2.0 + self.pan_x;
@@ -101,7 +102,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
                     frame.stroke(
                         &path,
                         Stroke::default()
-                            .with_color(Color::from_rgba(0.471, 0.863, 0.910, 0.6))
+                            .with_color(th::color::cyan().scale_alpha(0.6))
                             .with_width(1.5 * z),
                     );
 
@@ -122,7 +123,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
                         b.line_to(Point::new(ax - perp_x, ay - perp_y));
                         b.close();
                     });
-                    frame.fill(&arrow, Color::from_rgb(0.471, 0.863, 0.910));
+                    frame.fill(&arrow, th::color::cyan());
                 }
             }
 
@@ -144,7 +145,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
                     Color::from_rgb8(0x3D, 0x3A, 0x3F)
                 };
                 let border = if is_sel || node.is_main {
-                    Color::from_rgb8(0xA9, 0xDC, 0x76)
+                    th::color::green()
                 } else {
                     Color::from_rgba(0.6, 0.6, 0.6, 0.5)
                 };
@@ -351,12 +352,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         button(text("← Back"))
             .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
         text(format!("Call Graph — {}", project.name))
-            .size(16).color(Color::from_rgb(0.671, 0.616, 0.949)),
+            .size(16).color(th::color::purple()),
         Space::new().width(Length::Fill),
         button(text("Reset View").size(12)).on_press(Message::GraphReset),
         button(text("Export").size(12)).on_press(Message::GraphExport),
         text("Scroll: zoom  Drag: pan  Click: select").size(11)
-            .color(Color::from_rgb(0.5, 0.5, 0.5)),
+            .color(th::color::text_dim()),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -383,11 +384,11 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             if called_by.is_empty() { "none".to_string() } else { called_by.join(", ") },
         ))
         .size(12)
-        .color(Color::from_rgb(0.471, 0.863, 0.910))
+        .color(th::color::cyan())
         .into()
     } else {
         text(format!("{} functions | {} calls", graph_data.nodes.len(), graph_data.edges.len()))
-            .size(12).color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+            .size(12).color(th::color::text_dim()).into()
     };
 
     let canvas_widget = Canvas::new(CallGraphCanvas {

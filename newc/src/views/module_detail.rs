@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use iced::widget::{button, column, container, pane_grid, pick_list, row, scrollable, text, text_editor, Space};
-use iced::{Color, Element, Length};
+use iced::{Element, Length};
 use newc_core::sync::extract_function_implementations;
 use crate::highlight::code_view;
 use crate::theme as th;
@@ -71,10 +71,10 @@ pub fn view<'a>(
             .style(th::btn_ghost),
         text(format!("◆ {}", module_name))
             .size(18)
-            .color(th::color::GREEN),
+            .color(th::color::green()),
         text(src_path.display().to_string())
             .size(11)
-            .color(th::color::TEXT_HINT),
+            .color(th::color::text_hint()),
         Space::new().width(Length::Fill),
         button(text("Edit Header (.h)").size(11))
             .on_press(
@@ -140,7 +140,7 @@ pub fn view<'a>(
             text(format!("⚠ {} unreachable function(s): {}", mds.unreachable_funcs.len(),
                 mds.unreachable_funcs.join(", ")))
                 .size(12)
-                .color(Color::from_rgb(1.0, 0.549, 0.0))
+                .color(th::color::orange())
                 .into()
         )
     } else {
@@ -158,11 +158,11 @@ pub fn view<'a>(
     let fn_list: Vec<Element<Message>> = func_entries.iter().map(|fe| {
         let selected = mds.selected_func.as_deref() == Some(&fe.name);
         let color = if fe.is_unreachable {
-            th::color::ACCENT
+            th::color::accent()
         } else if selected {
-            th::color::GREEN
+            th::color::green()
         } else {
-            th::color::TEXT
+            th::color::text()
         };
         let style = if selected { th::btn_nav_active } else { th::btn_nav_inactive };
         button(text(fe.name.clone()).size(12).color(color))
@@ -206,7 +206,7 @@ pub fn view<'a>(
                 .height(Length::Fill),
             {
                 let hover_el: Element<Message> = if let Some(hover) = &mds.hover_text {
-                    container(text(hover.clone()).size(11).color(th::color::CYAN))
+                    container(text(hover.clone()).size(11).color(th::color::cyan()))
                         .padding(6)
                         .into()
                 } else {
@@ -229,7 +229,7 @@ pub fn view<'a>(
 
             let mut col = column![
                 row![
-                    text(f.name.clone()).size(15).color(Color::from_rgb(0.663, 0.863, 0.463)),
+                    text(f.name.clone()).size(15).color(th::color::green()),
                     Space::new().width(Length::Fill),
                     button(text("✎ Edit").size(12))
                         .on_press(Message::ModuleEditMode(true)),
@@ -248,20 +248,20 @@ pub fn view<'a>(
                 .spacing(6)
                 .align_y(iced::Alignment::Center),
                 text(f.signature.clone()).size(12).font(iced::Font::MONOSPACE)
-                    .color(Color::from_rgb(0.471, 0.863, 0.910)),
+                    .color(th::color::cyan()),
             ]
             .spacing(6);
 
             if let Some(doc) = newc_core::doc::parse_doc_comment(&f.comment) {
                 if !doc.brief.is_empty() {
-                    col = col.push(text(doc.brief).size(12).color(Color::from_rgb(0.988, 0.988, 0.980)));
+                    col = col.push(text(doc.brief).size(12).color(th::color::text()));
                 }
                 for (name, desc) in &doc.params {
                     col = col.push(
                         row![
-                            text("  @param").size(11).color(Color::from_rgb(1.0, 0.847, 0.0)),
-                            text(name.clone()).size(11).font(iced::Font::MONOSPACE).color(Color::from_rgb(0.663, 0.863, 0.463)),
-                            text(desc.clone()).size(11).color(Color::from_rgb(0.7, 0.7, 0.7)),
+                            text("  @param").size(11).color(th::color::yellow()),
+                            text(name.clone()).size(11).font(iced::Font::MONOSPACE).color(th::color::green()),
+                            text(desc.clone()).size(11).color(th::color::text_dim()),
                         ]
                         .spacing(6)
                     );
@@ -269,8 +269,8 @@ pub fn view<'a>(
                 if let Some(ret) = &doc.returns {
                     col = col.push(
                         row![
-                            text("  @return").size(11).color(Color::from_rgb(1.0, 0.847, 0.0)),
-                            text(ret.clone()).size(11).color(Color::from_rgb(0.7, 0.7, 0.7)),
+                            text("  @return").size(11).color(th::color::yellow()),
+                            text(ret.clone()).size(11).color(th::color::text_dim()),
                         ]
                         .spacing(6)
                     );
@@ -278,7 +278,7 @@ pub fn view<'a>(
             }
 
             if let Some(label) = coverage_label {
-                col = col.push(text(label).size(11).color(Color::from_rgb(0.663, 0.863, 0.463)));
+                col = col.push(text(label).size(11).color(th::color::green()));
             }
 
             if !lint_warnings.is_empty() {
@@ -289,7 +289,7 @@ pub fn view<'a>(
                         let label = format!("[{}] L{}: {}", w.code, w.line_no, w.message);
                         let has_fix = body_lines.get(w.line_no.saturating_sub(1))
                             .is_some_and(|line| newc_core::lint::quick_fix(w.code, line).is_some());
-                        let mut r = row![text(label).size(11).color(Color::from_rgb(1.0, 0.847, 0.4))]
+                        let mut r = row![text(label).size(11).color(th::color::yellow())]
                             .spacing(6)
                             .align_y(iced::Alignment::Center);
                         if has_fix {
@@ -314,7 +314,7 @@ pub fn view<'a>(
 
             // Call tree
             if mds.show_call_tree && !mds.call_tree_lines.is_empty() {
-                col = col.push(text("Call tree:").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)));
+                col = col.push(text("Call tree:").size(12).color(th::color::cyan()));
                 let tree_rows: Vec<Element<Message>> = mds.call_tree_lines.iter().map(|l| {
                     text(l.clone()).size(11).font(iced::Font::MONOSPACE).into()
                 }).collect();
@@ -331,11 +331,11 @@ pub fn view<'a>(
         let other_content = std::fs::read_to_string(&other_path).unwrap_or_default();
         row![
             column![
-                text(module_name.to_string()).size(12).color(th::color::TEXT_DIM),
+                text(module_name.to_string()).size(12).color(th::color::text_dim()),
                 code_view(&src_content, state.config.code_font_size, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL)),
             ].spacing(2).width(Length::FillPortion(1)),
             column![
-                text(other_module.clone()).size(12).color(th::color::TEXT_DIM),
+                text(other_module.clone()).size(12).color(th::color::text_dim()),
                 code_view(&other_content, state.config.code_font_size, None, None),
             ].spacing(2).width(Length::FillPortion(1)),
         ]
@@ -355,7 +355,7 @@ pub fn view<'a>(
         layout = layout.push(
             container(
                 row![
-                    text(format!("Delete `{pending_delete_name}`?")).size(12).color(th::color::ACCENT),
+                    text(format!("Delete `{pending_delete_name}`?")).size(12).color(th::color::accent()),
                     Space::new().width(Length::Fill),
                     button(text("Confirm").size(11))
                         .on_press(Message::ModuleDeleteFuncConfirm)

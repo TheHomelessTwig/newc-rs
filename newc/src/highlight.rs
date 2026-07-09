@@ -1,8 +1,9 @@
 //! Syntax highlighting for C source code.
 //!
 //! [`highlight_c`] tokenizes a C source string into coloured [`Span`]s using a
-//! Monokai Pro palette. [`code_view`] wraps those spans in a scrollable iced
-//! widget suitable for the module-detail and header-editor panels.
+//! mode-aware palette (Monokai Pro on dark themes, a standard light scheme on
+//! light themes). [`code_view`] wraps those spans in a scrollable iced widget
+//! suitable for the module-detail and header-editor panels.
 //!
 //! The highlighter is a single-pass byte scanner: it handles preprocessor
 //! lines, block/line comments, string/char literals, numeric literals,
@@ -24,17 +25,51 @@ pub struct Span {
     pub color: Color,
 }
 
-// Monokai Pro palette
-const TYPE_KW:   Color = Color::from_rgb(0.471, 0.863, 0.910); // #78DCE8 cyan
-const FLOW_KW:   Color = Color::from_rgb(1.000, 0.380, 0.533); // #FF6188 coral
-const FUNC_NAME: Color = Color::from_rgb(0.663, 0.863, 0.463); // #A9DC76 green
-const PREPROC:   Color = Color::from_rgb(1.000, 0.380, 0.533); // #FF6188 coral
-const STRING:    Color = Color::from_rgb(1.000, 0.847, 0.400); // #FFD866 yellow
-const NUMBER:    Color = Color::from_rgb(0.671, 0.616, 0.949); // #AB9DF2 lavender
-const COMMENT:   Color = Color::from_rgb(0.447, 0.439, 0.447); // #727072 gray
-const OPERATOR:  Color = Color::from_rgb(1.000, 0.380, 0.533); // #FF6188 coral
-const DEFAULT:   Color = Color::from_rgb(0.988, 0.988, 0.980); // #FCFCFA near-white
-const GUTTER:    Color = Color::from_rgb(0.447, 0.439, 0.447); // #727072 gray, dimmed line numbers
+/// Token colours for one display mode (dark or light).
+struct CodePalette {
+    type_kw: Color,
+    flow_kw: Color,
+    func_name: Color,
+    preproc: Color,
+    string: Color,
+    number: Color,
+    comment: Color,
+    operator: Color,
+    default: Color,
+    gutter: Color,
+}
+
+// Monokai Pro — used on dark themes
+const DARK_PALETTE: CodePalette = CodePalette {
+    type_kw:   Color::from_rgb(0.471, 0.863, 0.910), // #78DCE8 cyan
+    flow_kw:   Color::from_rgb(1.000, 0.380, 0.533), // #FF6188 coral
+    func_name: Color::from_rgb(0.663, 0.863, 0.463), // #A9DC76 green
+    preproc:   Color::from_rgb(1.000, 0.380, 0.533), // #FF6188 coral
+    string:    Color::from_rgb(1.000, 0.847, 0.400), // #FFD866 yellow
+    number:    Color::from_rgb(0.671, 0.616, 0.949), // #AB9DF2 lavender
+    comment:   Color::from_rgb(0.447, 0.439, 0.447), // #727072 gray
+    operator:  Color::from_rgb(1.000, 0.380, 0.533), // #FF6188 coral
+    default:   Color::from_rgb(0.988, 0.988, 0.980), // #FCFCFA near-white
+    gutter:    Color::from_rgb(0.447, 0.439, 0.447), // #727072 gray, dimmed line numbers
+};
+
+// Standard light-scheme picks — used on light themes
+const LIGHT_PALETTE: CodePalette = CodePalette {
+    type_kw:   Color::from_rgb8(0x0E, 0x74, 0x90), // teal
+    flow_kw:   Color::from_rgb8(0xD1, 0x2A, 0x5C), // crimson
+    func_name: Color::from_rgb8(0x3F, 0x6E, 0x1E), // green
+    preproc:   Color::from_rgb8(0xD1, 0x2A, 0x5C), // crimson
+    string:    Color::from_rgb8(0x9A, 0x67, 0x00), // amber
+    number:    Color::from_rgb8(0x6D, 0x28, 0xD9), // violet
+    comment:   Color::from_rgb8(0x8B, 0x8B, 0x8B), // gray
+    operator:  Color::from_rgb8(0xD1, 0x2A, 0x5C), // crimson
+    default:   Color::from_rgb8(0x1F, 0x1F, 0x1F), // near-black
+    gutter:    Color::from_rgb8(0x8B, 0x8B, 0x8B), // gray
+};
+
+fn code_palette() -> &'static CodePalette {
+    if th::is_dark() { &DARK_PALETTE } else { &LIGHT_PALETTE }
+}
 
 static TYPE_KEYWORDS: &[&str] = &[
     "auto", "bool", "char", "const", "double", "enum", "extern", "float",
@@ -56,9 +91,10 @@ pub fn highlight_c(source: &str) -> Vec<Span> {
     let mut spans = Vec::new();
     let mut in_block_comment = false;
 
+    let pal = code_palette();
     for line in source.lines() {
-        tokenize_line(line.as_bytes(), line, &mut spans, &mut in_block_comment);
-        spans.push(Span { text: "\n".into(), color: DEFAULT });
+        tokenize_line(line.as_bytes(), line, &mut spans, &mut in_block_comment, pal);
+        spans.push(Span { text: "\n".into(), color: pal.default });
     }
 
     spans
@@ -77,6 +113,7 @@ pub const MODULE_CODE_SCROLL: &str = "module_code_scroll";
 /// - `scroll_id` — if `Some`, assigns a stable [`iced::widget::Id`] to the
 ///   scrollable so it can be scrolled programmatically (use [`MODULE_CODE_SCROLL`]).
 pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>, scroll_id: Option<&'static str>) -> Element<'a, Message> {
+    let pal = code_palette();
     let spans = highlight_c(source);
 
     let mut lines: Vec<Vec<(String, Color)>> = vec![Vec::new()];
@@ -108,16 +145,21 @@ pub fn code_view<'a>(source: &str, font_size: f32, highlight_line: Option<usize>
         let gutter = text((i + 1).to_string())
             .font(iced::Font::MONOSPACE)
             .size(font_size)
-            .color(GUTTER)
+            .color(pal.gutter)
             .width(Length::Fixed(gutter_width))
             .align_x(iced::alignment::Horizontal::Right);
         let line_row = row![gutter, container(line_widget).padding(iced::Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 8.0 })]
             .width(Length::Fill);
         if highlight_line == Some(i + 1) {
+            let tint = if th::is_dark() {
+                Color::from_rgba(1.0, 1.0, 1.0, 0.08)
+            } else {
+                Color::from_rgba(0.0, 0.0, 0.0, 0.06)
+            };
             container(line_row)
                 .width(Length::Fill)
-                .style(|_| iced::widget::container::Style {
-                    background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.08).into()),
+                .style(move |_| iced::widget::container::Style {
+                    background: Some(tint.into()),
                     ..Default::default()
                 })
                 .into()
@@ -151,6 +193,7 @@ fn tokenize_line(
     s: &str,
     spans: &mut Vec<Span>,
     in_block_comment: &mut bool,
+    pal: &CodePalette,
 ) {
     let n = bytes.len();
     let mut i = 0;
@@ -158,12 +201,12 @@ fn tokenize_line(
     // Continuation of a block comment from a previous line
     if *in_block_comment {
         if let Some(end) = s.find("*/") {
-            push(spans, &s[..end + 2], COMMENT);
+            push(spans, &s[..end + 2], pal.comment);
             *in_block_comment = false;
             let rest_i = end + 2;
-            tokenize_line(&bytes[rest_i..], &s[rest_i..], spans, in_block_comment);
+            tokenize_line(&bytes[rest_i..], &s[rest_i..], spans, in_block_comment, pal);
         } else {
-            push(spans, s, COMMENT);
+            push(spans, s, pal.comment);
         }
         return;
     }
@@ -171,7 +214,7 @@ fn tokenize_line(
     // Preprocessor line (#include, #define, …)
     let trimmed = s.trim_start();
     if trimmed.starts_with('#') {
-        push(spans, s, PREPROC);
+        push(spans, s, pal.preproc);
         return;
     }
 
@@ -183,11 +226,11 @@ fn tokenize_line(
             loop {
                 if i + 1 < n && bytes[i] == b'*' && bytes[i + 1] == b'/' {
                     i += 2;
-                    push(spans, &s[start..i], COMMENT);
+                    push(spans, &s[start..i], pal.comment);
                     break;
                 }
                 if i >= n {
-                    push(spans, &s[start..], COMMENT);
+                    push(spans, &s[start..], pal.comment);
                     *in_block_comment = true;
                     return;
                 }
@@ -198,7 +241,7 @@ fn tokenize_line(
 
         // Line comment //
         if i + 1 < n && bytes[i] == b'/' && bytes[i + 1] == b'/' {
-            push(spans, &s[i..], COMMENT);
+            push(spans, &s[i..], pal.comment);
             return;
         }
 
@@ -212,7 +255,7 @@ fn tokenize_line(
                 if bytes[i] == delim { i += 1; break; }
                 i += 1;
             }
-            push(spans, &s[start..i], STRING);
+            push(spans, &s[start..i], pal.string);
             continue;
         }
 
@@ -230,7 +273,7 @@ fn tokenize_line(
             {
                 i += 1;
             }
-            push(spans, &s[start..i], if prev_alpha { DEFAULT } else { NUMBER });
+            push(spans, &s[start..i], if prev_alpha { pal.default } else { pal.number });
             continue;
         }
 
@@ -248,13 +291,13 @@ fn tokenize_line(
                 j < n && bytes[j] == b'('
             };
             let color = if TYPE_KEYWORDS.contains(&word) {
-                TYPE_KW
+                pal.type_kw
             } else if FLOW_KEYWORDS.contains(&word) {
-                FLOW_KW
+                pal.flow_kw
             } else if is_func {
-                FUNC_NAME
+                pal.func_name
             } else {
-                DEFAULT
+                pal.default
             };
             push(spans, word, color);
             continue;
@@ -263,8 +306,8 @@ fn tokenize_line(
         // Operators
         let color = match bytes[i] {
             b'+' | b'-' | b'*' | b'/' | b'%' | b'=' | b'<' | b'>'
-            | b'&' | b'|' | b'^' | b'~' | b'!' | b'?' | b':' => OPERATOR,
-            _ => DEFAULT,
+            | b'&' | b'|' | b'^' | b'~' | b'!' | b'?' | b':' => pal.operator,
+            _ => pal.default,
         };
         // Advance by full UTF-8 char
         let mut char_end = i + 1;

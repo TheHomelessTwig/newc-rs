@@ -5,6 +5,7 @@ use iced::{Color, Element, Length};
 use newc_core::function_lib::{FunctionLibrary, FunctionTemplate};
 use newc_core::main_builder::MainBlock;
 
+use crate::theme as th;
 use crate::highlight::code_view;
 use crate::state::{AppState, LibraryField, Message};
 
@@ -163,7 +164,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     func_items.sort_by(|a, b| a.name.cmp(&b.name));
 
     let fn_btns: Vec<Element<Message>> = func_items.into_iter().map(|fi| {
-        let color = if fi.selected { Color::from_rgb(0.663, 0.863, 0.463) } else { Color::WHITE };
+        let color = if fi.selected { th::color::green() } else { Color::WHITE };
         let star = if fi.starred { "★" } else { "☆" };
         let name = fi.name.clone();
         let name2 = fi.name.clone();
@@ -194,7 +195,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
     let fn_empty = candidates.is_empty();
     let fn_panel = scrollable(
         if fn_empty {
-            column![text("No functions.").size(12).color(Color::from_rgb(0.5, 0.5, 0.5))]
+            column![text("No functions.").size(12).color(th::color::text_dim())]
         } else {
             column(fn_btns).spacing(2)
         }
@@ -224,7 +225,7 @@ pub fn view<'a>(state: &'a AppState, lib: &'a FunctionLibrary) -> Element<'a, Me
             text("Function not found.").into()
         }
     } else {
-        text("Select a function").color(Color::from_rgb(0.5, 0.5, 0.5)).into()
+        text("Select a function").color(th::color::text_dim()).into()
     };
 
     let groups_cell = std::cell::RefCell::new(Some(group_panel.into()));
@@ -262,7 +263,7 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>, font_siz
     });
     let mut header_row = row![
         text(f.name.clone()).size(16),
-        text(format!("({})", f.module)).size(12).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text(format!("({})", f.module)).size(12).color(th::color::text_dim()),
         Space::new().width(Length::Fill),
         button(text("Edit").size(12)).on_press(Message::LibraryEditMode(true)),
         button(text("Delete").size(12)).on_press(Message::LibraryDelete(f.name.clone())),
@@ -275,25 +276,25 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>, font_siz
 
     column![
         header_row,
-        text(f.description.clone()).color(Color::from_rgb(0.85, 0.85, 0.85)),
+        text(f.description.clone()).color(th::color::text()),
         {
             let tags_str = f.tags.join(", ");
             let tags_el: Element<Message> = if !tags_str.is_empty() {
-                text(tags_str).size(11).color(Color::from_rgb(0.392, 0.784, 0.588)).into()
+                text(tags_str).size(11).color(th::color::green()).into()
             } else {
                 Space::new().into()
             };
             tags_el
         },
         row![
-            text("Prototype").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+            text("Prototype").size(12).color(th::color::cyan()),
             Space::new().width(Length::Fill),
             button(text("Copy").size(11)).on_press(Message::LibraryCopyCode(f.header_code.clone())),
         ]
         .align_y(iced::Alignment::Center),
         code_view(&f.header_code, (font_size - 1.0).max(8.0), None, None),
         row![
-            text("Implementation").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+            text("Implementation").size(12).color(th::color::cyan()),
             Space::new().width(Length::Fill),
             button(text("Copy").size(11)).on_press(Message::LibraryCopyCode(f.impl_code.clone())),
         ]
@@ -303,7 +304,7 @@ fn view_func<'a>(f: &'a FunctionTemplate, pending_module: Option<&str>, font_siz
             let req_str = f.requires.join(", ");
             let requires_el: Element<Message> = if !req_str.is_empty() {
                 text(format!("Requires: {req_str}")).size(11)
-                    .color(Color::from_rgb(0.784, 0.667, 0.392)).into()
+                    .color(th::color::yellow()).into()
             } else {
                 Space::new().into()
             };
@@ -369,14 +370,14 @@ fn edit_form<'a>(state: &'a AppState, _lib: &'a FunctionLibrary, draft: Option<F
                 .width(360),
         ]
         .spacing(8).align_y(iced::Alignment::Center),
-        text("Header (.h):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Header (.h):").size(12).color(th::color::cyan()),
         text_editor(&ls.header_editor)
             .highlight("c", iced::highlighter::Theme::Base16Mocha)
             .on_action(Message::LibraryHeaderEditAction)
             .font(iced::Font::MONOSPACE)
             .size((state.config.code_font_size - 1.0).max(8.0))
             .height(120),
-        text("Implementation (.c):").size(12).color(Color::from_rgb(0.471, 0.863, 0.910)),
+        text("Implementation (.c):").size(12).color(th::color::cyan()),
         text_editor(&ls.impl_editor)
             .highlight("c", iced::highlighter::Theme::Base16Mocha)
             .on_action(Message::LibraryImplEditAction)

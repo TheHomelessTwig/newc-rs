@@ -6,6 +6,7 @@ use iced::{Color, Element, Length, Point, Rectangle, Size, mouse};
 use newc_core::main_builder::{MainBlock, MainBuilderState};
 use newc_core::project::Project;
 
+use crate::theme as th;
 use crate::state::{AppState, Message, View};
 use crate::views::call_graph::CanvasState;
 
@@ -55,7 +56,7 @@ impl canvas::Program<Message> for FlowCanvas {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry<iced::Renderer>> {
         let geo = self.cache.draw(renderer, bounds.size(), |frame| {
-            frame.fill_rectangle(Point::ORIGIN, bounds.size(), Color::from_rgb8(0x1E, 0x1C, 0x1F));
+            frame.fill_rectangle(Point::ORIGIN, bounds.size(), th::color::bg_deep());
             let cx = bounds.width / 2.0 + self.pan_x;
             let z = self.zoom;
 
@@ -112,17 +113,17 @@ impl canvas::Program<Message> for FlowCanvas {
                 let (fill, border, text_color) = match node.shape {
                     NodeShape::Rounded => (
                         Color::from_rgb8(0x44, 0x44, 0x66),
-                        Color::from_rgb8(0xA9, 0xDC, 0x76),
-                        Color::from_rgb8(0xA9, 0xDC, 0x76),
+                        th::color::green(),
+                        th::color::green(),
                     ),
                     NodeShape::Diamond => (
                         Color::from_rgb8(0x3A, 0x4A, 0x6A),
-                        Color::from_rgb8(0xFF, 0xD8, 0x66),
-                        Color::from_rgb8(0xFF, 0xD8, 0x66),
+                        th::color::yellow(),
+                        th::color::yellow(),
                     ),
                     NodeShape::Rect => (
                         Color::from_rgb8(0x3D, 0x3A, 0x3F),
-                        Color::from_rgb8(0xFC, 0xFC, 0xFA),
+                        th::color::text(),
                         Color::WHITE,
                     ),
                 };
@@ -398,20 +399,20 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         button(text("← Composer"))
             .on_press(Message::Navigate(View::MainBuilder(project.clone()))),
         text(format!("Flowchart — {}", project.name))
-            .size(16).color(Color::from_rgb(1.0, 0.847, 0.4)),
+            .size(16).color(th::color::yellow()),
         Space::new().width(Length::Fill),
         button(text("Reset").size(12)).on_press(Message::GraphReset),
-        text(format!("{block_count} blocks")).size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
-        text("Drag: pan  Scroll: zoom").size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text(format!("{block_count} blocks")).size(11).color(th::color::text_dim()),
+        text("Drag: pan  Scroll: zoom").size(11).color(th::color::text_dim()),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
     let legend = row![
         text("▬ Process").size(11).color(Color::WHITE),
-        text("◇ Decision").size(11).color(Color::from_rgb8(0xFF, 0xD8, 0x66)),
-        text("▬ Start/End").size(11).color(Color::from_rgb8(0xA9, 0xDC, 0x76)),
-        text("YES → branches right   ← NO branches left").size(11).color(Color::from_rgb(0.5, 0.5, 0.5)),
+        text("◇ Decision").size(11).color(th::color::yellow()),
+        text("▬ Start/End").size(11).color(th::color::green()),
+        text("YES → branches right   ← NO branches left").size(11).color(th::color::text_dim()),
     ]
     .spacing(16);
 
