@@ -33,9 +33,7 @@ pub fn list_modules(root: &Path) -> Result<Vec<Module>> {
 
     let mut entries: Vec<_> = fs::read_dir(&include_dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().extension().and_then(|x| x.to_str()) == Some("h")
-        })
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("h"))
         .collect();
     entries.sort_by_key(|e| e.file_name());
 
@@ -47,7 +45,12 @@ pub fn list_modules(root: &Path) -> Result<Vec<Module>> {
             .unwrap_or_default();
         let source = root.join("src").join(format!("{name}.c"));
         let function_count = count_functions_in_source(&source);
-        modules.push(Module { name, header, source, function_count });
+        modules.push(Module {
+            name,
+            header,
+            source,
+            function_count,
+        });
     }
     Ok(modules)
 }
@@ -216,7 +219,8 @@ mod tests {
         fs::write(
             root.join("src/main.c"),
             "#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n",
-        ).unwrap();
+        )
+        .unwrap();
         root
     }
 

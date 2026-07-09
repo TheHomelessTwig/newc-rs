@@ -1,11 +1,11 @@
 //! New-project creation form — name, author, location, git init, template, and default modules.
 
-use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
 use iced::Element;
+use iced::widget::{Space, button, checkbox, column, row, scrollable, text, text_input};
 use newc_core::{license::License, module::is_valid_c_ident, project_template};
 
-use crate::theme as th;
 use crate::state::{AppState, Message, View};
+use crate::theme as th;
 
 /// Renders the "New Project" creation form.
 pub fn view(state: &AppState) -> Element<'_, Message> {
@@ -87,8 +87,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         .push(
             row![
                 text("Init git:").width(120),
-                checkbox(state.create_git)
-                    .on_toggle(Message::CreateGitToggle),
+                checkbox(state.create_git).on_toggle(Message::CreateGitToggle),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
@@ -96,35 +95,41 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         .push(
             row![
                 text("Use CMake:").width(120),
-                checkbox(state.create_use_cmake)
-                    .on_toggle(Message::CreateUseCmakeToggle),
-                text("(unchecked = Makefile)").size(11).color(th::color::text_dim()),
+                checkbox(state.create_use_cmake).on_toggle(Message::CreateUseCmakeToggle),
+                text("(unchecked = Makefile)")
+                    .size(11)
+                    .color(th::color::text_dim()),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
         );
 
     // ── License picker ───────────────────────────────────────────────────────
-    let mut license_btns: Vec<Element<Message>> = vec![
-        text("License:").width(120).into(),
-        {
-            let mut b = button(text("None").size(12)).on_press(Message::CreateLicense(None));
-            if state.create_license.is_none() {
-                b = b.style(th::btn_primary);
-            } else {
-                b = b.style(th::btn_secondary);
-            }
-            b.into()
-        },
-    ];
+    let mut license_btns: Vec<Element<Message>> = vec![text("License:").width(120).into(), {
+        let mut b = button(text("None").size(12)).on_press(Message::CreateLicense(None));
+        if state.create_license.is_none() {
+            b = b.style(th::btn_primary);
+        } else {
+            b = b.style(th::btn_secondary);
+        }
+        b.into()
+    }];
     for l in License::all() {
         let id = l.spdx_id().to_string();
         let selected = state.create_license.as_deref() == Some(l.spdx_id());
         let mut b = button(text(l.spdx_id()).size(12)).on_press(Message::CreateLicense(Some(id)));
-        b = if selected { b.style(th::btn_primary) } else { b.style(th::btn_secondary) };
+        b = if selected {
+            b.style(th::btn_primary)
+        } else {
+            b.style(th::btn_secondary)
+        };
         license_btns.push(b.into());
     }
-    col = col.push(row(license_btns).spacing(6).align_y(iced::Alignment::Center));
+    col = col.push(
+        row(license_btns)
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+    );
 
     if !loc_valid {
         col = col.push(
@@ -137,23 +142,32 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // ── Default modules ───────────────────────────────────────────────────────
     col = col.push(text("Default modules:").size(13));
     let module_checks = row![
-        checkbox(state.create_include_input).label("input")
+        checkbox(state.create_include_input)
+            .label("input")
             .on_toggle(|v| Message::CreateInclude("input".into(), v)),
-        checkbox(state.create_include_math).label("math")
+        checkbox(state.create_include_math)
+            .label("math")
             .on_toggle(|v| Message::CreateInclude("math".into(), v)),
-        checkbox(state.create_include_display).label("display")
+        checkbox(state.create_include_display)
+            .label("display")
             .on_toggle(|v| Message::CreateInclude("display".into(), v)),
-        checkbox(state.create_include_array).label("array")
+        checkbox(state.create_include_array)
+            .label("array")
             .on_toggle(|v| Message::CreateInclude("array".into(), v)),
-        checkbox(state.create_include_strings).label("strings")
+        checkbox(state.create_include_strings)
+            .label("strings")
             .on_toggle(|v| Message::CreateInclude("strings".into(), v)),
-        checkbox(state.create_include_linked_list).label("linked_list")
+        checkbox(state.create_include_linked_list)
+            .label("linked_list")
             .on_toggle(|v| Message::CreateInclude("linked_list".into(), v)),
-        checkbox(state.create_include_files).label("files")
+        checkbox(state.create_include_files)
+            .label("files")
             .on_toggle(|v| Message::CreateInclude("files".into(), v)),
-        checkbox(state.create_include_test_utils).label("test_utils")
+        checkbox(state.create_include_test_utils)
+            .label("test_utils")
             .on_toggle(|v| Message::CreateInclude("test_utils".into(), v)),
-        checkbox(state.create_use_unity).label("unity (test harness)")
+        checkbox(state.create_use_unity)
+            .label("unity (test harness)")
             .on_toggle(|v| Message::CreateInclude("unity".into(), v)),
     ]
     .spacing(12)
@@ -166,13 +180,14 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         create_btn = create_btn.on_press(Message::CreateSubmit);
     }
 
-    let content = col.push(Space::new().height(8))
-       .push(
-           row![
-               create_btn,
-               button(text("Cancel")).on_press(Message::Navigate(View::Home)).style(th::btn_ghost),
-           ]
-           .spacing(8),
-       );
+    let content = col.push(Space::new().height(8)).push(
+        row![
+            create_btn,
+            button(text("Cancel"))
+                .on_press(Message::Navigate(View::Home))
+                .style(th::btn_ghost),
+        ]
+        .spacing(8),
+    );
     scrollable(content).height(iced::Length::Fill).into()
 }

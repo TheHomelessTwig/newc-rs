@@ -26,14 +26,21 @@ pub fn rename_function(root: &Path, old_name: &str, new_name: &str) -> Result<us
     let mut count = 0;
 
     for dir in [root.join("src"), root.join("include")] {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if ext != "c" && ext != "h" { continue; }
+            if ext != "c" && ext != "h" {
+                continue;
+            }
             let content = std::fs::read_to_string(&path)?;
             if re.is_match(&content) {
-                std::fs::write(&path, re.replace_all(&content, replacement.as_str()).as_ref())?;
+                std::fs::write(
+                    &path,
+                    re.replace_all(&content, replacement.as_str()).as_ref(),
+                )?;
                 count += 1;
             }
         }
@@ -72,7 +79,9 @@ pub fn move_function(root: &Path, from_module: &str, to_module: &str, fname: &st
 
     // Append to target module
     let mut tgt = std::fs::read_to_string(&tgt_path)?;
-    if !tgt.ends_with('\n') { tgt.push('\n'); }
+    if !tgt.ends_with('\n') {
+        tgt.push('\n');
+    }
     tgt.push('\n');
     tgt.push_str(&func_text);
     std::fs::write(&tgt_path, tgt)?;
@@ -102,8 +111,16 @@ mod tests {
             "int foo(void)\n{\n    return 1;\n}\n\nint do_foo(void)\n{\n    return foo();\n}\n",
         )
         .unwrap();
-        fs::write(root.join("include/util.h"), "int foo(void);\n\nint do_foo(void);\n").unwrap();
-        fs::write(root.join("src/other.c"), "int bar(void)\n{\n    return 2;\n}\n").unwrap();
+        fs::write(
+            root.join("include/util.h"),
+            "int foo(void);\n\nint do_foo(void);\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/other.c"),
+            "int bar(void)\n{\n    return 2;\n}\n",
+        )
+        .unwrap();
         fs::write(root.join("include/other.h"), "int bar(void);\n").unwrap();
         (tmp, root)
     }

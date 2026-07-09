@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::error::{NewcError, Result};
-use crate::module::{list_modules, Module};
+use crate::module::{Module, list_modules};
 
 /// Which build tool a project's build file targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +68,13 @@ impl Project {
         let has_git = root.join(".git").exists();
         let modules = list_modules(&root)?;
         let build_system = BuildSystem::detect(&root);
-        Ok(Self { name, root, modules, has_git, build_system })
+        Ok(Self {
+            name,
+            root,
+            modules,
+            has_git,
+            build_system,
+        })
     }
 
     /// Returns `true` if `path` looks like a valid newc project directory.
@@ -120,9 +126,10 @@ impl Project {
 pub fn expand_tilde(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
     if s.starts_with("~/")
-        && let Some(home) = dirs::home_dir() {
-            return home.join(&s[2..]);
-        }
+        && let Some(home) = dirs::home_dir()
+    {
+        return home.join(&s[2..]);
+    }
     path.to_path_buf()
 }
 
@@ -134,7 +141,11 @@ mod tests {
     fn make_project(dir: &Path) {
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::create_dir_all(dir.join("include")).unwrap();
-        fs::write(dir.join("src/main.c"), "int main(void)\n{\n    return 0;\n}\n").unwrap();
+        fs::write(
+            dir.join("src/main.c"),
+            "int main(void)\n{\n    return 0;\n}\n",
+        )
+        .unwrap();
         fs::write(dir.join("Makefile"), "all:\n").unwrap();
     }
 

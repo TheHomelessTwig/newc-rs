@@ -1,7 +1,7 @@
 //! Regex-based text search across a project's C source and header files.
 
-use std::path::Path;
 use regex::RegexBuilder;
+use std::path::Path;
 
 fn build_pattern(query: &str) -> regex::Regex {
     RegexBuilder::new(query)
@@ -36,17 +36,29 @@ pub fn preview_replacements(root: &Path, pattern: &str, replacement: &str) -> Ve
     let mut previews = Vec::new();
 
     for dir in [root.join("src"), root.join("include")] {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut paths: Vec<_> = entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("c") | Some("h")))
+            .filter(|p| {
+                matches!(
+                    p.extension().and_then(|x| x.to_str()),
+                    Some("c") | Some("h")
+                )
+            })
             .collect();
         paths.sort();
 
         for path in &paths {
-            let Ok(content) = std::fs::read_to_string(path) else { continue };
-            let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let Ok(content) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             for (i, line) in content.lines().enumerate() {
                 if re.is_match(line) {
                     previews.push(ReplacePreview {
@@ -77,11 +89,18 @@ pub fn apply_replacements(root: &Path, pattern: &str, replacement: &str) -> std:
     let mut modified = 0;
 
     for dir in [root.join("src"), root.join("include")] {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut paths: Vec<_> = entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("c") | Some("h")))
+            .filter(|p| {
+                matches!(
+                    p.extension().and_then(|x| x.to_str()),
+                    Some("c") | Some("h")
+                )
+            })
             .collect();
         paths.sort();
 
@@ -126,7 +145,9 @@ pub fn search(root: &Path, query: &str) -> Vec<SearchResult> {
 
     let search_dirs = [root.join("src"), root.join("include")];
     for dir in &search_dirs {
-        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
         let mut paths: Vec<_> = entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
@@ -138,8 +159,11 @@ pub fn search(root: &Path, query: &str) -> Vec<SearchResult> {
         paths.sort();
 
         for path in &paths {
-            let Ok(content) = std::fs::read_to_string(path) else { continue };
-            let file_name = path.file_name()
+            let Ok(content) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let file_name = path
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let module = if path.extension().and_then(|x| x.to_str()) == Some("c")
@@ -176,7 +200,11 @@ mod tests {
         let root = tmp.path().to_path_buf();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::create_dir_all(root.join("include")).unwrap();
-        fs::write(root.join("src/util.c"), "int add(int a, int b)\n{\n    return a + b;\n}\n").unwrap();
+        fs::write(
+            root.join("src/util.c"),
+            "int add(int a, int b)\n{\n    return a + b;\n}\n",
+        )
+        .unwrap();
         fs::write(root.join("include/util.h"), "int add(int a, int b);\n").unwrap();
         (tmp, root)
     }
@@ -185,7 +213,11 @@ mod tests {
     fn search_is_case_insensitive_and_reports_module() {
         let (_tmp, root) = fixture();
         let results = search(&root, "ADD");
-        assert!(results.iter().any(|r| r.file == "util.c" && r.module.as_deref() == Some("util")));
+        assert!(
+            results
+                .iter()
+                .any(|r| r.file == "util.c" && r.module.as_deref() == Some("util"))
+        );
         assert!(results.iter().any(|r| r.file == "util.h"));
     }
 

@@ -17,7 +17,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// A hover result string (markdown or plaintext, as reported by clangd).
 #[derive(Debug, Clone)]
@@ -26,8 +26,15 @@ pub struct HoverResult {
 }
 
 enum ClientCmd {
-    DidOpen { uri: String, text: String },
-    Hover { uri: String, line: u32, character: u32 },
+    DidOpen {
+        uri: String,
+        text: String,
+    },
+    Hover {
+        uri: String,
+        line: u32,
+        character: u32,
+    },
 }
 
 /// Handle to a running `clangd` process. Dropping this does not terminate
@@ -64,7 +71,11 @@ impl LspClient {
         let root_uri = format!("file://{}", project_root.display());
         thread::spawn(move || writer_loop(stdin, command_receiver, root_uri));
 
-        Some(Self { command_sender, hover_receiver, _child: child })
+        Some(Self {
+            command_sender,
+            hover_receiver,
+            _child: child,
+        })
     }
 
     /// Notify clangd that a file is open with the given full text.
@@ -74,7 +85,11 @@ impl LspClient {
 
     /// Request hover info at a 0-based `(line, character)` position.
     pub fn hover(&self, uri: String, line: u32, character: u32) {
-        let _ = self.command_sender.send(ClientCmd::Hover { uri, line, character });
+        let _ = self.command_sender.send(ClientCmd::Hover {
+            uri,
+            line,
+            character,
+        });
     }
 
     /// Drain the most recent hover result, if any arrived since the last call.
@@ -116,7 +131,11 @@ fn writer_loop(mut stdin: ChildStdin, command_receiver: Receiver<ClientCmd>, roo
                     "textDocument": { "uri": uri, "languageId": "c", "version": 1, "text": text }
                 }
             }),
-            ClientCmd::Hover { uri, line, character } => {
+            ClientCmd::Hover {
+                uri,
+                line,
+                character,
+            } => {
                 let id = next_id;
                 next_id += 1;
                 json!({
@@ -163,8 +182,12 @@ fn read_message(reader: &mut impl BufRead) -> Option<Value> {
 fn reader_loop(stdout: ChildStdout, hover_sender: Sender<HoverResult>) {
     let mut reader = BufReader::new(stdout);
     while let Some(response_payload) = read_message(&mut reader) {
-        let Some(result) = response_payload.get("result") else { continue };
-        let Some(contents) = result.get("contents") else { continue };
+        let Some(result) = response_payload.get("result") else {
+            continue;
+        };
+        let Some(contents) = result.get("contents") else {
+            continue;
+        };
         let text = extract_hover_text(contents);
         if !text.is_empty() {
             let _ = hover_sender.send(HoverResult { text });

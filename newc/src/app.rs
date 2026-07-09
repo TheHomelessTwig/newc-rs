@@ -7,21 +7,19 @@
 //! C Reference, Snippets). Each window is identified by an [`iced::window::Id`]
 //! stored in [`crate::state::AppState`].
 
+use notify::Watcher;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use notify::Watcher;
 
-use iced::{Element, Subscription, Task, Theme};
-use iced::widget::{column, row, text, button, container, scrollable, Space, Stack};
-use iced::{Alignment, Background, Length, Color};
 use crate::theme as th;
+use iced::widget::{Space, Stack, button, column, container, row, scrollable, text};
+use iced::{Alignment, Background, Color, Length};
+use iced::{Element, Subscription, Task, Theme};
 use newc_core::{
-    function_lib::FunctionLibrary,
     build_history::{self, BuildRecord},
     diag,
-    meta,
-    module,
-    notes,
+    function_lib::FunctionLibrary,
+    meta, module, notes,
     project::Project,
     scaffold::{DefaultModule, ScaffoldOptions, create_project},
 };
@@ -80,7 +78,9 @@ impl NewcApp {
         let function_lib = FunctionLibrary::load();
 
         let mut app = Self {
-            state, runner, function_lib,
+            state,
+            runner,
+            function_lib,
             lsp_client: None,
             lsp_opened_modules: std::collections::HashSet::new(),
         };
@@ -100,11 +100,19 @@ impl NewcApp {
     /// Detached tool windows get fixed titles ("Function Library — newc" etc.).
     /// The main window title includes the active project name when one is open.
     pub fn title_for_window(&self, window: iced::window::Id) -> String {
-        if Some(window) == self.state.library_window { return "Function Library — newc".into(); }
-        if Some(window) == self.state.cref_window    { return "C Reference — newc".into(); }
-        if Some(window) == self.state.snippets_window { return "Snippets — newc".into(); }
+        if Some(window) == self.state.library_window {
+            return "Function Library — newc".into();
+        }
+        if Some(window) == self.state.cref_window {
+            return "C Reference — newc".into();
+        }
+        if Some(window) == self.state.snippets_window {
+            return "Snippets — newc".into();
+        }
         match &self.state.view {
-            View::ProjectDetail(p) | View::ProjectStats(p) | View::ModuleDetail { project: p, .. } => {
+            View::ProjectDetail(p)
+            | View::ProjectStats(p)
+            | View::ModuleDetail { project: p, .. } => {
                 format!("newc — {}", p.name)
             }
             _ => String::from("newc"),
@@ -138,7 +146,9 @@ impl NewcApp {
                     }
                     View::MainBuilder(project) => {
                         self.state.main_builder =
-                            newc_core::main_builder::MainBuilderState::load_from_main_c(&project.root);
+                            newc_core::main_builder::MainBuilderState::load_from_main_c(
+                                &project.root,
+                            );
                         self.state.composer_selected = None;
                         if self.state.create_author.is_empty() {
                             self.state.create_author = newc_core::scaffold::detect_author();
@@ -158,10 +168,13 @@ impl NewcApp {
                             iced::widget::text_editor::Content::with_text(&raw);
                         self.state.makefile_dirty = false;
                     }
-                    View::HeaderEditor { project, module_name } => {
+                    View::HeaderEditor {
+                        project,
+                        module_name,
+                    } => {
                         if let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
-                            let content = newc_core::header::read_ignore_block(&m.header)
-                                .unwrap_or_default();
+                            let content =
+                                newc_core::header::read_ignore_block(&m.header).unwrap_or_default();
                             self.state.header_editor_state.te_content =
                                 iced::widget::text_editor::Content::with_text(&content);
                             self.state.header_editor_state.content = content;
@@ -212,12 +225,25 @@ impl NewcApp {
                     self.state.build_lines.clear();
                     self.state.diagnostics.clear();
                     self.state.diag_nav_index = 0;
-                    let extra_cflags = self.state.build_profile_active.as_ref()
-                        .and_then(|name| self.state.project_config.as_ref()
-                            .and_then(|pc| pc.build_profiles.iter().find(|p| &p.name == name))
-                            .map(|p| p.cflags.clone()))
+                    let extra_cflags = self
+                        .state
+                        .build_profile_active
+                        .as_ref()
+                        .and_then(|name| {
+                            self.state
+                                .project_config
+                                .as_ref()
+                                .and_then(|pc| pc.build_profiles.iter().find(|p| &p.name == name))
+                                .map(|p| p.cflags.clone())
+                        })
                         .unwrap_or_default();
-                    self.runner.run(&target, cwd, build_system, &self.state.build_run_args, &extra_cflags);
+                    self.runner.run(
+                        &target,
+                        cwd,
+                        build_system,
+                        &self.state.build_run_args,
+                        &extra_cflags,
+                    );
                 }
             }
 
@@ -268,9 +294,10 @@ impl NewcApp {
                             .await
                             .map(|h| h.path().to_path_buf())
                     },
-                    |p| p.map(|path| Message::CreateLocation(
-                        path.to_string_lossy().into_owned()
-                    )).unwrap_or(Message::None),
+                    |p| {
+                        p.map(|path| Message::CreateLocation(path.to_string_lossy().into_owned()))
+                            .unwrap_or(Message::None)
+                    },
                 );
             }
 
@@ -399,34 +426,49 @@ impl NewcApp {
                 let _ = self.state.config.save();
             }
 
-            Message::ProjectConfigDraftEditor(s)     => self.state.project_config_draft.editor = Some(s),
-            Message::ProjectConfigDraftTerminal(s)    => self.state.project_config_draft.terminal = Some(s),
-            Message::ProjectConfigDraftClangStyle(s)  => self.state.project_config_draft.clang_format_style = Some(s),
+            Message::ProjectConfigDraftEditor(s) => {
+                self.state.project_config_draft.editor = Some(s)
+            }
+            Message::ProjectConfigDraftTerminal(s) => {
+                self.state.project_config_draft.terminal = Some(s)
+            }
+            Message::ProjectConfigDraftClangStyle(s) => {
+                self.state.project_config_draft.clang_format_style = Some(s)
+            }
             Message::ProfileNameInput(s) => self.state.profile_name_input = s,
             Message::ProfileCflagsInput(s) => self.state.profile_cflags_input = s,
             Message::ProfileAdd => {
                 let name = self.state.profile_name_input.trim().to_string();
                 let cflags = self.state.profile_cflags_input.trim().to_string();
                 if !name.is_empty() {
-                    self.state.project_config_draft.build_profiles.push(
-                        newc_core::config::BuildProfile { name, cflags }
-                    );
+                    self.state
+                        .project_config_draft
+                        .build_profiles
+                        .push(newc_core::config::BuildProfile { name, cflags });
                     self.state.profile_name_input.clear();
                     self.state.profile_cflags_input.clear();
                 }
             }
             Message::ProfileRemove(name) => {
-                self.state.project_config_draft.build_profiles.retain(|p| p.name != name);
+                self.state
+                    .project_config_draft
+                    .build_profiles
+                    .retain(|p| p.name != name);
             }
             Message::ProjectConfigSave => {
                 if let Some(project) = self.state.current_project() {
                     let root = project.root.clone();
                     match self.state.project_config_draft.save_to(&root) {
                         Ok(_) => {
-                            self.state.project_config = Some(self.state.project_config_draft.clone());
-                            self.state.push_toast(crate::state::Toast::success("Project settings saved.".to_string()));
+                            self.state.project_config =
+                                Some(self.state.project_config_draft.clone());
+                            self.state.push_toast(crate::state::Toast::success(
+                                "Project settings saved.".to_string(),
+                            ));
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -436,7 +478,9 @@ impl NewcApp {
                     let _ = std::fs::remove_file(&path);
                     self.state.project_config = None;
                     self.state.project_config_draft = newc_core::config::ProjectConfig::default();
-                    self.state.push_toast(crate::state::Toast::info("Project settings cleared.".to_string()));
+                    self.state.push_toast(crate::state::Toast::info(
+                        "Project settings cleared.".to_string(),
+                    ));
                 }
             }
 
@@ -498,7 +542,8 @@ impl NewcApp {
             Message::MakefileToggleFlag(flag) => {
                 let text = self.state.makefile_content.text();
                 let updated = toggle_makefile_flag(&text, &flag);
-                self.state.makefile_content = iced::widget::text_editor::Content::with_text(&updated);
+                self.state.makefile_content =
+                    iced::widget::text_editor::Content::with_text(&updated);
                 self.state.makefile_dirty = true;
             }
 
@@ -506,8 +551,12 @@ impl NewcApp {
                 if let Some(project) = self.state.current_project() {
                     let root = project.root.clone();
                     match std::process::Command::new("xdg-open").arg(&root).spawn() {
-                        Ok(_) => self.state.push_toast(crate::state::Toast::info("Opened in file manager.")),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(format!("xdg-open: {e}"))),
+                        Ok(_) => self
+                            .state
+                            .push_toast(crate::state::Toast::info("Opened in file manager.")),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(format!("xdg-open: {e}"))),
                     }
                 }
             }
@@ -534,10 +583,13 @@ impl NewcApp {
             Message::ExportCompileCommands => {
                 if let Some(project) = self.state.current_project() {
                     match newc_core::export::write_compile_commands(&project.root) {
-                        Ok(path) => self.state.push_toast(crate::state::Toast::success(
-                            format!("Wrote {}", path.display())
-                        )),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Ok(path) => self.state.push_toast(crate::state::Toast::success(format!(
+                            "Wrote {}",
+                            path.display()
+                        ))),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -551,16 +603,24 @@ impl NewcApp {
                     let student = self.state.submission_student_input.trim().to_string();
                     let assignment = self.state.submission_assignment_input.trim().to_string();
                     if student.is_empty() || assignment.is_empty() {
-                        self.state.push_toast(crate::state::Toast::error("Enter student name and assignment number.".to_string()));
+                        self.state.push_toast(crate::state::Toast::error(
+                            "Enter student name and assignment number.".to_string(),
+                        ));
                     } else {
                         let downloads = dirs::download_dir()
                             .or_else(|| dirs::home_dir().map(|h| h.join("Downloads")))
                             .unwrap_or_else(|| std::path::PathBuf::from("."));
                         return Task::perform(
                             async move {
-                                newc_core::export::pack_submission(&root, &name, &student, &assignment, &downloads)
-                                    .map(|path| format!("Packed → {}", path.display()))
-                                    .map_err(|e| e.to_string())
+                                newc_core::export::pack_submission(
+                                    &root,
+                                    &name,
+                                    &student,
+                                    &assignment,
+                                    &downloads,
+                                )
+                                .map(|path| format!("Packed → {}", path.display()))
+                                .map_err(|e| e.to_string())
                             },
                             Message::ArchiveDone,
                         );
@@ -576,11 +636,14 @@ impl NewcApp {
                         Ok(_) => {
                             let editor = &self.state.config.editor;
                             let _ = std::process::Command::new(editor).arg(&path).spawn();
-                            self.state.push_toast(crate::state::Toast::success(
-                                format!("Report → {}", path.display())
-                            ));
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Report → {}",
+                                path.display()
+                            )));
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -589,15 +652,20 @@ impl NewcApp {
                 if let Some(project) = self.state.current_project() {
                     match newc_core::analysis::check(&project.root) {
                         Ok(funcs) if funcs.is_empty() => {
-                            self.state.push_toast(crate::state::Toast::success("No unreachable functions."));
+                            self.state.push_toast(crate::state::Toast::success(
+                                "No unreachable functions.",
+                            ));
                         }
                         Ok(funcs) => {
                             let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
-                            self.state.push_toast(crate::state::Toast::info(
-                                format!("Unreachable: {}", names.join(", "))
-                            ));
+                            self.state.push_toast(crate::state::Toast::info(format!(
+                                "Unreachable: {}",
+                                names.join(", ")
+                            )));
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -606,14 +674,18 @@ impl NewcApp {
                 if let Some(project) = self.state.current_project() {
                     match newc_core::sync::sync_all(&project.root) {
                         Ok(synced) if synced.is_empty() => {
-                            self.state.push_toast(crate::state::Toast::info("Nothing to sync."));
+                            self.state
+                                .push_toast(crate::state::Toast::info("Nothing to sync."));
                         }
                         Ok(synced) => {
-                            self.state.push_toast(crate::state::Toast::success(
-                                format!("Synced: {}", synced.join(", "))
-                            ));
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Synced: {}",
+                                synced.join(", ")
+                            )));
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -621,31 +693,39 @@ impl NewcApp {
             Message::SyncModule(name) => {
                 if let Some(project) = self.state.current_project() {
                     match newc_core::sync::sync_module(&project.root, &name) {
-                        Ok(_) => self.state.push_toast(crate::state::Toast::success(format!("Synced {name}.h"))),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Ok(_) => self
+                            .state
+                            .push_toast(crate::state::Toast::success(format!("Synced {name}.h"))),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
 
             Message::FileChanged(path) => {
-                let name = path.file_name()
+                let name = path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("file")
                     .to_string();
-                self.state.push_toast(crate::state::Toast::info(format!("{name} changed.")));
+                self.state
+                    .push_toast(crate::state::Toast::info(format!("{name} changed.")));
                 // Warn if in module edit mode and the changed file is the open module
                 if let View::ModuleDetail { module_name, .. } = &self.state.view.clone()
-                    && self.state.module_detail_state.edit_mode {
-                        let stem_matches = path.file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s == module_name)
-                            .unwrap_or(false);
-                        if stem_matches {
-                            self.state.push_toast(crate::state::Toast::error(
-                                format!("{name} changed externally — unsaved edits may conflict.")
-                            ));
-                        }
+                    && self.state.module_detail_state.edit_mode
+                {
+                    let stem_matches = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s == module_name)
+                        .unwrap_or(false);
+                    if stem_matches {
+                        self.state.push_toast(crate::state::Toast::error(format!(
+                            "{name} changed externally — unsaved edits may conflict."
+                        )));
                     }
+                }
                 return self.update(Message::RefreshProject);
             }
 
@@ -663,14 +743,18 @@ impl NewcApp {
 
             Message::OnboardingBack => {
                 if let View::Onboarding(step) = self.state.view
-                    && step > 0 {
-                        self.state.view = View::Onboarding(step - 1);
-                    }
+                    && step > 0
+                {
+                    self.state.view = View::Onboarding(step - 1);
+                }
             }
 
             Message::OnboardingFinish => {
                 // Import selected projects
-                let selected: Vec<std::path::PathBuf> = self.state.onboarding_found.iter()
+                let selected: Vec<std::path::PathBuf> = self
+                    .state
+                    .onboarding_found
+                    .iter()
                     .filter(|(_, sel)| *sel)
                     .map(|(p, _)| p.clone())
                     .collect();
@@ -727,7 +811,9 @@ impl NewcApp {
                 if let Some(project) = self.state.current_project() {
                     let root = project.root.clone();
                     let commit_message = self.state.git_commit_msg.trim().to_string();
-                    if commit_message.is_empty() { return Task::none(); }
+                    if commit_message.is_empty() {
+                        return Task::none();
+                    }
                     match newc_core::git::commit(&root, &commit_message) {
                         Ok(_) => {
                             self.state.git_commit_msg.clear();
@@ -801,8 +887,12 @@ impl NewcApp {
             Message::GitInit => {
                 if let Some(project) = self.state.current_project() {
                     match newc_core::git::init(&project.root) {
-                        Ok(_) => self.state.push_toast(crate::state::Toast::success("Git repository initialized.".to_string())),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Ok(_) => self.state.push_toast(crate::state::Toast::success(
+                            "Git repository initialized.".to_string(),
+                        )),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -823,7 +913,11 @@ impl NewcApp {
                     let query = self.state.search_query.trim().to_string();
                     let replacement = self.state.search_replace.clone();
                     if !query.is_empty() {
-                        self.state.replace_preview = newc_core::grep::preview_replacements(&project.root, &query, &replacement);
+                        self.state.replace_preview = newc_core::grep::preview_replacements(
+                            &project.root,
+                            &query,
+                            &replacement,
+                        );
                     }
                 }
             }
@@ -832,13 +926,22 @@ impl NewcApp {
                     let query = self.state.search_query.trim().to_string();
                     let replacement = self.state.search_replace.clone();
                     if !query.is_empty() {
-                        match newc_core::grep::apply_replacements(&project.root, &query, &replacement) {
+                        match newc_core::grep::apply_replacements(
+                            &project.root,
+                            &query,
+                            &replacement,
+                        ) {
                             Ok(n) => {
                                 self.state.replace_preview.clear();
-                                self.state.search_results = newc_core::grep::search(&project.root, &query);
-                                self.state.push_toast(crate::state::Toast::success(format!("Replaced in {n} file(s).")));
+                                self.state.search_results =
+                                    newc_core::grep::search(&project.root, &query);
+                                self.state.push_toast(crate::state::Toast::success(format!(
+                                    "Replaced in {n} file(s)."
+                                )));
                             }
-                            Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                            Err(e) => self
+                                .state
+                                .push_toast(crate::state::Toast::error(e.to_string())),
                         }
                     }
                 }
@@ -864,14 +967,17 @@ impl NewcApp {
                     };
                     match newc_core::user_template::save(&user_template) {
                         Ok(_) => {
-                            self.state.push_toast(crate::state::Toast::success(
-                                format!("Template '{}' saved.", user_template.name)
-                            ));
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Template '{}' saved.",
+                                user_template.name
+                            )));
                             self.state.show_save_template_modal = false;
                             self.state.save_template_name.clear();
                             self.state.save_template_desc.clear();
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
@@ -882,12 +988,15 @@ impl NewcApp {
                     let candidates = self.state.tidy_candidates.clone();
                     match newc_core::analysis::tidy(&project.root, &candidates) {
                         Ok(log) => {
-                            self.state.push_toast(crate::state::Toast::success(
-                                format!("Removed {} function(s).", log.len())
-                            ));
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Removed {} function(s).",
+                                log.len()
+                            )));
                             self.state.tidy_candidates.clear();
                         }
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                     self.state.show_tidy_confirm = false;
                 }
@@ -898,10 +1007,13 @@ impl NewcApp {
             Message::WorkspaceNew => {
                 let name = self.state.workspace_input.trim().to_string();
                 if !name.is_empty() {
-                    self.state.config.workspaces.push(newc_core::config::Workspace {
-                        name: name.clone(),
-                        paths: Vec::new(),
-                    });
+                    self.state
+                        .config
+                        .workspaces
+                        .push(newc_core::config::Workspace {
+                            name: name.clone(),
+                            paths: Vec::new(),
+                        });
                     let _ = self.state.config.save();
                     self.state.workspace_input.clear();
                     self.state.show_new_workspace = false;
@@ -921,13 +1033,19 @@ impl NewcApp {
                         ws.paths.retain(|p| p != &project_root);
                     }
                     // Add to target workspace
-                    if let Some(ws) = self.state.config.workspaces.iter_mut().find(|w| &w.name == target_ws) {
+                    if let Some(ws) = self
+                        .state
+                        .config
+                        .workspaces
+                        .iter_mut()
+                        .find(|w| &w.name == target_ws)
+                    {
                         ws.paths.push(project_root);
                     }
                     let _ = self.state.config.save();
-                    self.state.push_toast(crate::state::Toast::success(
-                        format!("Project moved to workspace '{target_ws}'.")
-                    ));
+                    self.state.push_toast(crate::state::Toast::success(format!(
+                        "Project moved to workspace '{target_ws}'."
+                    )));
                 }
             }
 
@@ -970,7 +1088,8 @@ impl NewcApp {
             Message::NewGroupSubmit => {
                 let name = self.state.new_group_name.trim().to_string();
                 if !name.is_empty() {
-                    self.function_lib.create_group(&name, &self.state.new_group_desc);
+                    self.function_lib
+                        .create_group(&name, &self.state.new_group_desc);
                     self.state.show_new_group = false;
                     self.state.new_group_name.clear();
                     self.state.new_group_desc.clear();
@@ -990,54 +1109,57 @@ impl NewcApp {
             Message::GroupDeleteCascade(v) => self.state.delete_group_cascade = v,
             Message::GroupDeleteSubmit => {
                 if let Some(name) = self.state.group_action_target.take() {
-                    self.function_lib.delete_group(&name, self.state.delete_group_cascade);
+                    self.function_lib
+                        .delete_group(&name, self.state.delete_group_cascade);
                 }
             }
 
             Message::UpdateCheck => {
-                return Task::perform(
-                    async { crate::updater::check() },
-                    |r| match r {
-                        Ok(Some(v)) => Message::UpdateCheckResult(Some(v)),
-                        Ok(None)    => Message::UpdateCheckResult(None),
-                        Err(e)      => {
-                            eprintln!("update check error: {e}");
-                            Message::UpdateCheckResult(None)
-                        }
-                    },
-                );
+                return Task::perform(async { crate::updater::check() }, |r| match r {
+                    Ok(Some(v)) => Message::UpdateCheckResult(Some(v)),
+                    Ok(None) => Message::UpdateCheckResult(None),
+                    Err(e) => {
+                        eprintln!("update check error: {e}");
+                        Message::UpdateCheckResult(None)
+                    }
+                });
             }
             Message::UpdateCheckResult(v) => {
                 self.state.update_available = v.clone();
                 match v {
-                    Some(ver) => self.state.push_toast(crate::state::Toast::info(
-                        format!("v{ver} available. Click Install to update.")
+                    Some(ver) => self.state.push_toast(crate::state::Toast::info(format!(
+                        "v{ver} available. Click Install to update."
+                    ))),
+                    None => self.state.push_toast(crate::state::Toast::success(
+                        "Already up to date.".to_string(),
                     )),
-                    None => self.state.push_toast(crate::state::Toast::success("Already up to date.".to_string())),
                 }
             }
             Message::UpdateInstall(_) => {
-                self.state.push_toast(crate::state::Toast::info("Downloading update…".to_string()));
-                return Task::perform(
-                    async { crate::updater::update() },
-                    |r| match r {
-                        Ok(_)  => Message::UpdateInstallDone,
-                        Err(e) => {
-                            eprintln!("update install error: {e}");
-                            Message::UpdateInstallDone
-                        }
-                    },
-                );
+                self.state
+                    .push_toast(crate::state::Toast::info("Downloading update…".to_string()));
+                return Task::perform(async { crate::updater::update() }, |r| match r {
+                    Ok(_) => Message::UpdateInstallDone,
+                    Err(e) => {
+                        eprintln!("update install error: {e}");
+                        Message::UpdateInstallDone
+                    }
+                });
             }
             Message::UpdateInstallDone => {
                 self.state.update_available = None;
-                self.state.push_toast(crate::state::Toast::success("Updated. Restart newc to apply.".to_string()));
+                self.state.push_toast(crate::state::Toast::success(
+                    "Updated. Restart newc to apply.".to_string(),
+                ));
             }
 
             Message::DiagJumpTo { module, line } => {
                 if let Some(project) = self.state.current_project().cloned() {
                     self.state.module_detail_state.highlight_line = Some(line);
-                    self.state.view = View::ModuleDetail { project, module_name: module };
+                    self.state.view = View::ModuleDetail {
+                        project,
+                        module_name: module,
+                    };
                     let y = ((line as f32 - 1.0 - 5.0).max(0.0)) * 16.0;
                     return iced::widget::operation::scroll_to::<Message>(
                         iced::widget::Id::new(crate::highlight::MODULE_CODE_SCROLL),
@@ -1052,45 +1174,64 @@ impl NewcApp {
 
             Message::ModuleHoverRequest(module_name) => {
                 if let Some(project) = self.state.current_project().cloned()
-                    && let Some(m) = project.modules.iter().find(|m| m.name == module_name) {
-                        if self.lsp_client.is_none() {
-                            self.lsp_client = crate::lsp::LspClient::spawn(&project.root);
-                        }
-                        let uri = format!("file://{}", m.source.display());
-                        if let Some(client) = &self.lsp_client {
-                            if self.lsp_opened_modules.insert(module_name.clone()) {
-                                let text = std::fs::read_to_string(&m.source).unwrap_or_default();
-                                client.did_open(uri.clone(), text);
-                            }
-                            let pos = self.state.module_detail_state.edit_content.cursor().position;
-                            client.hover(uri, pos.line as u32, pos.column as u32);
-                        } else {
-                            self.state.push_toast(crate::state::Toast::error(
-                                "clangd not found on PATH — hover unavailable.".to_string()
-                            ));
-                        }
+                    && let Some(m) = project.modules.iter().find(|m| m.name == module_name)
+                {
+                    if self.lsp_client.is_none() {
+                        self.lsp_client = crate::lsp::LspClient::spawn(&project.root);
                     }
+                    let uri = format!("file://{}", m.source.display());
+                    if let Some(client) = &self.lsp_client {
+                        if self.lsp_opened_modules.insert(module_name.clone()) {
+                            let text = std::fs::read_to_string(&m.source).unwrap_or_default();
+                            client.did_open(uri.clone(), text);
+                        }
+                        let pos = self
+                            .state
+                            .module_detail_state
+                            .edit_content
+                            .cursor()
+                            .position;
+                        client.hover(uri, pos.line as u32, pos.column as u32);
+                    } else {
+                        self.state.push_toast(crate::state::Toast::error(
+                            "clangd not found on PATH — hover unavailable.".to_string(),
+                        ));
+                    }
+                }
             }
 
             Message::DiagNavPrev => {
                 if !self.state.diagnostics.is_empty() {
-                    self.state.diag_nav_index = self.state.diag_nav_index
+                    self.state.diag_nav_index = self
+                        .state
+                        .diag_nav_index
                         .checked_sub(1)
                         .unwrap_or(self.state.diagnostics.len() - 1);
                     let target_diag = self.state.diagnostics[self.state.diag_nav_index].clone();
                     let module = std::path::Path::new(&target_diag.file)
-                        .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or(target_diag.file);
-                    return self.update(Message::DiagJumpTo { module, line: target_diag.line });
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or(target_diag.file);
+                    return self.update(Message::DiagJumpTo {
+                        module,
+                        line: target_diag.line,
+                    });
                 }
             }
 
             Message::DiagNavNext => {
                 if !self.state.diagnostics.is_empty() {
-                    self.state.diag_nav_index = (self.state.diag_nav_index + 1) % self.state.diagnostics.len();
+                    self.state.diag_nav_index =
+                        (self.state.diag_nav_index + 1) % self.state.diagnostics.len();
                     let target_diag = self.state.diagnostics[self.state.diag_nav_index].clone();
                     let module = std::path::Path::new(&target_diag.file)
-                        .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or(target_diag.file);
-                    return self.update(Message::DiagJumpTo { module, line: target_diag.line });
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or(target_diag.file);
+                    return self.update(Message::DiagJumpTo {
+                        module,
+                        line: target_diag.line,
+                    });
                 }
             }
 
@@ -1110,9 +1251,10 @@ impl NewcApp {
                 if v {
                     if self.state.library_state.draft.is_none()
                         && let Some(sel) = self.state.library_state.selected.clone()
-                            && let Some(f) = self.function_lib.all().iter().find(|f| f.name == sel) {
-                                self.state.library_state.draft = Some(f.clone());
-                            }
+                        && let Some(f) = self.function_lib.all().iter().find(|f| f.name == sel)
+                    {
+                        self.state.library_state.draft = Some(f.clone());
+                    }
                     if let Some(draft) = &self.state.library_state.draft {
                         self.state.library_state.header_editor =
                             iced::widget::text_editor::Content::with_text(&draft.header_code);
@@ -1133,8 +1275,10 @@ impl NewcApp {
                     self.state.library_state.draft = Some(draft);
                     self.state.library_state.selected = None;
                     self.state.library_state.edit_mode = true;
-                    self.state.library_state.header_editor = iced::widget::text_editor::Content::new();
-                    self.state.library_state.impl_editor = iced::widget::text_editor::Content::new();
+                    self.state.library_state.header_editor =
+                        iced::widget::text_editor::Content::new();
+                    self.state.library_state.impl_editor =
+                        iced::widget::text_editor::Content::new();
                 }
             }
             Message::LibraryGroupNew => {
@@ -1150,7 +1294,13 @@ impl NewcApp {
                         Signature => draft.signature = value,
                         Header => draft.header_code = value,
                         Impl => draft.impl_code = value,
-                        Tags => draft.tags = value.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                        Tags => {
+                            draft.tags = value
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect()
+                        }
                         Notes => draft.notes = value,
                     }
                 }
@@ -1170,7 +1320,9 @@ impl NewcApp {
                 }
             }
             Message::LibraryCopyCode(code) => {
-                self.state.push_toast(crate::state::Toast::success("Copied to clipboard.".to_string()));
+                self.state.push_toast(crate::state::Toast::success(
+                    "Copied to clipboard.".to_string(),
+                ));
                 return iced::clipboard::write(code);
             }
             Message::LibraryUpdateNotes { name, notes } => {
@@ -1188,15 +1340,25 @@ impl NewcApp {
             }
             Message::SnippetsSelect(sel) => self.state.snippets_selected = sel,
             Message::SnippetsCopy(code) => {
-                self.state.push_toast(crate::state::Toast::success("Copied to clipboard.".to_string()));
+                self.state.push_toast(crate::state::Toast::success(
+                    "Copied to clipboard.".to_string(),
+                ));
                 return iced::clipboard::write(code);
             }
 
             // Pane resize
-            Message::LibraryPaneResized(e) => { self.state.library_panes.resize(e.split, e.ratio); }
-            Message::CRefPaneResized(e) => { self.state.cref_panes.resize(e.split, e.ratio); }
-            Message::SnippetsPaneResized(e) => { self.state.snippets_panes.resize(e.split, e.ratio); }
-            Message::ModulePaneResized(e) => { self.state.module_panes.resize(e.split, e.ratio); }
+            Message::LibraryPaneResized(e) => {
+                self.state.library_panes.resize(e.split, e.ratio);
+            }
+            Message::CRefPaneResized(e) => {
+                self.state.cref_panes.resize(e.split, e.ratio);
+            }
+            Message::SnippetsPaneResized(e) => {
+                self.state.snippets_panes.resize(e.split, e.ratio);
+            }
+            Message::ModulePaneResized(e) => {
+                self.state.module_panes.resize(e.split, e.ratio);
+            }
 
             // Main builder
             Message::ComposerAddBlock(block) => {
@@ -1268,7 +1430,9 @@ impl NewcApp {
                     match &mut self.state.main_builder.blocks[parent] {
                         MainBlock::IfBlock { body, .. }
                         | MainBlock::WhileLoop { body, .. }
-                        | MainBlock::ForLoop { body, .. } => { body.push(block); }
+                        | MainBlock::ForLoop { body, .. } => {
+                            body.push(block);
+                        }
                         _ => {}
                     }
                     self.state.composer_undo.push(snap);
@@ -1284,7 +1448,10 @@ impl NewcApp {
                         MainBlock::IfBlock { body, .. }
                         | MainBlock::WhileLoop { body, .. }
                         | MainBlock::ForLoop { body, .. }
-                            if child < body.len() => { body.remove(child); }
+                            if child < body.len() =>
+                        {
+                            body.remove(child);
+                        }
                         _ => {}
                     }
                     self.state.composer_undo.push(snap);
@@ -1300,7 +1467,10 @@ impl NewcApp {
                         MainBlock::IfBlock { body, .. }
                         | MainBlock::WhileLoop { body, .. }
                         | MainBlock::ForLoop { body, .. }
-                            if child > 0 && child < body.len() => { body.swap(child, child - 1); }
+                            if child > 0 && child < body.len() =>
+                        {
+                            body.swap(child, child - 1);
+                        }
                         _ => {}
                     }
                     self.state.composer_undo.push(snap);
@@ -1316,7 +1486,10 @@ impl NewcApp {
                         MainBlock::IfBlock { body, .. }
                         | MainBlock::WhileLoop { body, .. }
                         | MainBlock::ForLoop { body, .. }
-                            if child + 1 < body.len() => { body.swap(child, child + 1); }
+                            if child + 1 < body.len() =>
+                        {
+                            body.swap(child, child + 1);
+                        }
                         _ => {}
                     }
                     self.state.composer_undo.push(snap);
@@ -1325,59 +1498,85 @@ impl NewcApp {
                 }
             }
             Message::ComposerToggleInclude(name) => {
-                if let Some(pos) = self.state.main_builder.includes.iter().position(|i| i == &name) {
+                if let Some(pos) = self
+                    .state
+                    .main_builder
+                    .includes
+                    .iter()
+                    .position(|i| i == &name)
+                {
                     self.state.main_builder.includes.remove(pos);
                 } else {
                     self.state.main_builder.includes.push(name);
                 }
             }
             Message::ComposerSelectBlock(block_index) => {
-                self.state.composer_selected = if self.state.composer_selected == Some(block_index) {
+                self.state.composer_selected = if self.state.composer_selected == Some(block_index)
+                {
                     None
                 } else {
                     Some(block_index)
                 };
             }
-            Message::ComposerEditField { block_index, field, value } => {
+            Message::ComposerEditField {
+                block_index,
+                field,
+                value,
+            } => {
                 use newc_core::main_builder::MainBlock;
                 if block_index < self.state.main_builder.blocks.len() {
                     let snap = self.state.main_builder.clone();
                     match &mut self.state.main_builder.blocks[block_index] {
-                        MainBlock::VarDecl { type_name, name, init, .. } => match field.as_str() {
+                        MainBlock::VarDecl {
+                            type_name,
+                            name,
+                            init,
+                            ..
+                        } => match field.as_str() {
                             "type" => *type_name = value,
                             "name" => *name = value,
                             "init" => *init = value,
                             _ => {}
                         },
-                        MainBlock::FunctionCall { func_name, args, assign_to, comment } => {
-                            match field.as_str() {
-                                "func_name" => *func_name = value,
-                                "args" => {
-                                    *args = if value.trim().is_empty() {
-                                        Vec::new()
-                                    } else {
-                                        value.split(',').map(|s| s.trim().to_string()).collect()
-                                    };
-                                }
-                                "assign_to" => *assign_to = value,
-                                "comment" => *comment = value,
-                                _ => {}
+                        MainBlock::FunctionCall {
+                            func_name,
+                            args,
+                            assign_to,
+                            comment,
+                        } => match field.as_str() {
+                            "func_name" => *func_name = value,
+                            "args" => {
+                                *args = if value.trim().is_empty() {
+                                    Vec::new()
+                                } else {
+                                    value.split(',').map(|s| s.trim().to_string()).collect()
+                                };
                             }
-                        }
+                            "assign_to" => *assign_to = value,
+                            "comment" => *comment = value,
+                            _ => {}
+                        },
                         MainBlock::IfBlock { condition, .. } => {
-                            if field == "condition" { *condition = value; }
+                            if field == "condition" {
+                                *condition = value;
+                            }
                         }
                         MainBlock::WhileLoop { condition, .. } => {
-                            if field == "condition" { *condition = value; }
-                        }
-                        MainBlock::ForLoop { init, condition, increment, .. } => {
-                            match field.as_str() {
-                                "init" => *init = value,
-                                "condition" => *condition = value,
-                                "increment" => *increment = value,
-                                _ => {}
+                            if field == "condition" {
+                                *condition = value;
                             }
                         }
+                        MainBlock::ForLoop {
+                            init,
+                            condition,
+                            increment,
+                            ..
+                        } => match field.as_str() {
+                            "init" => *init = value,
+                            "condition" => *condition = value,
+                            "increment" => *increment = value,
+                            _ => {}
+                        },
                         MainBlock::Comment(c) => *c = value,
                         MainBlock::RawCode(c) => *c = value,
                         MainBlock::BlankLine => {}
@@ -1408,25 +1607,35 @@ impl NewcApp {
             Message::ModuleEditMode(v) => {
                 if v {
                     // load current function body into edit buffer
-                    if let Some(selected_function_name) = &self.state.module_detail_state.selected_func.clone()
-                        && let View::ModuleDetail { project, module_name } = &self.state.view.clone()
-                            && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
-                                && let Ok(src) = std::fs::read_to_string(&m.source) {
-                                    let funcs = newc_core::sync::extract_function_implementations(&src);
-                                    if let Some(f) = funcs.iter().find(|f| &f.name == selected_function_name) {
-                                        self.state.module_detail_state.edit_content = iced::widget::text_editor::Content::with_text(&f.body);
-                                    }
-                                }
+                    if let Some(selected_function_name) =
+                        &self.state.module_detail_state.selected_func.clone()
+                        && let View::ModuleDetail {
+                            project,
+                            module_name,
+                        } = &self.state.view.clone()
+                        && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
+                        && let Ok(src) = std::fs::read_to_string(&m.source)
+                    {
+                        let funcs = newc_core::sync::extract_function_implementations(&src);
+                        if let Some(f) = funcs.iter().find(|f| &f.name == selected_function_name) {
+                            self.state.module_detail_state.edit_content =
+                                iced::widget::text_editor::Content::with_text(&f.body);
+                        }
+                    }
                 }
                 self.state.module_detail_state.edit_mode = v;
             }
             Message::ModuleSaveFunc { name, new_impl } => {
-                if let View::ModuleDetail { project, module_name } = &self.state.view.clone()
-                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
-                        let _ = newc_core::sync::update_function_in_source(&m.source, &name, &new_impl);
-                        self.state.module_detail_state.edit_mode = false;
-                        self.state.set_status(format!("Saved '{name}'."));
-                    }
+                if let View::ModuleDetail {
+                    project,
+                    module_name,
+                } = &self.state.view.clone()
+                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
+                {
+                    let _ = newc_core::sync::update_function_in_source(&m.source, &name, &new_impl);
+                    self.state.module_detail_state.edit_mode = false;
+                    self.state.set_status(format!("Saved '{name}'."));
+                }
             }
             Message::ModuleDeleteFunc(name) => {
                 if name.is_empty() {
@@ -1436,25 +1645,40 @@ impl NewcApp {
                 }
             }
             Message::ModuleDeleteFuncConfirm => {
-                if let Some(function_to_delete) = self.state.module_detail_state.delete_func_confirm.take()
-                    && let View::ModuleDetail { project, module_name } = &self.state.view.clone()
-                        && let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
-                            match newc_core::analysis::remove_function_from_source_pub(&m.source, &function_to_delete) {
-                                Ok(_) => {
-                                    let _ = newc_core::sync::sync_module(&project.root, module_name);
-                                    self.state.module_detail_state.selected_func = None;
-                                    self.state.push_toast(crate::state::Toast::success(
-                                        format!("Deleted '{function_to_delete}'.")
-                                    ));
-                                }
-                                Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
-                            }
+                if let Some(function_to_delete) =
+                    self.state.module_detail_state.delete_func_confirm.take()
+                    && let View::ModuleDetail {
+                        project,
+                        module_name,
+                    } = &self.state.view.clone()
+                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
+                {
+                    match newc_core::analysis::remove_function_from_source_pub(
+                        &m.source,
+                        &function_to_delete,
+                    ) {
+                        Ok(_) => {
+                            let _ = newc_core::sync::sync_module(&project.root, module_name);
+                            self.state.module_detail_state.selected_func = None;
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Deleted '{function_to_delete}'."
+                            )));
                         }
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
             }
             Message::ModuleRunCheck => {
-                if let View::ModuleDetail { project, module_name: _ } = &self.state.view.clone() {
+                if let View::ModuleDetail {
+                    project,
+                    module_name: _,
+                } = &self.state.view.clone()
+                {
                     let funcs = newc_core::analysis::check(&project.root).unwrap_or_default();
-                    self.state.module_detail_state.unreachable_funcs = funcs.into_iter().map(|f| f.name).collect();
+                    self.state.module_detail_state.unreachable_funcs =
+                        funcs.into_iter().map(|f| f.name).collect();
                     self.state.module_detail_state.check_ran = true;
                 }
             }
@@ -1473,33 +1697,48 @@ impl NewcApp {
                     self.state.pending_library_insert_module.take(),
                     self.state.library_state.selected.clone(),
                 ) {
-                    let func = self.function_lib.all().iter().find(|f| f.name == sel).cloned();
+                    let func = self
+                        .function_lib
+                        .all()
+                        .iter()
+                        .find(|f| f.name == sel)
+                        .cloned();
                     if let Some(f) = func
                         && let Some(project) = self.state.current_project().cloned()
-                            && let Some(m) = project.modules.iter().find(|m| m.name == module_name) {
-                                let mut src = std::fs::read_to_string(&m.source).unwrap_or_default();
-                                if !src.ends_with('\n') { src.push('\n'); }
-                                src.push('\n');
-                                src.push_str(f.impl_code.trim_end());
-                                src.push('\n');
-                                match std::fs::write(&m.source, &src) {
-                                    Ok(_) => {
-                                        let _ = newc_core::sync::sync_module(&project.root, &module_name);
-                                        self.state.push_toast(crate::state::Toast::success(
-                                            format!("Inserted '{}' into {module_name}.", f.name)
-                                        ));
-                                        self.state.view = View::ModuleDetail {
-                                            project,
-                                            module_name,
-                                        };
-                                    }
-                                    Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
-                                }
+                        && let Some(m) = project.modules.iter().find(|m| m.name == module_name)
+                    {
+                        let mut src = std::fs::read_to_string(&m.source).unwrap_or_default();
+                        if !src.ends_with('\n') {
+                            src.push('\n');
+                        }
+                        src.push('\n');
+                        src.push_str(f.impl_code.trim_end());
+                        src.push('\n');
+                        match std::fs::write(&m.source, &src) {
+                            Ok(_) => {
+                                let _ = newc_core::sync::sync_module(&project.root, &module_name);
+                                self.state.push_toast(crate::state::Toast::success(format!(
+                                    "Inserted '{}' into {module_name}.",
+                                    f.name
+                                )));
+                                self.state.view = View::ModuleDetail {
+                                    project,
+                                    module_name,
+                                };
                             }
+                            Err(e) => self
+                                .state
+                                .push_toast(crate::state::Toast::error(e.to_string())),
+                        }
+                    }
                 }
             }
             Message::ModuleSyncNow => {
-                if let View::ModuleDetail { project, module_name } = &self.state.view.clone() {
+                if let View::ModuleDetail {
+                    project,
+                    module_name,
+                } = &self.state.view.clone()
+                {
                     let _ = newc_core::sync::sync_module(&project.root, module_name);
                     self.state.set_status(format!("Synced {module_name}.h"));
                 }
@@ -1517,20 +1756,28 @@ impl NewcApp {
                     let result = match terminal.as_str() {
                         "alacritty" | "xterm" | "urxvt" => std::process::Command::new(&terminal)
                             .args(["-e", "gdb", &binary])
-                            .current_dir(&root).spawn(),
+                            .current_dir(&root)
+                            .spawn(),
                         "gnome-terminal" => std::process::Command::new(&terminal)
                             .args(["--", "gdb", &binary])
-                            .current_dir(&root).spawn(),
+                            .current_dir(&root)
+                            .spawn(),
                         "wezterm" => std::process::Command::new(&terminal)
                             .args(["start", "--", "gdb", &binary])
-                            .current_dir(&root).spawn(),
+                            .current_dir(&root)
+                            .spawn(),
                         _ => std::process::Command::new(&terminal)
                             .args(["gdb", &binary])
-                            .current_dir(&root).spawn(),
+                            .current_dir(&root)
+                            .spawn(),
                     };
                     match result {
-                        Ok(_) => self.state.push_toast(crate::state::Toast::info(format!("Launched: {terminal} {gdb_cmd}"))),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(format!("Failed to launch debugger: {e}"))),
+                        Ok(_) => self.state.push_toast(crate::state::Toast::info(format!(
+                            "Launched: {terminal} {gdb_cmd}"
+                        ))),
+                        Err(e) => self.state.push_toast(crate::state::Toast::error(format!(
+                            "Failed to launch debugger: {e}"
+                        ))),
                     }
                 }
             }
@@ -1549,21 +1796,26 @@ impl NewcApp {
                 self.state.show_rename_modal = false;
                 let old = self.state.rename_func_old.clone();
                 let new = self.state.rename_func_input.trim().to_string();
-                if !new.is_empty() && old != new
-                    && let Some(project) = self.state.current_project().cloned() {
-                        match newc_core::refactor::rename_function(&project.root, &old, &new) {
-                            Ok(n) => {
-                                if let View::ModuleDetail { module_name, .. } = &self.state.view.clone() {
-                                    let _ = newc_core::sync::sync_module(&project.root, module_name);
-                                }
-                                self.state.module_detail_state.selected_func = Some(new.clone());
-                                self.state.push_toast(crate::state::Toast::success(
-                                    format!("Renamed '{old}' → '{new}' in {n} file(s).")
-                                ));
+                if !new.is_empty()
+                    && old != new
+                    && let Some(project) = self.state.current_project().cloned()
+                {
+                    match newc_core::refactor::rename_function(&project.root, &old, &new) {
+                        Ok(n) => {
+                            if let View::ModuleDetail { module_name, .. } = &self.state.view.clone()
+                            {
+                                let _ = newc_core::sync::sync_module(&project.root, module_name);
                             }
-                            Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                            self.state.module_detail_state.selected_func = Some(new.clone());
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Renamed '{old}' → '{new}' in {n} file(s)."
+                            )));
                         }
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
+                }
             }
 
             Message::ModuleMoveStart(name) => {
@@ -1580,69 +1832,114 @@ impl NewcApp {
                 self.state.show_move_modal = false;
                 let move_function_name = self.state.move_func_name.clone();
                 let target = self.state.move_func_target_input.trim().to_string();
-                if !move_function_name.is_empty() && !target.is_empty()
-                    && let View::ModuleDetail { project, module_name } = &self.state.view.clone()
-                        && target != *module_name {
-                            match newc_core::refactor::move_function(&project.root, module_name, &target, &move_function_name) {
-                                Ok(_) => {
-                                    self.state.module_detail_state.selected_func = None;
-                                    self.state.push_toast(crate::state::Toast::success(
-                                        format!("Moved '{move_function_name}' → {target}.")
-                                    ));
-                                }
-                                Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
-                            }
+                if !move_function_name.is_empty()
+                    && !target.is_empty()
+                    && let View::ModuleDetail {
+                        project,
+                        module_name,
+                    } = &self.state.view.clone()
+                    && target != *module_name
+                {
+                    match newc_core::refactor::move_function(
+                        &project.root,
+                        module_name,
+                        &target,
+                        &move_function_name,
+                    ) {
+                        Ok(_) => {
+                            self.state.module_detail_state.selected_func = None;
+                            self.state.push_toast(crate::state::Toast::success(format!(
+                                "Moved '{move_function_name}' → {target}."
+                            )));
                         }
-            }
-
-            Message::ModuleGenerateDoc(function_name) => {
-                if let View::ModuleDetail { project, module_name } = &self.state.view.clone() {
-                    match newc_core::doc::insert_stub(&project.root, module_name, &function_name) {
-                        Ok(()) => self.state.push_toast(crate::state::Toast::success(
-                            format!("Inserted doc stub for '{function_name}'.")
-                        )),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
 
-            Message::LintQuickFix { module, function, line_no, code } => {
+            Message::ModuleGenerateDoc(function_name) => {
+                if let View::ModuleDetail {
+                    project,
+                    module_name,
+                } = &self.state.view.clone()
+                {
+                    match newc_core::doc::insert_stub(&project.root, module_name, &function_name) {
+                        Ok(()) => self.state.push_toast(crate::state::Toast::success(format!(
+                            "Inserted doc stub for '{function_name}'."
+                        ))),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
+                    }
+                }
+            }
+
+            Message::LintQuickFix {
+                module,
+                function,
+                line_no,
+                code,
+            } => {
                 if let Some(project) = self.state.current_project() {
-                    match newc_core::lint::apply_fix_in_function(&project.root, &module, &function, line_no, &code) {
-                        Ok(()) => self.state.push_toast(crate::state::Toast::success(
-                            format!("Applied {code} fix.")
-                        )),
-                        Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    match newc_core::lint::apply_fix_in_function(
+                        &project.root,
+                        &module,
+                        &function,
+                        line_no,
+                        &code,
+                    ) {
+                        Ok(()) => self.state.push_toast(crate::state::Toast::success(format!(
+                            "Applied {code} fix."
+                        ))),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(e.to_string())),
                     }
                 }
             }
 
             Message::ModuleClangFormat => {
-                if let View::ModuleDetail { project, module_name } = &self.state.view.clone()
-                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
-                        let style = self.state.config.clang_format_style.clone();
-                        let result = std::process::Command::new("clang-format")
-                            .arg(format!("--style={style}"))
-                            .arg("-i")
-                            .arg(&m.source)
-                            .status();
-                        match result {
-                            Ok(s) if s.success() => self.state.push_toast(crate::state::Toast::success("clang-format applied.".to_string())),
-                            Ok(_) => self.state.push_toast(crate::state::Toast::error("clang-format returned non-zero.".to_string())),
-                            Err(e) => self.state.push_toast(crate::state::Toast::error(format!("clang-format: {e}"))),
-                        }
+                if let View::ModuleDetail {
+                    project,
+                    module_name,
+                } = &self.state.view.clone()
+                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
+                {
+                    let style = self.state.config.clang_format_style.clone();
+                    let result = std::process::Command::new("clang-format")
+                        .arg(format!("--style={style}"))
+                        .arg("-i")
+                        .arg(&m.source)
+                        .status();
+                    match result {
+                        Ok(s) if s.success() => self.state.push_toast(
+                            crate::state::Toast::success("clang-format applied.".to_string()),
+                        ),
+                        Ok(_) => self.state.push_toast(crate::state::Toast::error(
+                            "clang-format returned non-zero.".to_string(),
+                        )),
+                        Err(e) => self
+                            .state
+                            .push_toast(crate::state::Toast::error(format!("clang-format: {e}"))),
                     }
+                }
             }
 
             // Header
             Message::HeaderSave => {
-                if let View::HeaderEditor { project, module_name } = &self.state.view.clone()
-                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name) {
-                        let content = self.state.header_editor_state.te_content.text();
-                        let _ = newc_core::header::write_ignore_block(&m.header, &content);
-                        self.state.header_editor_state.dirty = false;
-                        self.state.set_status("Header saved.");
-                    }
+                if let View::HeaderEditor {
+                    project,
+                    module_name,
+                } = &self.state.view.clone()
+                    && let Some(m) = project.modules.iter().find(|m| &m.name == module_name)
+                {
+                    let content = self.state.header_editor_state.te_content.text();
+                    let _ = newc_core::header::write_ignore_block(&m.header, &content);
+                    self.state.header_editor_state.dirty = false;
+                    self.state.set_status("Header saved.");
+                }
             }
             Message::HeaderEditorAction(action) => {
                 self.state.header_editor_state.te_content.perform(action);
@@ -1657,9 +1954,17 @@ impl NewcApp {
             Message::ImportTargetModule(s) => self.state.import_state.target_module = s,
             Message::ImportToggleFunc(i) => {
                 if i == usize::MAX {
-                    self.state.import_state.selected.iter_mut().for_each(|s| *s = true);
+                    self.state
+                        .import_state
+                        .selected
+                        .iter_mut()
+                        .for_each(|s| *s = true);
                 } else if i == usize::MAX - 1 {
-                    self.state.import_state.selected.iter_mut().for_each(|s| *s = false);
+                    self.state
+                        .import_state
+                        .selected
+                        .iter_mut()
+                        .for_each(|s| *s = false);
                 } else if let Some(s) = self.state.import_state.selected.get_mut(i) {
                     *s = !*s;
                 }
@@ -1707,9 +2012,10 @@ impl NewcApp {
             }
             Message::StatusTick => {
                 if let Some((_, t)) = &self.state.status
-                    && t.elapsed().as_secs() >= 4 {
-                        self.state.status = None;
-                    }
+                    && t.elapsed().as_secs() >= 4
+                {
+                    self.state.status = None;
+                }
             }
             Message::ToastTick => {
                 for toast in &mut self.state.toasts {
@@ -1749,15 +2055,20 @@ impl NewcApp {
                         std::fs::write(&path, svg).map(|_| path)
                     }
                     _ => {
-                        self.state.push_toast(crate::state::Toast::info("Export only available in graph views."));
+                        self.state.push_toast(crate::state::Toast::info(
+                            "Export only available in graph views.",
+                        ));
                         return Task::none();
                     }
                 };
                 match result {
-                    Ok(path) => self.state.push_toast(crate::state::Toast::success(
-                        format!("SVG → {}", path.display())
-                    )),
-                    Err(e) => self.state.push_toast(crate::state::Toast::error(e.to_string())),
+                    Ok(path) => self.state.push_toast(crate::state::Toast::success(format!(
+                        "SVG → {}",
+                        path.display()
+                    ))),
+                    Err(e) => self
+                        .state
+                        .push_toast(crate::state::Toast::error(e.to_string())),
                 }
             }
 
@@ -1802,15 +2113,27 @@ impl NewcApp {
                 return task.discard();
             }
             Message::WindowClosed(id) => {
-                if self.state.library_window == Some(id) { self.state.library_window = None; }
-                if self.state.cref_window    == Some(id) { self.state.cref_window    = None; }
-                if self.state.snippets_window== Some(id) { self.state.snippets_window= None; }
+                if self.state.library_window == Some(id) {
+                    self.state.library_window = None;
+                }
+                if self.state.cref_window == Some(id) {
+                    self.state.cref_window = None;
+                }
+                if self.state.snippets_window == Some(id) {
+                    self.state.snippets_window = None;
+                }
                 if self.state.main_window == Some(id) {
                     // Persist window size + pane splits for next launch
                     let ratios = &mut self.state.config.pane_ratios;
-                    ratios.insert("library".into(), pane_split_ratios(&self.state.library_panes));
+                    ratios.insert(
+                        "library".into(),
+                        pane_split_ratios(&self.state.library_panes),
+                    );
                     ratios.insert("cref".into(), pane_split_ratios(&self.state.cref_panes));
-                    ratios.insert("snippets".into(), pane_split_ratios(&self.state.snippets_panes));
+                    ratios.insert(
+                        "snippets".into(),
+                        pane_split_ratios(&self.state.snippets_panes),
+                    );
                     ratios.insert("module".into(), pane_split_ratios(&self.state.module_panes));
                     let _ = self.state.config.save();
                 }
@@ -1866,15 +2189,24 @@ impl NewcApp {
     pub fn view_for_window(&self, window: iced::window::Id) -> Element<'_, Message> {
         if Some(window) == self.state.library_window {
             return container(views::library::view(&self.state, &self.function_lib))
-                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(th::panel_style)
+                .into();
         }
         if Some(window) == self.state.cref_window {
             return container(views::cref::view(&self.state))
-                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(th::panel_style)
+                .into();
         }
         if Some(window) == self.state.snippets_window {
             return container(views::snippets::view(&self.state))
-                .width(Length::Fill).height(Length::Fill).style(th::panel_style).into();
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(th::panel_style)
+                .into();
         }
         self.view_main()
     }
@@ -1898,7 +2230,9 @@ impl NewcApp {
                 column![
                     text("Error").size(16).color(th::color::red()),
                     text(err_clone),
-                    button(text("Dismiss")).on_press(Message::ErrorDismiss).style(th::btn_secondary),
+                    button(text("Dismiss"))
+                        .on_press(Message::ErrorDismiss)
+                        .style(th::btn_secondary),
                 ]
                 .spacing(8)
                 .padding(20),
@@ -1906,11 +2240,7 @@ impl NewcApp {
             .style(th::card_raised_style)
             .max_width(520);
             let panel = container(card).center(Length::Fill);
-            central = Stack::new()
-                .push(central)
-                .push(backdrop)
-                .push(panel)
-                .into();
+            central = Stack::new().push(central).push(backdrop).push(panel).into();
         }
 
         // Overlay: shortcuts (Stack over existing content with semi-transparent backdrop)
@@ -1926,11 +2256,7 @@ impl NewcApp {
                 .max_width(520)
                 .width(Length::Shrink)
                 .center(Length::Fill);
-            central = Stack::new()
-                .push(central)
-                .push(backdrop)
-                .push(panel)
-                .into();
+            central = Stack::new().push(central).push(backdrop).push(panel).into();
         }
 
         // Overlay: quick search (Stack over existing content with semi-transparent backdrop)
@@ -1946,11 +2272,7 @@ impl NewcApp {
                 .max_width(560)
                 .width(Length::Shrink)
                 .center(Length::Fill);
-            central = Stack::new()
-                .push(central)
-                .push(backdrop)
-                .push(panel)
-                .into();
+            central = Stack::new().push(central).push(backdrop).push(panel).into();
         }
 
         let content = row![sidebar, central]
@@ -1973,7 +2295,10 @@ impl NewcApp {
             return main_col;
         }
 
-        let toast_widgets: Vec<Element<Message>> = self.state.toasts.iter()
+        let toast_widgets: Vec<Element<Message>> = self
+            .state
+            .toasts
+            .iter()
             .rev() // newest on bottom
             .map(|t| {
                 container(
@@ -1985,7 +2310,7 @@ impl NewcApp {
                             .on_press(Message::ToastDismiss(t.id)),
                     ]
                     .spacing(8)
-                    .align_y(Alignment::Center)
+                    .align_y(Alignment::Center),
                 )
                 .style(|_| th::toast_style(&t.kind))
                 .padding([8, 12])
@@ -1994,20 +2319,20 @@ impl NewcApp {
             })
             .collect();
 
-        let toast_overlay: Element<Message> = container(
-            column(toast_widgets).spacing(6)
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .align_x(iced::alignment::Horizontal::Right)
-        .align_y(iced::alignment::Vertical::Bottom)
-        .padding(iced::Padding { top: 0.0, right: 16.0, bottom: 52.0, left: 0.0 })
-        .into();
+        let toast_overlay: Element<Message> = container(column(toast_widgets).spacing(6))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(iced::alignment::Horizontal::Right)
+            .align_y(iced::alignment::Vertical::Bottom)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: 16.0,
+                bottom: 52.0,
+                left: 0.0,
+            })
+            .into();
 
-        Stack::new()
-            .push(main_col)
-            .push(toast_overlay)
-            .into()
+        Stack::new().push(main_col).push(toast_overlay).into()
     }
 
     /// Build the active [`Subscription`] set.
@@ -2025,25 +2350,18 @@ impl NewcApp {
         // Live build output: poll runner every 50ms while building
         if matches!(self.state.build_state, BuildState::Running) {
             subs.push(
-                iced::time::every(Duration::from_millis(50))
-                    .map(|_| Message::PollBuildOutput),
+                iced::time::every(Duration::from_millis(50)).map(|_| Message::PollBuildOutput),
             );
         }
 
         // Status auto-clear: tick every second
         if self.state.status.is_some() {
-            subs.push(
-                iced::time::every(Duration::from_secs(1))
-                    .map(|_| Message::StatusTick),
-            );
+            subs.push(iced::time::every(Duration::from_secs(1)).map(|_| Message::StatusTick));
         }
 
         // Toast auto-dismiss: tick every 100ms when toasts active
         if !self.state.toasts.is_empty() {
-            subs.push(
-                iced::time::every(Duration::from_millis(100))
-                    .map(|_| Message::ToastTick),
-            );
+            subs.push(iced::time::every(Duration::from_millis(100)).map(|_| Message::ToastTick));
         }
 
         // File watcher — watch current project root for external changes
@@ -2059,21 +2377,37 @@ impl NewcApp {
 
         // Global keyboard shortcuts
         subs.push(iced::event::listen_with(|event, _status, _window| {
-            if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) = event {
+            if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                key, modifiers, ..
+            }) = event
+            {
                 if key.as_ref() == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
                     return Some(Message::EscapePressed);
                 }
                 match (modifiers.control(), modifiers.shift(), key.as_ref()) {
-                    (true, false, iced::keyboard::Key::Character("s")) => Some(Message::SaveShortcut),
-                    (true, _, iced::keyboard::Key::Character("b")) => Some(Message::BuildStart("all".into())),
+                    (true, false, iced::keyboard::Key::Character("s")) => {
+                        Some(Message::SaveShortcut)
+                    }
+                    (true, _, iced::keyboard::Key::Character("b")) => {
+                        Some(Message::BuildStart("all".into()))
+                    }
                     (true, _, iced::keyboard::Key::Character("r")) => Some(Message::RefreshProject),
-                    (true, true, iced::keyboard::Key::Character("z")) => Some(Message::ComposerRedo),
-                    (true, false, iced::keyboard::Key::Character("z")) => Some(Message::ComposerUndo),
+                    (true, true, iced::keyboard::Key::Character("z")) => {
+                        Some(Message::ComposerRedo)
+                    }
+                    (true, false, iced::keyboard::Key::Character("z")) => {
+                        Some(Message::ComposerUndo)
+                    }
                     (true, _, iced::keyboard::Key::Character("y")) => Some(Message::ComposerRedo),
-                    (true, false, iced::keyboard::Key::Character("p")) => Some(Message::QuickSearchToggle),
+                    (true, false, iced::keyboard::Key::Character("p")) => {
+                        Some(Message::QuickSearchToggle)
+                    }
                     _ => {
                         if let iced::keyboard::Key::Character(c) = key.as_ref()
-                            && c == "?" { return Some(Message::ShowShortcuts(true)); }
+                            && c == "?"
+                        {
+                            return Some(Message::ShowShortcuts(true));
+                        }
                         None
                     }
                 }
@@ -2095,15 +2429,20 @@ impl NewcApp {
 impl NewcApp {
     fn drain_lsp_hover(&mut self) {
         if let Some(client) = &self.lsp_client
-            && let Some(result) = client.try_recv_hover() {
-                self.state.module_detail_state.hover_text = Some(result.text);
-            }
+            && let Some(result) = client.try_recv_hover()
+        {
+            self.state.module_detail_state.hover_text = Some(result.text);
+        }
     }
 
     fn drain_build_output(&mut self) {
         let mut new_stderr_lines: Vec<String> = Vec::new();
         for line in self.runner.drain() {
-            if let LineKind::Done { exit_code, duration_ms } = line.kind {
+            if let LineKind::Done {
+                exit_code,
+                duration_ms,
+            } = line.kind
+            {
                 self.state.build_state = BuildState::Done { exit_code };
                 if let Some(project) = self.state.current_project() {
                     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -2120,10 +2459,12 @@ impl NewcApp {
                 self.state.diagnostics = diag::parse(&new_stderr_lines);
                 self.state.diag_nav_index = 0;
                 if self.state.build_target_current == "valgrind-xml"
-                    && let Some(project) = self.state.current_project() {
-                        let xml = std::fs::read_to_string(project.root.join("vg.xml")).unwrap_or_default();
-                        self.state.valgrind_errors = newc_core::valgrind::parse(&xml);
-                    }
+                    && let Some(project) = self.state.current_project()
+                {
+                    let xml =
+                        std::fs::read_to_string(project.root.join("vg.xml")).unwrap_or_default();
+                    self.state.valgrind_errors = newc_core::valgrind::parse(&xml);
+                }
                 self.state.build_lines.push(line);
             } else {
                 if matches!(line.kind, LineKind::Stderr) {
@@ -2155,7 +2496,8 @@ impl NewcApp {
                 self.state.notes_dirty = false;
                 // Load per-project config overrides
                 self.state.project_config = newc_core::config::ProjectConfig::load_from(&p.root);
-                self.state.project_config_draft = self.state.project_config.clone().unwrap_or_default();
+                self.state.project_config_draft =
+                    self.state.project_config.clone().unwrap_or_default();
                 self.state.view = View::ProjectDetail(p);
             }
             Err(e) => self.state.set_error(e.to_string()),
@@ -2173,22 +2515,43 @@ impl NewcApp {
         let root = parent.join(&name);
 
         let mut modules = Vec::new();
-        if self.state.create_include_input { modules.push(DefaultModule::Input); }
-        if self.state.create_include_math { modules.push(DefaultModule::Math); }
-        if self.state.create_include_display { modules.push(DefaultModule::Display); }
-        if self.state.create_include_array { modules.push(DefaultModule::Array); }
-        if self.state.create_include_strings { modules.push(DefaultModule::Strings); }
-        if self.state.create_include_linked_list { modules.push(DefaultModule::LinkedList); }
-        if self.state.create_include_files { modules.push(DefaultModule::Files); }
-        if self.state.create_include_test_utils { modules.push(DefaultModule::TestUtils); }
-        if self.state.create_use_unity { modules.push(DefaultModule::UnityTest); }
+        if self.state.create_include_input {
+            modules.push(DefaultModule::Input);
+        }
+        if self.state.create_include_math {
+            modules.push(DefaultModule::Math);
+        }
+        if self.state.create_include_display {
+            modules.push(DefaultModule::Display);
+        }
+        if self.state.create_include_array {
+            modules.push(DefaultModule::Array);
+        }
+        if self.state.create_include_strings {
+            modules.push(DefaultModule::Strings);
+        }
+        if self.state.create_include_linked_list {
+            modules.push(DefaultModule::LinkedList);
+        }
+        if self.state.create_include_files {
+            modules.push(DefaultModule::Files);
+        }
+        if self.state.create_include_test_utils {
+            modules.push(DefaultModule::TestUtils);
+        }
+        if self.state.create_use_unity {
+            modules.push(DefaultModule::UnityTest);
+        }
 
         let build_system = if self.state.create_use_cmake {
             newc_core::project::BuildSystem::CMake
         } else {
             newc_core::project::BuildSystem::Make
         };
-        let license = self.state.create_license.as_deref()
+        let license = self
+            .state
+            .create_license
+            .as_deref()
             .and_then(newc_core::license::License::from_spdx_id);
         let opts = ScaffoldOptions {
             name: name.clone(),
@@ -2213,29 +2576,51 @@ impl NewcApp {
 
     fn top_bar(&self) -> Element<'_, Message> {
         // Nav button: highlighted if current view matches
-        let is_home     = matches!(self.state.view, View::Home);
-        let is_create   = matches!(self.state.view, View::CreateProject);
-        let is_lib      = matches!(self.state.view, View::FunctionLibrary);
-        let is_cref     = matches!(self.state.view, View::CReference);
-        let is_snip     = matches!(self.state.view, View::Snippets);
+        let is_home = matches!(self.state.view, View::Home);
+        let is_create = matches!(self.state.view, View::CreateProject);
+        let is_lib = matches!(self.state.view, View::FunctionLibrary);
+        let is_cref = matches!(self.state.view, View::CReference);
+        let is_snip = matches!(self.state.view, View::Snippets);
         let is_settings = matches!(self.state.view, View::Settings);
 
         let nav = |label: &'static str, active: bool, msg: Message| -> Element<'_, Message> {
             button(text(label).size(13))
-                .style(if active { th::btn_nav_active } else { th::btn_nav_inactive })
+                .style(if active {
+                    th::btn_nav_active
+                } else {
+                    th::btn_nav_inactive
+                })
                 .on_press(msg)
                 .into()
         };
 
-        let err_count  = self.state.diagnostics.iter().filter(|d| d.is_error()).count();
-        let warn_count = self.state.diagnostics.iter().filter(|d| d.kind == diag::DiagKind::Warning).count();
+        let err_count = self
+            .state
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .count();
+        let warn_count = self
+            .state
+            .diagnostics
+            .iter()
+            .filter(|d| d.kind == diag::DiagKind::Warning)
+            .count();
         let base_build_label = match &self.state.build_state {
-            BuildState::Idle    => if self.state.build_panel_open { "▼ Build" } else { "▶ Build" },
+            BuildState::Idle => {
+                if self.state.build_panel_open {
+                    "▼ Build"
+                } else {
+                    "▶ Build"
+                }
+            }
             BuildState::Running => "⟳ Building",
             BuildState::Done { exit_code: Some(0) } => "✓ Build",
             BuildState::Done { .. } => "✗ Build",
         };
-        let build_label = if matches!(self.state.build_state, BuildState::Done { .. }) && (err_count > 0 || warn_count > 0) {
+        let build_label = if matches!(self.state.build_state, BuildState::Done { .. })
+            && (err_count > 0 || warn_count > 0)
+        {
             format!("{base_build_label}  {err_count}E {warn_count}W")
         } else {
             base_build_label.to_string()
@@ -2250,11 +2635,11 @@ impl NewcApp {
         let bar = row![
             text("newc").size(15).color(th::color::accent()),
             Space::new().width(8),
-            nav("Home",     is_home,     Message::Navigate(View::Home)),
-            nav("New",      is_create,   Message::Navigate(View::CreateProject)),
-            nav("Library",  is_lib,      Message::Navigate(View::FunctionLibrary)),
-            nav("CRef",     is_cref,     Message::Navigate(View::CReference)),
-            nav("Snippets", is_snip,     Message::Navigate(View::Snippets)),
+            nav("Home", is_home, Message::Navigate(View::Home)),
+            nav("New", is_create, Message::Navigate(View::CreateProject)),
+            nav("Library", is_lib, Message::Navigate(View::FunctionLibrary)),
+            nav("CRef", is_cref, Message::Navigate(View::CReference)),
+            nav("Snippets", is_snip, Message::Navigate(View::Snippets)),
             nav("Settings", is_settings, Message::Navigate(View::Settings)),
             Space::new().width(Length::Fill),
             button(text(build_label).size(12).color(build_color))
@@ -2276,25 +2661,41 @@ impl NewcApp {
     fn status_bar(&self) -> Element<'_, Message> {
         use newc_core::git;
 
-        let project_name = self.state.current_project()
+        let project_name = self
+            .state
+            .current_project()
             .map(|p| p.name.as_str())
             .unwrap_or("—");
 
-        let git_branch = self.state.current_project()
+        let git_branch = self
+            .state
+            .current_project()
             .map(|p| git::current_branch(&p.root))
             .unwrap_or_default();
-        let branch_str = if git_branch.is_empty() { String::new() } else { format!(" ⎇ {git_branch}") };
+        let branch_str = if git_branch.is_empty() {
+            String::new()
+        } else {
+            format!(" ⎇ {git_branch}")
+        };
 
-        let status_msg = if let Some((s, _)) = &self.state.status { s.as_str() } else { "" };
+        let status_msg = if let Some((s, _)) = &self.state.status {
+            s.as_str()
+        } else {
+            ""
+        };
 
         column![
             th::separator(),
             container(
                 row![
-                    text(format!("◆ {project_name}{branch_str}")).size(11).color(th::color::green()),
+                    text(format!("◆ {project_name}{branch_str}"))
+                        .size(11)
+                        .color(th::color::green()),
                     Space::new().width(Length::Fill),
                     text(status_msg).size(11).color(th::color::text_dim()),
-                    text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(10).color(th::color::text_hint()),
+                    text(format!("v{}", env!("CARGO_PKG_VERSION")))
+                        .size(10)
+                        .color(th::color::text_hint()),
                 ]
                 .spacing(12)
                 .align_y(Alignment::Center)
@@ -2309,10 +2710,15 @@ impl NewcApp {
 
     fn sidebar(&self) -> Element<'_, Message> {
         let is_current = |root: &std::path::PathBuf| {
-            self.state.current_project().map(|p| &p.root == root).unwrap_or(false)
+            self.state
+                .current_project()
+                .map(|p| &p.root == root)
+                .unwrap_or(false)
         };
 
-        let projects: Vec<Element<Message>> = self.state.known_projects
+        let projects: Vec<Element<Message>> = self
+            .state
+            .known_projects
             .iter()
             .filter_map(|p| Some((p.clone(), Project::open(p.clone()).ok()?)))
             .map(|(root, p)| {
@@ -2322,7 +2728,8 @@ impl NewcApp {
                 } else {
                     p.name.clone()
                 };
-                let path_short = root.file_name()
+                let path_short = root
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_string();
@@ -2330,14 +2737,24 @@ impl NewcApp {
                 container(
                     button(
                         column![
-                            text(name).size(12).color(if active { th::color::accent() } else { th::color::text() }),
-                            text(root.to_string_lossy().as_ref().to_string()).size(10).color(th::color::text_hint()),
+                            text(name).size(12).color(if active {
+                                th::color::accent()
+                            } else {
+                                th::color::text()
+                            }),
+                            text(root.to_string_lossy().as_ref().to_string())
+                                .size(10)
+                                .color(th::color::text_hint()),
                         ]
-                        .spacing(1)
+                        .spacing(1),
                     )
-                    .style(if active { th::btn_nav_active } else { th::btn_ghost })
+                    .style(if active {
+                        th::btn_nav_active
+                    } else {
+                        th::btn_ghost
+                    })
                     .on_press(Message::OpenProject(root))
-                    .width(Length::Fill)
+                    .width(Length::Fill),
                 )
                 .width(Length::Fill)
                 .into()
@@ -2373,11 +2790,12 @@ impl NewcApp {
                 .width(210)
                 .height(Length::Fill)
                 .style(th::panel_style),
-            container(iced::widget::Space::new().width(1).height(Length::Fill))
-                .style(|_| iced::widget::container::Style {
+            container(iced::widget::Space::new().width(1).height(Length::Fill)).style(|_| {
+                iced::widget::container::Style {
                     background: Some(Background::Color(th::color::border_dim())),
                     ..Default::default()
-                }),
+                }
+            }),
         ]
         .into()
     }
@@ -2400,7 +2818,10 @@ impl NewcApp {
             View::ProjectSearch(p) => views::project_search::view(&self.state, p),
             View::HealthDashboard(p) => views::health::view(&self.state, p),
 
-            View::ModuleDetail { project: p, module_name } => {
+            View::ModuleDetail {
+                project: p,
+                module_name,
+            } => {
                 if let Some(m) = p.modules.iter().find(|m| &m.name == module_name) {
                     views::module_detail::view(&self.state, module_name, &m.source, &p.root)
                 } else {
@@ -2408,7 +2829,10 @@ impl NewcApp {
                 }
             }
 
-            View::HeaderEditor { project: p, module_name } => {
+            View::HeaderEditor {
+                project: p,
+                module_name,
+            } => {
                 let _ = (p, module_name);
                 views::header_editor::view(&self.state)
             }
@@ -2428,7 +2852,6 @@ impl NewcApp {
             .padding(8)
             .into()
     }
-
 }
 
 /// Build the custom Monokai Pro [`Theme`] from hardcoded palette values.
@@ -2439,11 +2862,11 @@ pub fn monokai_pro_theme() -> Theme {
         "Monokai Pro".to_string(),
         Palette {
             background: th::color::bg_base(),
-            text:       Color::from_rgb8(0xFC, 0xFC, 0xFA),
-            primary:    th::color::accent(),
-            success:    Color::from_rgb8(0xA9, 0xDC, 0x76),
-            warning:    Color::from_rgb8(0xFF, 0xD8, 0x66),
-            danger:     th::color::accent(),
+            text: Color::from_rgb8(0xFC, 0xFC, 0xFA),
+            primary: th::color::accent(),
+            success: Color::from_rgb8(0xA9, 0xDC, 0x76),
+            warning: Color::from_rgb8(0xFF, 0xD8, 0x66),
+            danger: th::color::accent(),
         },
     )))
 }
@@ -2537,7 +2960,10 @@ fn toggle_makefile_flag(content: &str, flag: &str) -> String {
         let trimmed = line.trim_start();
         if (trimmed.starts_with("CFLAGS") || trimmed.starts_with("CFLAGS ")) && line.contains('=') {
             if line.contains(flag) {
-                *line = line.replace(&format!(" {flag}"), "").replace(&format!("{flag} "), "").replace(flag, "");
+                *line = line
+                    .replace(&format!(" {flag}"), "")
+                    .replace(&format!("{flag} "), "")
+                    .replace(flag, "");
             } else {
                 line.push(' ');
                 line.push_str(flag);
@@ -2546,16 +2972,30 @@ fn toggle_makefile_flag(content: &str, flag: &str) -> String {
         }
     }
     let mut out = lines.join("\n");
-    if ends_newline { out.push('\n'); }
+    if ends_newline {
+        out.push('\n');
+    }
     out
 }
 
 fn scan_for_onboarding_projects() -> Vec<(std::path::PathBuf, bool)> {
     let mut found = Vec::new();
-    let Some(home) = dirs::home_dir() else { return found };
-    for dir in &["projects", "uni", "Uni", "school", "Documents", "code", "src"] {
+    let Some(home) = dirs::home_dir() else {
+        return found;
+    };
+    for dir in &[
+        "projects",
+        "uni",
+        "Uni",
+        "school",
+        "Documents",
+        "code",
+        "src",
+    ] {
         let base = home.join(dir);
-        if !base.is_dir() { continue; }
+        if !base.is_dir() {
+            continue;
+        }
         if let Ok(entries) = std::fs::read_dir(&base) {
             for entry in entries.flatten() {
                 let p = entry.path();

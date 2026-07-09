@@ -153,8 +153,7 @@ fn collect_module_functions(root: &Path) -> Result<HashMap<String, FuncInfo>> {
     let mut entries: Vec<_> = fs::read_dir(&src_dir)?
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.path().extension().and_then(|x| x.to_str()) == Some("c")
-                && e.file_name() != "main.c"
+            e.path().extension().and_then(|x| x.to_str()) == Some("c") && e.file_name() != "main.c"
         })
         .collect();
     entries.sort_by_key(|e| e.file_name());
@@ -165,7 +164,13 @@ fn collect_module_functions(root: &Path) -> Result<HashMap<String, FuncInfo>> {
         for sig in extract_signatures(&content) {
             if let Some(name) = extract_func_name(&sig) {
                 let is_static = sig.starts_with("static ");
-                map.insert(name, FuncInfo { source: path.clone(), is_static });
+                map.insert(
+                    name,
+                    FuncInfo {
+                        source: path.clone(),
+                        is_static,
+                    },
+                );
             }
         }
     }
@@ -267,8 +272,11 @@ fn extract_function_body(content: &str, re: &Regex) -> String {
     for (i, line) in lines.iter().enumerate() {
         if !in_target {
             // Look for the function signature line
-            if re.is_match(line) && line.contains('(') && !line.trim_start().starts_with("/*")
-                && !line.trim_start().starts_with("*") && !line.contains(';')
+            if re.is_match(line)
+                && line.contains('(')
+                && !line.trim_start().starts_with("/*")
+                && !line.trim_start().starts_with("*")
+                && !line.contains(';')
             {
                 // Confirm next non-empty line is '{'
                 if lines.get(i + 1).map(|l| l.trim()) == Some("{") {
@@ -292,7 +300,10 @@ fn extract_func_name(sig: &str) -> Option<String> {
     // Match: "type name(" → extract name
     // Pattern: last word-token before '('
     let before_paren = sig.split('(').next()?;
-    let name = before_paren.split_whitespace().last()?.trim_start_matches('*');
+    let name = before_paren
+        .split_whitespace()
+        .last()?
+        .trim_start_matches('*');
     if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         Some(name.to_string())
     } else {
@@ -410,7 +421,11 @@ fn is_func_def_line(line: &str, re: &Regex) -> bool {
     if trimmed.contains(';') || !re.is_match(trimmed) {
         return false;
     }
-    trimmed.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+    trimmed
+        .chars()
+        .next()
+        .map(|c| c.is_alphabetic())
+        .unwrap_or(false)
 }
 
 fn remove_prototype_from_header(hdr: &Path, fname: &str) -> Result<()> {
@@ -481,7 +496,11 @@ mod tests {
     use super::*;
 
     /// Write a minimal project: main.c with the given body, plus (name, content) modules.
-    fn write_project(tmp: &tempfile::TempDir, main_body: &str, modules: &[(&str, &str)]) -> PathBuf {
+    fn write_project(
+        tmp: &tempfile::TempDir,
+        main_body: &str,
+        modules: &[(&str, &str)],
+    ) -> PathBuf {
         let root = tmp.path().to_path_buf();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::create_dir_all(root.join("include")).unwrap();

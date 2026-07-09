@@ -91,16 +91,12 @@ pub fn write_ignore_block(hdr: &Path, new_content: &str) -> Result<()> {
 
 /// Return a `typedef struct` skeleton with a placeholder field.
 pub fn struct_template(name: &str) -> String {
-    format!(
-        "typedef struct {{\n\t/* TODO: add fields */\n\tint placeholder;\n}} {name};\n"
-    )
+    format!("typedef struct {{\n\t/* TODO: add fields */\n\tint placeholder;\n}} {name};\n")
 }
 
 /// Return a `typedef enum` skeleton with three sentinel values.
 pub fn enum_template(name: &str) -> String {
-    format!(
-        "typedef enum {{\n\t{name}_FIRST = 0,\n\t{name}_SECOND,\n\t{name}_COUNT\n}} {name};\n"
-    )
+    format!("typedef enum {{\n\t{name}_FIRST = 0,\n\t{name}_SECOND,\n\t{name}_COUNT\n}} {name};\n")
 }
 
 /// Return a `#define` preprocessor macro line.

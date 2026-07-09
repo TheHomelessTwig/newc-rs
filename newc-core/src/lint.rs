@@ -58,7 +58,11 @@ pub fn quick_fix(code: &str, line: &str) -> Option<String> {
     match code {
         "L001" if line.contains("gets(") => Some(line.replacen("gets(", "fgets(", 1)),
         "L002" if line.contains("strcpy(") => Some(line.replacen("strcpy(", "strncpy(", 1)),
-        "L006" if line.contains("sprintf(") && !line.contains("vsprintf(") && !line.contains("snprintf(") => {
+        "L006"
+            if line.contains("sprintf(")
+                && !line.contains("vsprintf(")
+                && !line.contains("snprintf(") =>
+        {
             Some(line.replacen("sprintf(", "snprintf(", 1))
         }
         _ => None,
@@ -90,12 +94,11 @@ pub fn apply_fix_in_function(
     })?;
 
     let body_lines: Vec<&str> = func.body.lines().collect();
-    let old_line = *body_lines.get(line_no.saturating_sub(1)).ok_or_else(|| {
-        crate::error::NewcError::Other("line out of range".to_string())
-    })?;
-    let fixed_line = quick_fix(code, old_line).ok_or_else(|| {
-        crate::error::NewcError::Other(format!("no automatic fix for {code}"))
-    })?;
+    let old_line = *body_lines
+        .get(line_no.saturating_sub(1))
+        .ok_or_else(|| crate::error::NewcError::Other("line out of range".to_string()))?;
+    let fixed_line = quick_fix(code, old_line)
+        .ok_or_else(|| crate::error::NewcError::Other(format!("no automatic fix for {code}")))?;
 
     let mut new_body_lines = body_lines;
     new_body_lines[line_no - 1] = &fixed_line;
@@ -127,10 +130,16 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // L001: gets() usage — unsafe buffer overflow (exclude fgets, ungets, etc.)
         if let Some(pos) = t.find("gets(") {
             let prev_is_alpha = pos > 0
-                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+                && t[..pos]
+                    .chars()
+                    .last()
+                    .map(|c| c.is_alphanumeric() || c == '_')
+                    .unwrap_or(false);
             if !prev_is_alpha {
                 warnings.push(LintWarning {
-                    line_no: lno, severity: LintSeverity::Error, code: "L001",
+                    line_no: lno,
+                    severity: LintSeverity::Error,
+                    code: "L001",
                     message: "gets() is unsafe — use fgets() instead".into(),
                 });
             }
@@ -139,7 +148,9 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // L002: strcpy without bounds check
         if t.contains("strcpy(") && !t.contains("strncpy(") {
             warnings.push(LintWarning {
-                line_no: lno, severity: LintSeverity::Warning, code: "L002",
+                line_no: lno,
+                severity: LintSeverity::Warning,
+                code: "L002",
                 message: "strcpy() may overflow — consider strncpy() or snprintf()".into(),
             });
         }
@@ -147,7 +158,9 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // L003: scanf with unbounded %s
         if t.contains("scanf(") && t.contains("\"%s\"") {
             warnings.push(LintWarning {
-                line_no: lno, severity: LintSeverity::Warning, code: "L003",
+                line_no: lno,
+                severity: LintSeverity::Warning,
+                code: "L003",
                 message: "scanf(\"%s\") has no width limit — use \"%127s\" or similar".into(),
             });
         }
@@ -157,13 +170,15 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // Skips fprintf, snprintf, sprintf, dprintf, vprintf, etc. (char before 'printf' is alpha)
         if let Some(pos) = t.find("printf(") {
             let prev_is_alpha = pos > 0
-                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+                && t[..pos]
+                    .chars()
+                    .last()
+                    .map(|c| c.is_alphanumeric() || c == '_')
+                    .unwrap_or(false);
             if !prev_is_alpha {
                 let after = t[pos + 7..].trim_start();
                 let first_char = after.chars().next().unwrap_or('"');
-                let is_safe = first_char == '"'
-                    || first_char == ')'
-                    || first_char.is_uppercase();
+                let is_safe = first_char == '"' || first_char == ')' || first_char.is_uppercase();
                 if !is_safe {
                     warnings.push(LintWarning {
                         line_no: lno, severity: LintSeverity::Warning, code: "L004",
@@ -174,22 +189,28 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         }
 
         // L005: assignment in condition (if (x = y) likely typo)
-        if (t.starts_with("if") || t.starts_with("while")) && t.contains('(')
-            && let Some(paren_start) = t.find('(') {
-                let inner = &t[paren_start + 1..];
-                // Look for single = not preceded by !, <, >, =, not followed by =
-                if has_assignment_in_condition(inner) {
-                    warnings.push(LintWarning {
-                        line_no: lno, severity: LintSeverity::Warning, code: "L005",
-                        message: "Possible assignment in condition — did you mean '=='?".into(),
-                    });
-                }
+        if (t.starts_with("if") || t.starts_with("while"))
+            && t.contains('(')
+            && let Some(paren_start) = t.find('(')
+        {
+            let inner = &t[paren_start + 1..];
+            // Look for single = not preceded by !, <, >, =, not followed by =
+            if has_assignment_in_condition(inner) {
+                warnings.push(LintWarning {
+                    line_no: lno,
+                    severity: LintSeverity::Warning,
+                    code: "L005",
+                    message: "Possible assignment in condition — did you mean '=='?".into(),
+                });
             }
+        }
 
         // L006: sprintf without bounds
         if t.contains("sprintf(") && !t.contains("snprintf(") {
             warnings.push(LintWarning {
-                line_no: lno, severity: LintSeverity::Warning, code: "L006",
+                line_no: lno,
+                severity: LintSeverity::Warning,
+                code: "L006",
                 message: "sprintf() may overflow — use snprintf() instead".into(),
             });
         }
@@ -199,26 +220,32 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
             let next_lines: Vec<&str> = lines.iter().skip(i + 1).take(4).cloned().collect();
             let has_null_check = next_lines.iter().any(|l| {
                 let lt = l.trim();
-                if lt.starts_with("//") || lt.starts_with('*') { return false; }
-                lt.contains("== NULL") || lt.contains("!= NULL")
+                if lt.starts_with("//") || lt.starts_with('*') {
+                    return false;
+                }
+                lt.contains("== NULL")
+                    || lt.contains("!= NULL")
                     || (lt.starts_with("if") && lt.contains("NULL"))
             });
             if !has_null_check {
                 warnings.push(LintWarning {
-                    line_no: lno, severity: LintSeverity::Info, code: "L007",
+                    line_no: lno,
+                    severity: LintSeverity::Info,
+                    code: "L007",
                     message: "malloc/calloc result not checked for NULL".into(),
                 });
             }
         }
 
         // L008: magic numbers (bare integer literals > 9 in expressions, excluding common values)
-        if !t.starts_with("#") && !t.starts_with("//")
-            && has_magic_number(t) {
-                warnings.push(LintWarning {
-                    line_no: lno, severity: LintSeverity::Info, code: "L008",
-                    message: "Magic number — consider using a named constant".into(),
-                });
-            }
+        if !t.starts_with("#") && !t.starts_with("//") && has_magic_number(t) {
+            warnings.push(LintWarning {
+                line_no: lno,
+                severity: LintSeverity::Info,
+                code: "L008",
+                message: "Magic number — consider using a named constant".into(),
+            });
+        }
 
         // L009: fopen without fclose check pattern
         if t.contains("fopen(") {
@@ -226,7 +253,9 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
             let has_close = rest.iter().any(|l| l.contains("fclose("));
             if !has_close {
                 warnings.push(LintWarning {
-                    line_no: lno, severity: LintSeverity::Warning, code: "L009",
+                    line_no: lno,
+                    severity: LintSeverity::Warning,
+                    code: "L009",
                     message: "fopen() with no matching fclose() found in next 20 lines".into(),
                 });
             }
@@ -235,7 +264,11 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // L011: free() not followed by ptr = NULL within 3 lines
         if let Some(pos) = t.find("free(") {
             let prev_is_alpha = pos > 0
-                && t[..pos].chars().last().map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false);
+                && t[..pos]
+                    .chars()
+                    .last()
+                    .map(|c| c.is_alphanumeric() || c == '_')
+                    .unwrap_or(false);
             if !prev_is_alpha {
                 let next3: Vec<&str> = lines.iter().skip(i + 1).take(3).cloned().collect();
                 let nulled = next3.iter().any(|l| l.contains("= NULL"));
@@ -271,7 +304,10 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // Heuristic: line contains `return &` and the identifier after & is not `static`/global
         if t.starts_with("return") && t.contains("return &") {
             // Exclude common safe patterns: return &static_var, return &global, return &(*ptr)
-            let after = t.trim_start_matches("return").trim().trim_start_matches('&');
+            let after = t
+                .trim_start_matches("return")
+                .trim()
+                .trim_start_matches('&');
             let is_deref = after.starts_with('(');
             if !is_deref {
                 warnings.push(LintWarning {
@@ -284,8 +320,12 @@ pub fn lint_file(content: &str) -> Vec<LintWarning> {
         // L016: strtok() is not re-entrant — global state breaks nested tokenisation
         if t.contains("strtok(") && !t.contains("strtok_r(") {
             warnings.push(LintWarning {
-                line_no: lno, severity: LintSeverity::Warning, code: "L016",
-                message: "strtok() uses global state and is not re-entrant — use strtok_r() instead".into(),
+                line_no: lno,
+                severity: LintSeverity::Warning,
+                code: "L016",
+                message:
+                    "strtok() uses global state and is not re-entrant — use strtok_r() instead"
+                        .into(),
             });
         }
 
@@ -326,7 +366,9 @@ fn has_assignment_in_condition(s: &str) -> bool {
             '(' => depth += 1,
             ')' => {
                 depth -= 1;
-                if depth <= 0 { break; }
+                if depth <= 0 {
+                    break;
+                }
             }
             '=' if depth == 1 => {
                 let prev = if i > 0 { chars[i - 1] } else { ' ' };
@@ -352,8 +394,11 @@ pub fn has_magic_number(line: &str) -> bool {
         if c.is_ascii_digit() {
             let mut num = String::from(c);
             while let Some(&d) = chars.peek() {
-                if d.is_ascii_digit() { num.push(chars.next().unwrap()); }
-                else { break; }
+                if d.is_ascii_digit() {
+                    num.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
             }
             if let Ok(n) = num.parse::<i64>() {
                 // Allow 0, 1, -1, 2, 10, 100, 256, 1024 (common powers/constants)
@@ -424,7 +469,10 @@ mod tests {
     }
     #[test]
     fn l004_snprintf_clean() {
-        assert!(!has(&lint_file("snprintf(buf, sizeof(buf), \"%s %d\", q, i);"), "L004"));
+        assert!(!has(
+            &lint_file("snprintf(buf, sizeof(buf), \"%s %d\", q, i);"),
+            "L004"
+        ));
     }
     #[test]
     fn l004_fprintf_clean() {
@@ -482,7 +530,10 @@ mod tests {
     // L009 — fopen without fclose
     #[test]
     fn l009_fopen_no_close_triggers() {
-        assert!(has(&lint_file(r#"FILE *f = fopen("test.txt", "r");"#), "L009"));
+        assert!(has(
+            &lint_file(r#"FILE *f = fopen("test.txt", "r");"#),
+            "L009"
+        ));
     }
     #[test]
     fn l009_fopen_with_close_clean() {
@@ -506,7 +557,10 @@ mod tests {
     }
     #[test]
     fn l010_ifndef_guard_clean() {
-        assert!(!has(&lint_header("#ifndef FOO_H\n#define FOO_H\nint foo(void);\n#endif"), "L010"));
+        assert!(!has(
+            &lint_header("#ifndef FOO_H\n#define FOO_H\nint foo(void);\n#endif"),
+            "L010"
+        ));
     }
     #[test]
     fn l010_pragma_once_clean() {
@@ -540,7 +594,10 @@ mod tests {
     }
     #[test]
     fn l013_strtol_clean() {
-        assert!(!has(&lint_file("int n = (int)strtol(argv[1], &end, 10);"), "L013"));
+        assert!(!has(
+            &lint_file("int n = (int)strtol(argv[1], &end, 10);"),
+            "L013"
+        ));
     }
 
     // L014 — return &local

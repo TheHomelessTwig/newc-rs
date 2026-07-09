@@ -25,7 +25,11 @@ pub struct CoverageSummary {
 
 impl CoverageSummary {
     pub fn percent(&self) -> f32 {
-        if self.total == 0 { 0.0 } else { 100.0 * self.covered as f32 / self.total as f32 }
+        if self.total == 0 {
+            0.0
+        } else {
+            100.0 * self.covered as f32 / self.total as f32
+        }
     }
 }
 
@@ -81,13 +85,18 @@ pub fn summarize(lines: &[LineCoverage]) -> CoverageSummary {
 /// Per-function coverage breakdown, matching each function's body line range
 /// (located via [`crate::sync::extract_function_implementations`]) against
 /// the parsed `.gcov` lines for that source file.
-pub fn function_coverage(source: &str, gcov_lines: &[LineCoverage]) -> Vec<(String, CoverageSummary)> {
+pub fn function_coverage(
+    source: &str,
+    gcov_lines: &[LineCoverage],
+) -> Vec<(String, CoverageSummary)> {
     let funcs = crate::sync::extract_function_implementations(source);
     let mut results = Vec::new();
 
     for func in funcs {
         let full = format!("{}\n{}", func.signature, func.body);
-        let Some(byte_offset) = source.find(&full) else { continue };
+        let Some(byte_offset) = source.find(&full) else {
+            continue;
+        };
         let start_line = source[..byte_offset].matches('\n').count() + 1;
         let end_line = start_line + full.lines().count();
 
@@ -120,9 +129,18 @@ mod tests {
     #[test]
     fn percent_with_some_hits() {
         let lines = vec![
-            LineCoverage { line_no: 1, count: Some(3) },
-            LineCoverage { line_no: 2, count: Some(0) },
-            LineCoverage { line_no: 3, count: None },
+            LineCoverage {
+                line_no: 1,
+                count: Some(3),
+            },
+            LineCoverage {
+                line_no: 2,
+                count: Some(0),
+            },
+            LineCoverage {
+                line_no: 3,
+                count: None,
+            },
         ];
         let summary = summarize(&lines);
         assert_eq!(summary.total, 2);

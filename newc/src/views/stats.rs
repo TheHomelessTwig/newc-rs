@@ -1,11 +1,11 @@
 //! Project statistics screen — module count, function count, LOC summary, and per-module bar chart.
 
-use iced::widget::{button, column, row, text, Space};
-use iced::{Element};
+use iced::Element;
+use iced::widget::{Space, button, column, row, text};
 use newc_core::{project::Project, stats};
 
-use crate::theme as th;
 use crate::state::{Message, View};
+use crate::theme as th;
 
 /// Renders the project stats screen with summary totals and a per-module LOC breakdown.
 pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Element<'a, Message> {
@@ -26,11 +26,20 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
         stat_row("Modules", project_stats.module_stats.len().to_string()),
         stat_row("Total functions", project_stats.total_functions.to_string()),
         stat_row("Lines of code (LOC)", project_stats.total_loc.to_string()),
-        stat_row("Total source lines", project_stats.total_source_lines.to_string()),
+        stat_row(
+            "Total source lines",
+            project_stats.total_source_lines.to_string()
+        ),
     ]
     .spacing(4);
 
-    let max_loc = project_stats.module_stats.iter().map(|m| m.loc).max().unwrap_or(1).max(1);
+    let max_loc = project_stats
+        .module_stats
+        .iter()
+        .map(|m| m.loc)
+        .max()
+        .unwrap_or(1)
+        .max(1);
 
     let module_rows: Vec<Element<Message>> = {
         let mut rows = vec![
@@ -48,8 +57,12 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
             let bar: String = "█".repeat(bar_pct / 5);
             rows.push(
                 row![
-                    text(format!("◆ {}", m.name)).width(160).color(th::color::green()),
-                    text(m.functions.to_string()).width(60).color(th::color::yellow()),
+                    text(format!("◆ {}", m.name))
+                        .width(160)
+                        .color(th::color::green()),
+                    text(m.functions.to_string())
+                        .width(60)
+                        .color(th::color::yellow()),
                     text(m.loc.to_string()).width(60).color(th::color::yellow()),
                     text(bar).size(10).color(th::color::green()).width(160),
                 ]
@@ -66,7 +79,9 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
         text("Summary").size(14).color(th::color::cyan()),
         summary,
         Space::new().height(8),
-        text("Per-module breakdown").size(14).color(th::color::cyan()),
+        text("Per-module breakdown")
+            .size(14)
+            .color(th::color::cyan()),
         column(module_rows).spacing(4),
         Space::new().height(8),
         text("LOC = non-blank, non-comment lines in src/*.c files.")

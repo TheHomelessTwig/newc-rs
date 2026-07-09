@@ -28,9 +28,17 @@ pub const HELP_LINES: &[&str] = &[
 pub fn cmake_configure_args(target: &str) -> Vec<&'static str> {
     match target {
         "debug" => vec!["-DCMAKE_BUILD_TYPE=Debug", "-DSTRICT=OFF", "-DCOVERAGE=OFF"],
-        "strict" => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=ON", "-DCOVERAGE=OFF"],
+        "strict" => vec![
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSTRICT=ON",
+            "-DCOVERAGE=OFF",
+        ],
         "coverage" => vec!["-DCMAKE_BUILD_TYPE=Debug", "-DSTRICT=OFF", "-DCOVERAGE=ON"],
-        _ => vec!["-DCMAKE_BUILD_TYPE=Release", "-DSTRICT=OFF", "-DCOVERAGE=OFF"],
+        _ => vec![
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSTRICT=OFF",
+            "-DCOVERAGE=OFF",
+        ],
     }
 }
 

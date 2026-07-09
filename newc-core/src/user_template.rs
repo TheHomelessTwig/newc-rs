@@ -44,10 +44,20 @@ impl UserTemplate {
 /// # Errors
 /// Returns an error if the directory cannot be created or the file cannot be written.
 pub fn save(template: &UserTemplate) -> Result<()> {
-    let Some(dir) = template_dir() else { return Ok(()) };
+    let Some(dir) = template_dir() else {
+        return Ok(());
+    };
     std::fs::create_dir_all(&dir)?;
-    let safe_name: String = template.name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+    let safe_name: String = template
+        .name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let path = dir.join(format!("{safe_name}.toml"));
     let content = toml::to_string_pretty(template)
@@ -60,9 +70,15 @@ pub fn save(template: &UserTemplate) -> Result<()> {
 ///
 /// Returns an empty vec if the directory does not exist or cannot be read.
 pub fn load_all() -> Vec<UserTemplate> {
-    let Some(dir) = template_dir() else { return Vec::new() };
-    if !dir.exists() { return Vec::new(); }
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let Some(dir) = template_dir() else {
+        return Vec::new();
+    };
+    if !dir.exists() {
+        return Vec::new();
+    }
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
     let mut templates = Vec::new();
     let mut paths: Vec<PathBuf> = entries
         .filter_map(|e| e.ok())
@@ -72,9 +88,10 @@ pub fn load_all() -> Vec<UserTemplate> {
     paths.sort();
     for path in paths {
         if let Ok(content) = std::fs::read_to_string(&path)
-            && let Ok(t) = toml::from_str::<UserTemplate>(&content) {
-                templates.push(t);
-            }
+            && let Ok(t) = toml::from_str::<UserTemplate>(&content)
+        {
+            templates.push(t);
+        }
     }
     templates
 }
@@ -86,12 +103,23 @@ pub fn load_all() -> Vec<UserTemplate> {
 /// # Errors
 /// Returns an IO error if the file exists but cannot be removed.
 pub fn delete(name: &str) -> Result<()> {
-    let Some(dir) = template_dir() else { return Ok(()) };
-    let safe_name: String = name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+    let Some(dir) = template_dir() else {
+        return Ok(());
+    };
+    let safe_name: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let path = dir.join(format!("{safe_name}.toml"));
-    if path.exists() { std::fs::remove_file(path)?; }
+    if path.exists() {
+        std::fs::remove_file(path)?;
+    }
     Ok(())
 }
 

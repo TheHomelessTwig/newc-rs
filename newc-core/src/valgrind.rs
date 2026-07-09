@@ -41,7 +41,9 @@ pub fn parse(xml: &str) -> Vec<ValgrindError> {
     let mut rest = xml;
     while let Some(start) = rest.find("<error>") {
         let body_start = start + "<error>".len();
-        let Some(len) = rest[body_start..].find("</error>") else { break };
+        let Some(len) = rest[body_start..].find("</error>") else {
+            break;
+        };
         let block = &rest[body_start..body_start + len];
 
         errors.push(ValgrindError {

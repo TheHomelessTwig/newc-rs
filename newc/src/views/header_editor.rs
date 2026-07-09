@@ -1,7 +1,7 @@
 //! Header file editor — full-text editor for the `SYNC_IGNORE` block in a module's `.h` file.
 
-use iced::widget::{button, column, row, text, text_editor, Space};
 use iced::Length;
+use iced::widget::{Space, button, column, row, text, text_editor};
 
 /// A single field within the interactive struct builder.
 #[derive(Default, Clone)]
@@ -35,11 +35,9 @@ pub struct HeaderEditorState {
 }
 
 /// Renders the header editor screen (syntax-highlighted text editor for the `.h` file).
-pub fn view<'a>(
-    state: &'a crate::state::AppState,
-) -> iced::Element<'a, crate::state::Message> {
-    use crate::theme as th;
+pub fn view<'a>(state: &'a crate::state::AppState) -> iced::Element<'a, crate::state::Message> {
     use crate::state::Message;
+    use crate::theme as th;
 
     let ed = &state.header_editor_state;
 
@@ -47,11 +45,17 @@ pub fn view<'a>(
         row![
             text("Header Editor").size(18),
             Space::new().width(Length::Fill),
-            button(text("Save")).on_press(Message::HeaderSave).style(th::btn_primary),
+            button(text("Save"))
+                .on_press(Message::HeaderSave)
+                .style(th::btn_primary),
             if ed.dirty {
-                button(text("Discard")).on_press(Message::Navigate(crate::state::View::Home)).style(th::btn_danger)
+                button(text("Discard"))
+                    .on_press(Message::Navigate(crate::state::View::Home))
+                    .style(th::btn_danger)
             } else {
-                button(text("Close")).on_press(Message::Navigate(crate::state::View::Home)).style(th::btn_ghost)
+                button(text("Close"))
+                    .on_press(Message::Navigate(crate::state::View::Home))
+                    .style(th::btn_ghost)
             },
         ]
         .spacing(8)

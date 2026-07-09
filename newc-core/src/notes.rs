@@ -1,7 +1,7 @@
 //! Free-form per-project notes stored in `<project>/.newc_notes`.
 
-use std::path::Path;
 use crate::error::Result;
+use std::path::Path;
 
 const NOTES_FILE: &str = ".newc_notes";
 

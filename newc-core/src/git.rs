@@ -47,7 +47,10 @@ pub fn is_repo(root: &Path) -> bool {
 /// and zero counts for all other fields.
 pub fn status(root: &Path) -> Option<GitStatus> {
     if !is_repo(root) {
-        return Some(GitStatus { initialized: false, ..Default::default() });
+        return Some(GitStatus {
+            initialized: false,
+            ..Default::default()
+        });
     }
 
     let branch = Command::new("git")
@@ -73,27 +76,46 @@ pub fn status(root: &Path) -> Option<GitStatus> {
     let mut unstaged = 0;
     let mut untracked = 0;
     for line in porcelain.lines() {
-        if line.len() < 2 { continue; }
+        if line.len() < 2 {
+            continue;
+        }
         let x = line.chars().next().unwrap_or(' ');
         let y = line.chars().nth(1).unwrap_or(' ');
-        if x == '?' && y == '?' { untracked += 1; }
-        else {
-            if x != ' ' && x != '?' { staged += 1; }
-            if y != ' ' && y != '?' { unstaged += 1; }
+        if x == '?' && y == '?' {
+            untracked += 1;
+        } else {
+            if x != ' ' && x != '?' {
+                staged += 1;
+            }
+            if y != ' ' && y != '?' {
+                unstaged += 1;
+            }
         }
     }
 
-    Some(GitStatus { branch, staged, unstaged, untracked, initialized: true })
+    Some(GitStatus {
+        branch,
+        staged,
+        unstaged,
+        untracked,
+        initialized: true,
+    })
 }
 
 /// Return the last `count` commits from the repository's log.
 ///
 /// Returns an empty vec if the directory is not a git repo.
 pub fn log(root: &Path, count: usize) -> Vec<GitCommit> {
-    if !is_repo(root) { return Vec::new(); }
+    if !is_repo(root) {
+        return Vec::new();
+    }
 
     let out = Command::new("git")
-        .args(["log", &format!("--max-count={count}"), "--pretty=format:%h|%s|%an|%ar"])
+        .args([
+            "log",
+            &format!("--max-count={count}"),
+            "--pretty=format:%h|%s|%an|%ar",
+        ])
         .current_dir(root)
         .output()
         .ok()
@@ -124,9 +146,12 @@ pub fn log(root: &Path, count: usize) -> Vec<GitCommit> {
 /// Returns an error containing git's stderr output if `git init` fails.
 pub fn init(root: &Path) -> Result<()> {
     let out = Command::new("git").arg("init").current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -135,10 +160,16 @@ pub fn init(root: &Path) -> Result<()> {
 /// # Errors
 /// Returns an error containing git's stderr output on failure.
 pub fn stage_all(root: &Path) -> Result<()> {
-    let out = Command::new("git").args(["add", "-A"]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -151,9 +182,12 @@ pub fn commit(root: &Path, message: &str) -> Result<()> {
         .args(["commit", "-m", message])
         .current_dir(root)
         .output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -161,7 +195,9 @@ pub fn commit(root: &Path, message: &str) -> Result<()> {
 
 /// Return the unstaged diff as a UTF-8 string, or an empty string on error.
 pub fn diff(root: &Path) -> String {
-    if !is_repo(root) { return String::new(); }
+    if !is_repo(root) {
+        return String::new();
+    }
     Command::new("git")
         .args(["diff"])
         .current_dir(root)
@@ -173,7 +209,9 @@ pub fn diff(root: &Path) -> String {
 
 /// Return the staged diff (`--cached`) as a UTF-8 string, or an empty string on error.
 pub fn diff_staged(root: &Path) -> String {
-    if !is_repo(root) { return String::new(); }
+    if !is_repo(root) {
+        return String::new();
+    }
     Command::new("git")
         .args(["diff", "--cached"])
         .current_dir(root)
@@ -202,7 +240,9 @@ pub struct ChangedFile {
 ///
 /// Returns an empty vec if the directory is not a git repository.
 pub fn changed_files(root: &Path) -> Vec<ChangedFile> {
-    if !is_repo(root) { return Vec::new(); }
+    if !is_repo(root) {
+        return Vec::new();
+    }
     let out = Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(root)
@@ -233,10 +273,16 @@ pub fn changed_files(root: &Path) -> Vec<ChangedFile> {
 /// # Errors
 /// Returns an error containing git's stderr output on failure.
 pub fn stage_file(root: &Path, path: &str) -> Result<()> {
-    let out = Command::new("git").args(["add", path]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["add", path])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -245,10 +291,16 @@ pub fn stage_file(root: &Path, path: &str) -> Result<()> {
 /// # Errors
 /// Returns an error containing git's stderr output on failure.
 pub fn unstage_file(root: &Path, path: &str) -> Result<()> {
-    let out = Command::new("git").args(["restore", "--staged", path]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["restore", "--staged", path])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -258,7 +310,9 @@ pub fn unstage_file(root: &Path, path: &str) -> Result<()> {
 ///
 /// Returns an empty vec if the directory is not a git repository.
 pub fn branches(root: &Path) -> Vec<String> {
-    if !is_repo(root) { return Vec::new(); }
+    if !is_repo(root) {
+        return Vec::new();
+    }
     let out = Command::new("git")
         .args(["branch", "--format=%(refname:short)"])
         .current_dir(root)
@@ -266,12 +320,17 @@ pub fn branches(root: &Path) -> Vec<String> {
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_default();
-    out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+    out.lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
 }
 
 /// Return the name of the currently checked-out branch, or an empty string on error.
 pub fn current_branch(root: &Path) -> String {
-    if !is_repo(root) { return String::new(); }
+    if !is_repo(root) {
+        return String::new();
+    }
     Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(root)
@@ -287,10 +346,16 @@ pub fn current_branch(root: &Path) -> String {
 /// # Errors
 /// Returns an error if the branch does not exist or the switch fails.
 pub fn switch_branch(root: &Path, name: &str) -> Result<()> {
-    let out = Command::new("git").args(["switch", name]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["switch", name])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -299,10 +364,16 @@ pub fn switch_branch(root: &Path, name: &str) -> Result<()> {
 /// # Errors
 /// Returns an error if a branch with that name already exists or git fails.
 pub fn new_branch(root: &Path, name: &str) -> Result<()> {
-    let out = Command::new("git").args(["switch", "-c", name]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["switch", "-c", name])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -322,8 +393,11 @@ pub fn push(root: &Path) -> Result<String> {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    if out.status.success() { Ok(text) }
-    else { Err(NewcError::Other(text)) }
+    if out.status.success() {
+        Ok(text)
+    } else {
+        Err(NewcError::Other(text))
+    }
 }
 
 // ── Stash ────────────────────────────────────────────────────────────────────
@@ -342,10 +416,16 @@ pub struct StashEntry {
 /// # Errors
 /// Returns an error containing git's stderr output on failure.
 pub fn stash(root: &Path) -> Result<()> {
-    let out = Command::new("git").args(["stash", "push"]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["stash", "push"])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -354,10 +434,16 @@ pub fn stash(root: &Path) -> Result<()> {
 /// # Errors
 /// Returns an error containing git's stderr output on failure (e.g. merge conflict).
 pub fn stash_pop(root: &Path) -> Result<()> {
-    let out = Command::new("git").args(["stash", "pop"]).current_dir(root).output()?;
-    if out.status.success() { Ok(()) }
-    else {
-        Err(NewcError::Other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+    let out = Command::new("git")
+        .args(["stash", "pop"])
+        .current_dir(root)
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(NewcError::Other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }
 
@@ -365,7 +451,9 @@ pub fn stash_pop(root: &Path) -> Result<()> {
 ///
 /// Returns an empty vec if the directory is not a git repository.
 pub fn stash_list(root: &Path) -> Vec<StashEntry> {
-    if !is_repo(root) { return Vec::new(); }
+    if !is_repo(root) {
+        return Vec::new();
+    }
     let out = Command::new("git")
         .args(["stash", "list", "--format=%gd|%gs"])
         .current_dir(root)
@@ -377,7 +465,10 @@ pub fn stash_list(root: &Path) -> Vec<StashEntry> {
     out.lines()
         .filter_map(|line| {
             let (reference, description) = line.split_once('|')?;
-            Some(StashEntry { reference: reference.to_string(), description: description.to_string() })
+            Some(StashEntry {
+                reference: reference.to_string(),
+                description: description.to_string(),
+            })
         })
         .collect()
 }
@@ -396,6 +487,9 @@ pub fn pull(root: &Path) -> Result<String> {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    if out.status.success() { Ok(text) }
-    else { Err(NewcError::Other(text)) }
+    if out.status.success() {
+        Ok(text)
+    } else {
+        Err(NewcError::Other(text))
+    }
 }

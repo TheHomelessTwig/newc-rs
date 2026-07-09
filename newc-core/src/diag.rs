@@ -52,7 +52,9 @@ fn parse_line(line: &str) -> Option<Diagnostic> {
     // Also handle: path:line: kind: message (no col)
     let mut parts = line.splitn(5, ':');
     let file = parts.next()?.trim().to_string();
-    if file.is_empty() || file.starts_with(' ') { return None; }
+    if file.is_empty() || file.starts_with(' ') {
+        return None;
+    }
 
     let line_no_str = parts.next()?.trim();
     let line_no: usize = line_no_str.parse().ok()?;
@@ -67,7 +69,11 @@ fn parse_line(line: &str) -> Option<Diagnostic> {
         // No col — third is kind
         let msg = parts.next().unwrap_or("").trim().to_string();
         let remaining = parts.next().unwrap_or("").trim().to_string();
-        let full_msg = if remaining.is_empty() { msg } else { format!("{msg} {remaining}") };
+        let full_msg = if remaining.is_empty() {
+            msg
+        } else {
+            format!("{msg} {remaining}")
+        };
         (0, third.to_string(), full_msg)
     };
 
@@ -78,5 +84,11 @@ fn parse_line(line: &str) -> Option<Diagnostic> {
         _ => return None,
     };
 
-    Some(Diagnostic { file, line: line_no, col, kind, message })
+    Some(Diagnostic {
+        file,
+        line: line_no,
+        col,
+        kind,
+        message,
+    })
 }

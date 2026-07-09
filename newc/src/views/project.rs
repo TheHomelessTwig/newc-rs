@@ -1,6 +1,6 @@
 //! Project detail screen — metadata badges, build controls, code tools, and module table.
 
-use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
+use iced::widget::{Space, button, column, container, row, scrollable, text, text_input};
 use iced::{Background, Border, Element, Length};
 use newc_core::project::Project;
 
@@ -18,7 +18,8 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         return container(
             column![
                 text(format!("Remove module '{mod_name}'?"))
-                    .size(15).color(th::color::accent()),
+                    .size(15)
+                    .color(th::color::accent()),
                 th::hint_text("This permanently deletes the .c and .h files."),
                 row![
                     button(text("Remove").size(12))
@@ -61,18 +62,26 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let mut meta_row: Vec<Element<Message>> = vec![];
     if !meta.course.is_empty() {
         meta_row.push(
-            container(text(format!("📚 {}", meta.course)).size(11).color(th::color::cyan()))
-                .padding([2, 6])
-                .style(th::section_style)
-                .into()
+            container(
+                text(format!("📚 {}", meta.course))
+                    .size(11)
+                    .color(th::color::cyan()),
+            )
+            .padding([2, 6])
+            .style(th::section_style)
+            .into(),
         );
     }
     if !meta.assignment.is_empty() {
         meta_row.push(
-            container(text(format!("📝 {}", meta.assignment)).size(11).color(th::color::text()))
-                .padding([2, 6])
-                .style(th::section_style)
-                .into()
+            container(
+                text(format!("📝 {}", meta.assignment))
+                    .size(11)
+                    .color(th::color::text()),
+            )
+            .padding([2, 6])
+            .style(th::section_style)
+            .into(),
         );
     }
     if let Some(days) = meta.days_until_due() {
@@ -83,13 +92,16 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         } else if days <= 3 {
             (format!("⏰ Due in {days} days"), th::color::yellow())
         } else {
-            (format!("📅 Due in {days} days ({})", meta.due_date), th::color::text_dim())
+            (
+                format!("📅 Due in {days} days ({})", meta.due_date),
+                th::color::text_dim(),
+            )
         };
         meta_row.push(
             container(text(badge).size(11).color(color))
                 .padding([2, 6])
                 .style(th::section_style)
-                .into()
+                .into(),
         );
     }
     if let Some(m) = meta.marks_display() {
@@ -97,14 +109,14 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             container(text(format!("🎯 {m}")).size(11).color(th::color::green()))
                 .padding([2, 6])
                 .style(th::section_style)
-                .into()
+                .into(),
         );
     }
     meta_row.push(
         button(text("Edit Metadata").size(11))
             .on_press(Message::MetaShowEditor(true))
             .style(th::btn_ghost)
-            .into()
+            .into(),
     );
 
     // ── Navigate section ──────────────────────────────────────────────────────
@@ -155,7 +167,12 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         build_btns.push(btn.into());
     }
     if build_running {
-        build_btns.push(text("⟳ building…").size(12).color(th::color::yellow()).into());
+        build_btns.push(
+            text("⟳ building…")
+                .size(12)
+                .color(th::color::yellow())
+                .into(),
+        );
     }
 
     let build_section = container(
@@ -226,7 +243,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
             .spacing(4)
             .wrap(),
             row![
-                text("Pack submission:").size(12).color(th::color::text_dim()),
+                text("Pack submission:")
+                    .size(12)
+                    .color(th::color::text_dim()),
                 text_input("student name", &state.submission_student_input)
                     .on_input(Message::SubmissionStudentInput)
                     .width(160),
@@ -249,7 +268,10 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let module_section = {
         let col_header = container(
             row![
-                text("Module").size(11).width(180).color(th::color::text_dim()),
+                text("Module")
+                    .size(11)
+                    .width(180)
+                    .color(th::color::text_dim()),
                 text("fns").size(11).width(40).color(th::color::text_dim()),
                 text("size").size(11).width(52).color(th::color::text_dim()),
                 Space::new().width(Length::Fill),
@@ -259,54 +281,86 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         )
         .style(|_| iced::widget::container::Style {
             background: Some(Background::Color(th::color::bg_deep())),
-            border: Border { color: th::color::border_dim(), width: 0.0, radius: 0.0.into() },
+            border: Border {
+                color: th::color::border_dim(),
+                width: 0.0,
+                radius: 0.0.into(),
+            },
             ..Default::default()
         });
 
         let module_rows: Element<Message> = if project.modules.is_empty() {
             th::hint_text("No modules found.").into()
         } else {
-            struct ModRow { name: String, fn_count: usize, src_bytes: u64 }
-            let mod_data: Vec<ModRow> = project.modules.iter().map(|m| ModRow {
-                name: m.name.clone(),
-                fn_count: m.function_count,
-                src_bytes: std::fs::metadata(&m.source).map(|md| md.len()).unwrap_or(0),
-            }).collect();
+            struct ModRow {
+                name: String,
+                fn_count: usize,
+                src_bytes: u64,
+            }
+            let mod_data: Vec<ModRow> = project
+                .modules
+                .iter()
+                .map(|m| ModRow {
+                    name: m.name.clone(),
+                    fn_count: m.function_count,
+                    src_bytes: std::fs::metadata(&m.source).map(|md| md.len()).unwrap_or(0),
+                })
+                .collect();
 
-            let rows: Vec<Element<Message>> = mod_data.into_iter().enumerate().map(|(i, m)| {
-                let fn_color = match m.fn_count {
-                    0 => th::color::text_hint(),
-                    1..=3 => th::color::yellow(),
-                    _ => th::color::green(),
-                };
-                let m_name = m.name.clone();
-                let m_name2 = m.name.clone();
-                let proj = project.clone();
-                let row_style = if i % 2 == 0 { th::stripe_even } else { th::stripe_odd };
-                container(
-                    row![
-                        text(format!("◆ {}", m.name)).size(12).width(180).color(th::color::green()),
-                        text(m.fn_count.to_string()).size(12).width(40).color(fn_color),
-                        text(fmt_bytes(m.src_bytes)).size(11).width(52).color(th::color::text_dim()),
-                        Space::new().width(Length::Fill),
-                        button(text("Edit").size(11))
-                            .on_press(Message::Navigate(View::ModuleDetail { project: proj, module_name: m_name }))
-                            .style(th::btn_ghost),
-                        button(text("Sync").size(11))
-                            .on_press(Message::SyncModule(m.name.clone()))
-                            .style(th::btn_ghost),
-                        button(text("✗").size(11))
-                            .on_press(Message::RemoveModule(m_name2))
-                            .style(th::btn_danger),
-                    ]
-                    .spacing(4)
-                    .align_y(iced::Alignment::Center)
-                    .padding([4, 8]),
-                )
-                .width(Length::Fill)
-                .style(row_style)
-                .into()
-            }).collect();
+            let rows: Vec<Element<Message>> = mod_data
+                .into_iter()
+                .enumerate()
+                .map(|(i, m)| {
+                    let fn_color = match m.fn_count {
+                        0 => th::color::text_hint(),
+                        1..=3 => th::color::yellow(),
+                        _ => th::color::green(),
+                    };
+                    let m_name = m.name.clone();
+                    let m_name2 = m.name.clone();
+                    let proj = project.clone();
+                    let row_style = if i % 2 == 0 {
+                        th::stripe_even
+                    } else {
+                        th::stripe_odd
+                    };
+                    container(
+                        row![
+                            text(format!("◆ {}", m.name))
+                                .size(12)
+                                .width(180)
+                                .color(th::color::green()),
+                            text(m.fn_count.to_string())
+                                .size(12)
+                                .width(40)
+                                .color(fn_color),
+                            text(fmt_bytes(m.src_bytes))
+                                .size(11)
+                                .width(52)
+                                .color(th::color::text_dim()),
+                            Space::new().width(Length::Fill),
+                            button(text("Edit").size(11))
+                                .on_press(Message::Navigate(View::ModuleDetail {
+                                    project: proj,
+                                    module_name: m_name
+                                }))
+                                .style(th::btn_ghost),
+                            button(text("Sync").size(11))
+                                .on_press(Message::SyncModule(m.name.clone()))
+                                .style(th::btn_ghost),
+                            button(text("✗").size(11))
+                                .on_press(Message::RemoveModule(m_name2))
+                                .style(th::btn_danger),
+                        ]
+                        .spacing(4)
+                        .align_y(iced::Alignment::Center)
+                        .padding([4, 8]),
+                    )
+                    .width(Length::Fill)
+                    .style(row_style)
+                    .into()
+                })
+                .collect();
 
             column(rows).spacing(0).into()
         };
@@ -316,7 +370,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
                 th::section_title("◈ Modules"),
                 Space::new().width(Length::Fill),
                 button(text("+ Add Module").size(11))
-                    .on_press(Message::Navigate(View::AddModule { project: project.clone() }))
+                    .on_press(Message::Navigate(View::AddModule {
+                        project: project.clone()
+                    }))
                     .style(th::btn_primary),
             ]
             .spacing(8)
@@ -342,6 +398,9 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
 }
 
 fn fmt_bytes(b: u64) -> String {
-    if b < 1024 { format!("{b}B") }
-    else { format!("{:.1}K", b as f64 / 1024.0) }
+    if b < 1024 {
+        format!("{b}B")
+    } else {
+        format!("{:.1}K", b as f64 / 1024.0)
+    }
 }

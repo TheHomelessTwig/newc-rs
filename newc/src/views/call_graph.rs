@@ -6,12 +6,12 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use iced::widget::canvas::{self, Canvas, Path, Stroke};
-use iced::widget::{button, column, row, text, Space};
+use iced::widget::{Space, button, column, row, text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, mouse};
 use newc_core::{project::Project, sync::extract_function_implementations};
 
-use crate::theme as th;
 use crate::state::{AppState, Message, View};
+use crate::theme as th;
 
 // ── Graph data ─────────────────────────────────────────────────────────────────
 
@@ -78,11 +78,7 @@ impl canvas::Program<Message> for CallGraphCanvas {
     ) -> Vec<canvas::Geometry<iced::Renderer>> {
         let geo = self.cache.draw(renderer, bounds.size(), |frame| {
             // Background
-            frame.fill_rectangle(
-                Point::ORIGIN,
-                bounds.size(),
-                th::color::bg_deep(),
-            );
+            frame.fill_rectangle(Point::ORIGIN, bounds.size(), th::color::bg_deep());
 
             let cx = bounds.width / 2.0 + self.pan_x;
             let cy = self.pan_y + 20.0;
@@ -194,7 +190,10 @@ impl canvas::Program<Message> for CallGraphCanvas {
                         let nw = node.w * z;
                         let nh = node.h * z;
                         if pos.x >= nx && pos.x <= nx + nw && pos.y >= ny && pos.y <= ny + nh {
-                            return Some(canvas::Action::publish(Message::GraphNodeSelect(node.id.clone())).and_capture());
+                            return Some(
+                                canvas::Action::publish(Message::GraphNodeSelect(node.id.clone()))
+                                    .and_capture(),
+                            );
                         }
                     }
                 }
@@ -206,12 +205,15 @@ impl canvas::Program<Message> for CallGraphCanvas {
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if let Some(start) = state.drag_start
-                    && let Some(pos) = cursor.position_in(bounds) {
-                        let dx = pos.x - start.x;
-                        let dy = pos.y - start.y;
-                        state.drag_start = Some(pos); // frame-to-frame delta, not total
-                        return Some(canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture());
-                    }
+                    && let Some(pos) = cursor.position_in(bounds)
+                {
+                    let dx = pos.x - start.x;
+                    let dy = pos.y - start.y;
+                    state.drag_start = Some(pos); // frame-to-frame delta, not total
+                    return Some(
+                        canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture(),
+                    );
+                }
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
@@ -254,7 +256,9 @@ pub fn build_graph(project: &Project) -> CallGraphData {
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
     queue.push_back(("main".to_string(), 0));
     while let Some((func, level)) = queue.pop_front() {
-        if levels.contains_key(&func) { continue; }
+        if levels.contains_key(&func) {
+            continue;
+        }
         levels.insert(func.clone(), level);
         if let Some(calls) = call_map.get(&func) {
             for callee in calls {
@@ -292,18 +296,29 @@ pub fn build_graph(project: &Project) -> CallGraphData {
     for _ in 0..3 {
         for lvl in 1..=max_lvl {
             let prev = by_level.get(&(lvl - 1)).cloned().unwrap_or_default();
-            let prev_pos: HashMap<String, f32> = prev.iter().enumerate()
-                .map(|(i, f)| (f.clone(), i as f32)).collect();
+            let prev_pos: HashMap<String, f32> = prev
+                .iter()
+                .enumerate()
+                .map(|(i, f)| (f.clone(), i as f32))
+                .collect();
             if let Some(funcs) = by_level.get_mut(&lvl) {
                 funcs.sort_by(|a, b| {
                     let score = |f: &str| {
-                        let callers: Vec<f32> = call_map.iter()
+                        let callers: Vec<f32> = call_map
+                            .iter()
                             .filter(|(_, callees)| callees.iter().any(|c| c == f))
                             .filter_map(|(caller, _)| prev_pos.get(caller))
-                            .cloned().collect();
-                        if callers.is_empty() { f32::MAX } else { callers.iter().sum::<f32>() / callers.len() as f32 }
+                            .cloned()
+                            .collect();
+                        if callers.is_empty() {
+                            f32::MAX
+                        } else {
+                            callers.iter().sum::<f32>() / callers.len() as f32
+                        }
                     };
-                    score(a).partial_cmp(&score(b)).unwrap_or(std::cmp::Ordering::Equal)
+                    score(a)
+                        .partial_cmp(&score(b))
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 });
             }
         }
@@ -334,7 +349,10 @@ pub fn build_graph(project: &Project) -> CallGraphData {
     for (from, calls) in &call_map {
         for to in calls {
             if nodes.iter().any(|n| &n.id == to) {
-                edges.push(GraphEdge { from: from.clone(), to: to.clone() });
+                edges.push(GraphEdge {
+                    from: from.clone(),
+                    to: to.clone(),
+                });
             }
         }
     }
@@ -349,14 +367,15 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let graph_data = build_graph(project);
 
     let controls = row![
-        button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+        button(text("← Back")).on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
         text(format!("Call Graph — {}", project.name))
-            .size(16).color(th::color::purple()),
+            .size(16)
+            .color(th::color::purple()),
         Space::new().width(Length::Fill),
         button(text("Reset View").size(12)).on_press(Message::GraphReset),
         button(text("Export").size(12)).on_press(Message::GraphExport),
-        text("Scroll: zoom  Drag: pan  Click: select").size(11)
+        text("Scroll: zoom  Drag: pan  Click: select")
+            .size(11)
             .color(th::color::text_dim()),
     ]
     .spacing(8)
@@ -370,25 +389,44 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     .spacing(12);
 
     let selected_info: Element<Message> = if let Some(sel) = &state.graph_selected {
-        let calls = graph_data.edges.iter()
+        let calls = graph_data
+            .edges
+            .iter()
             .filter(|e| &e.from == sel)
             .map(|e| e.to.clone())
             .collect::<Vec<_>>();
-        let called_by = graph_data.edges.iter()
+        let called_by = graph_data
+            .edges
+            .iter()
             .filter(|e| &e.to == sel)
             .map(|e| e.from.clone())
             .collect::<Vec<_>>();
-        text(format!("Selected: {}  |  Calls: {}  |  Called by: {}",
+        text(format!(
+            "Selected: {}  |  Calls: {}  |  Called by: {}",
             sel,
-            if calls.is_empty() { "none".to_string() } else { calls.join(", ") },
-            if called_by.is_empty() { "none".to_string() } else { called_by.join(", ") },
+            if calls.is_empty() {
+                "none".to_string()
+            } else {
+                calls.join(", ")
+            },
+            if called_by.is_empty() {
+                "none".to_string()
+            } else {
+                called_by.join(", ")
+            },
         ))
         .size(12)
         .color(th::color::cyan())
         .into()
     } else {
-        text(format!("{} functions | {} calls", graph_data.nodes.len(), graph_data.edges.len()))
-            .size(12).color(th::color::text_dim()).into()
+        text(format!(
+            "{} functions | {} calls",
+            graph_data.nodes.len(),
+            graph_data.edges.len()
+        ))
+        .size(12)
+        .color(th::color::text_dim())
+        .into()
     };
 
     let canvas_widget = Canvas::new(CallGraphCanvas {
@@ -418,8 +456,12 @@ fn build_call_map(project: &Project) -> HashMap<String, Vec<String>> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
 
     for module in &project.modules {
-        if !module.source.exists() { continue; }
-        let Ok(src) = std::fs::read_to_string(&module.source) else { continue };
+        if !module.source.exists() {
+            continue;
+        }
+        let Ok(src) = std::fs::read_to_string(&module.source) else {
+            continue;
+        };
         let funcs = extract_function_implementations(&src);
         let names: Vec<String> = funcs.iter().map(|f| f.name.clone()).collect();
         for func in funcs {
@@ -432,7 +474,9 @@ fn build_call_map(project: &Project) -> HashMap<String, Vec<String>> {
     if let Ok(src) = std::fs::read_to_string(&main_c) {
         // Extract Allman-style helpers defined in main.c (non-main functions)
         let helpers = extract_function_implementations(&src);
-        let all: Vec<String> = map.keys().cloned()
+        let all: Vec<String> = map
+            .keys()
+            .cloned()
             .chain(helpers.iter().map(|f| f.name.clone()))
             .collect();
         for func in &helpers {
@@ -441,7 +485,8 @@ fn build_call_map(project: &Project) -> HashMap<String, Vec<String>> {
         }
         // If "main" wasn't extracted (K&R-style brace on same line), seed it from raw scan.
         if !map.contains_key("main") {
-            let main_calls: Vec<String> = all.iter()
+            let main_calls: Vec<String> = all
+                .iter()
                 .filter(|n| n.as_str() != "main" && src.contains(&format!("{n}(")))
                 .cloned()
                 .collect();
@@ -453,7 +498,8 @@ fn build_call_map(project: &Project) -> HashMap<String, Vec<String>> {
 }
 
 fn calls_in(body: &str, known: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = known.iter()
+    let mut out: Vec<String> = known
+        .iter()
         .filter(|n| *n != "main" && body.contains(&format!("{n}(")))
         .cloned()
         .collect();
@@ -467,9 +513,13 @@ fn reachable_from(map: &HashMap<String, Vec<String>>, root: &str) -> HashSet<Str
     let mut queue = VecDeque::new();
     queue.push_back(root.to_string());
     while let Some(f) = queue.pop_front() {
-        if !visited.insert(f.clone()) { continue; }
+        if !visited.insert(f.clone()) {
+            continue;
+        }
         if let Some(calls) = map.get(&f) {
-            for c in calls { queue.push_back(c.clone()); }
+            for c in calls {
+                queue.push_back(c.clone());
+            }
         }
     }
     visited
@@ -492,8 +542,16 @@ pub fn graph_to_svg(data: &CallGraphData) -> String {
     let margin = 40.0f32;
     let min_x = data.nodes.iter().map(|n| n.x).fold(f32::MAX, f32::min);
     let min_y = data.nodes.iter().map(|n| n.y).fold(f32::MAX, f32::min);
-    let max_x = data.nodes.iter().map(|n| n.x + n.w).fold(f32::MIN, f32::max);
-    let max_y = data.nodes.iter().map(|n| n.y + n.h).fold(f32::MIN, f32::max);
+    let max_x = data
+        .nodes
+        .iter()
+        .map(|n| n.x + n.w)
+        .fold(f32::MIN, f32::max);
+    let max_y = data
+        .nodes
+        .iter()
+        .map(|n| n.y + n.h)
+        .fold(f32::MIN, f32::max);
 
     let ox = margin - min_x;
     let oy = margin - min_y;
@@ -523,13 +581,27 @@ pub fn graph_to_svg(data: &CallGraphData) -> String {
     for node in &data.nodes {
         let nx = ox + node.x;
         let ny = oy + node.y;
-        let fill = if node.is_main { "#448B3A" } else if node.is_unreachable { "#7A2A3A" } else { "#3D3A3F" };
-        let text_color = if node.is_unreachable { "#CC8080" } else { "#FCFCFA" };
+        let fill = if node.is_main {
+            "#448B3A"
+        } else if node.is_unreachable {
+            "#7A2A3A"
+        } else {
+            "#3D3A3F"
+        };
+        let text_color = if node.is_unreachable {
+            "#CC8080"
+        } else {
+            "#FCFCFA"
+        };
         out.push_str(&format!(
             "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{}\" stroke=\"#888\" stroke-width=\"1.5\"/>",
             nx, ny, node.w, node.h, fill
         ));
-        let escaped = node.id.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+        let escaped = node
+            .id
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
         out.push_str(&format!(
             "<text x=\"{:.1}\" y=\"{:.1}\" fill=\"{}\" font-size=\"12\" font-family=\"monospace\">{}</text>",
             nx + 6.0, ny + node.h / 2.0 + 4.0, text_color, escaped

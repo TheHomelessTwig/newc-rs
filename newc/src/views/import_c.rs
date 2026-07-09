@@ -1,6 +1,6 @@
 //! Import-from-C-file dialog — pick a `.c` file, select functions, and copy them into a module.
 
-use iced::widget::{button, checkbox, column, row, scrollable, text, text_input, Space};
+use iced::widget::{Space, button, checkbox, column, row, scrollable, text, text_input};
 use iced::{Element, Length};
 use newc_core::function_lib::FunctionTemplate;
 use newc_core::sync::ExtractedFunction;
@@ -20,24 +20,32 @@ pub struct ImportState {
 
 /// Renders the import-from-.c-file dialog screen.
 pub fn view(state: &crate::state::AppState) -> Element<'_, crate::state::Message> {
+    use crate::state::Message;
     use crate::theme as th;
-use crate::state::Message;
 
     let imp = &state.import_state;
 
     let header = row![
         text("Import from .c file").size(18),
         Space::new().width(Length::Fill),
-        button(text("Cancel")).on_press(Message::ShowImport(false)).style(th::btn_ghost),
+        button(text("Cancel"))
+            .on_press(Message::ShowImport(false))
+            .style(th::btn_ghost),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
 
     let pick_row = row![
-        button(text("Browse .c file…")).on_press(Message::ImportPickFile).style(th::btn_secondary),
-        text(if imp.path_label.is_empty() { "" } else { &imp.path_label })
-            .size(12)
-            .color(th::color::text_dim()),
+        button(text("Browse .c file…"))
+            .on_press(Message::ImportPickFile)
+            .style(th::btn_secondary),
+        text(if imp.path_label.is_empty() {
+            ""
+        } else {
+            &imp.path_label
+        })
+        .size(12)
+        .color(th::color::text_dim()),
     ]
     .spacing(8)
     .align_y(iced::Alignment::Center);
@@ -73,10 +81,11 @@ use crate::state::Message;
             let checked = imp.selected.get(i).copied().unwrap_or(false);
             column![
                 row![
-                    checkbox(checked)
-                        .on_toggle(move |_v| Message::ImportToggleFunc(i)),
+                    checkbox(checked).on_toggle(move |_v| Message::ImportToggleFunc(i)),
                     column![
-                        text(func.name.as_str()).size(13).font(iced::Font::MONOSPACE),
+                        text(func.name.as_str())
+                            .size(13)
+                            .font(iced::Font::MONOSPACE),
                         text(func.signature.as_str())
                             .size(11)
                             .color(th::color::text_dim())
@@ -92,7 +101,8 @@ use crate::state::Message;
         .collect();
 
     let can_import = selected_count > 0 && !imp.target_module.trim().is_empty();
-    let mut import_btn = button(text(format!("Import {selected_count} function(s)"))).style(th::btn_primary);
+    let mut import_btn =
+        button(text(format!("Import {selected_count} function(s)"))).style(th::btn_primary);
     if can_import {
         import_btn = import_btn.on_press(Message::ImportSubmit);
     }
@@ -102,12 +112,22 @@ use crate::state::Message;
         pick_row,
         target_row,
         row![
-            button(text("Select all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX)).style(th::btn_ghost),
-            button(text("Deselect all").size(12)).on_press(Message::ImportToggleFunc(usize::MAX - 1)).style(th::btn_ghost),
+            button(text("Select all").size(12))
+                .on_press(Message::ImportToggleFunc(usize::MAX))
+                .style(th::btn_ghost),
+            button(text("Deselect all").size(12))
+                .on_press(Message::ImportToggleFunc(usize::MAX - 1))
+                .style(th::btn_ghost),
         ]
         .spacing(6),
         scrollable(column(func_rows).spacing(6)).height(360),
-        row![import_btn, button(text("Cancel")).on_press(Message::ShowImport(false)).style(th::btn_ghost)].spacing(8),
+        row![
+            import_btn,
+            button(text("Cancel"))
+                .on_press(Message::ShowImport(false))
+                .style(th::btn_ghost)
+        ]
+        .spacing(8),
     ]
     .spacing(10)
     .padding(16)

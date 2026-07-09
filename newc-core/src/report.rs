@@ -50,7 +50,10 @@ pub fn generate(root: &Path, project_name: &str) -> String {
     for m in &s.module_stats {
         md.push_str(&format!("| {} | {} | {} |\n", m.name, m.functions, m.loc));
     }
-    md.push_str(&format!("| **Total** | **{}** | **{}** |\n\n", s.total_functions, s.total_loc));
+    md.push_str(&format!(
+        "| **Total** | **{}** | **{}** |\n\n",
+        s.total_functions, s.total_loc
+    ));
 
     // Modules + function list
     md.push_str("## Modules\n\n");
@@ -66,7 +69,10 @@ pub fn generate(root: &Path, project_name: &str) -> String {
             .collect();
         paths.sort();
         for path in &paths {
-            let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             md.push_str(&format!("### {name}\n\n"));
             if let Ok(content) = std::fs::read_to_string(path) {
                 let fns = crate::sync::extract_function_implementations(&content);
@@ -85,9 +91,18 @@ pub fn generate(root: &Path, project_name: &str) -> String {
         md.push_str("| Timestamp | Target | Result | Duration |\n");
         md.push_str("|---|---|---|---|\n");
         for rec in records.iter().rev().take(10) {
-            let result = if rec.succeeded() { "✓ OK" } else { "✗ Failed" };
-            md.push_str(&format!("| {} | {} | {} | {} |\n",
-                rec.timestamp, rec.target, result, rec.duration_str()));
+            let result = if rec.succeeded() {
+                "✓ OK"
+            } else {
+                "✗ Failed"
+            };
+            md.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                rec.timestamp,
+                rec.target,
+                result,
+                rec.duration_str()
+            ));
         }
         md.push('\n');
     }

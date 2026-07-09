@@ -122,7 +122,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 "#
             ),
-            License::Unlicense => r#"This is free and unencumbered software released into the public domain.
+            License::Unlicense => {
+                r#"This is free and unencumbered software released into the public domain.
 
 Anyone is free to copy, modify, publish, use, compile, sell, or distribute
 this software, either in source code form or as a compiled binary, for any
@@ -143,7 +144,9 @@ ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <https://unlicense.org>
-"#.to_string(),
+"#
+                .to_string()
+            }
             License::Apache2 => APACHE_2_0
                 .replace("[yyyy]", year)
                 .replace("[name of copyright owner]", author),
