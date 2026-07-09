@@ -2,17 +2,22 @@
 
 use std::path::{Path, PathBuf};
 
-use iced::widget::{button, column, container, pane_grid, pick_list, row, scrollable, text, text_editor, Space};
-use iced::{Element, Length};
-use newc_core::sync::extract_function_implementations;
 use crate::highlight::code_view;
 use crate::theme as th;
+use iced::widget::{
+    Space, button, column, container, pane_grid, pick_list, row, scrollable, text, text_editor,
+};
+use iced::{Element, Length};
+use newc_core::sync::extract_function_implementations;
 
 use crate::state::{AppState, Message, View};
 
 /// Identifies which pane of the module detail resizable pane-grid is being rendered.
 #[derive(Clone, Copy)]
-pub enum ModulePane { Sidebar, Panel }
+pub enum ModulePane {
+    Sidebar,
+    Panel,
+}
 
 /// Persistent UI state for the module detail screen.
 #[derive(Default)]
@@ -61,7 +66,8 @@ pub fn view<'a>(
     // ── Header ────────────────────────────────────────────────────────────────
     // Build the back view from project_root
     let project = newc_core::project::Project::open(project_root.to_path_buf()).ok();
-    let back_msg = project.as_ref()
+    let back_msg = project
+        .as_ref()
         .map(|p| Message::Navigate(View::ProjectDetail(p.clone())))
         .unwrap_or(Message::Navigate(View::Home));
 
@@ -78,7 +84,8 @@ pub fn view<'a>(
         Space::new().width(Length::Fill),
         button(text("Edit Header (.h)").size(11))
             .on_press(
-                project.as_ref()
+                project
+                    .as_ref()
                     .map(|p| Message::Navigate(View::HeaderEditor {
                         project: p.clone(),
                         module_name: module_name.to_string(),
@@ -115,17 +122,25 @@ pub fn view<'a>(
         },
         {
             let mut other_modules: Vec<String> = std::fs::read_dir(project_root.join("src"))
-                .map(|entries| entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("c"))
-                    .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
-                    .filter(|n| n != module_name)
-                    .collect())
+                .map(|entries| {
+                    entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("c"))
+                        .filter_map(|e| {
+                            e.path()
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().to_string())
+                        })
+                        .filter(|n| n != module_name)
+                        .collect()
+                })
                 .unwrap_or_default();
             other_modules.sort();
-            pick_list(other_modules, state.split_compare_module.clone(), |name| Message::SplitCompareSelect(Some(name)))
-                .placeholder("split with…")
-                .text_size(12)
+            pick_list(other_modules, state.split_compare_module.clone(), |name| {
+                Message::SplitCompareSelect(Some(name))
+            })
+            .placeholder("split with…")
+            .text_size(12)
         },
         button(text("×").size(12))
             .on_press(Message::SplitCompareSelect(None))
@@ -135,44 +150,63 @@ pub fn view<'a>(
     .align_y(iced::Alignment::Center);
 
     // ── Dead-code banner ──────────────────────────────────────────────────────
-    let dead_banner: Option<Element<Message>> = if mds.check_ran && !mds.unreachable_funcs.is_empty() {
-        Some(
-            text(format!("⚠ {} unreachable function(s): {}", mds.unreachable_funcs.len(),
-                mds.unreachable_funcs.join(", ")))
+    let dead_banner: Option<Element<Message>> =
+        if mds.check_ran && !mds.unreachable_funcs.is_empty() {
+            Some(
+                text(format!(
+                    "⚠ {} unreachable function(s): {}",
+                    mds.unreachable_funcs.len(),
+                    mds.unreachable_funcs.join(", ")
+                ))
                 .size(12)
                 .color(th::color::orange())
-                .into()
-        )
-    } else {
-        None
-    };
+                .into(),
+            )
+        } else {
+            None
+        };
 
     // ── Left: function list ───────────────────────────────────────────────────
     // Collect owned function names
-    struct FuncEntry { name: String, is_unreachable: bool }
-    let func_entries: Vec<FuncEntry> = funcs.iter().map(|f| FuncEntry {
-        name: f.name.clone(),
-        is_unreachable: mds.unreachable_funcs.contains(&f.name),
-    }).collect();
+    struct FuncEntry {
+        name: String,
+        is_unreachable: bool,
+    }
+    let func_entries: Vec<FuncEntry> = funcs
+        .iter()
+        .map(|f| FuncEntry {
+            name: f.name.clone(),
+            is_unreachable: mds.unreachable_funcs.contains(&f.name),
+        })
+        .collect();
 
-    let fn_list: Vec<Element<Message>> = func_entries.iter().map(|fe| {
-        let selected = mds.selected_func.as_deref() == Some(&fe.name);
-        let color = if fe.is_unreachable {
-            th::color::accent()
-        } else if selected {
-            th::color::green()
-        } else {
-            th::color::text()
-        };
-        let style = if selected { th::btn_nav_active } else { th::btn_nav_inactive };
-        button(text(fe.name.clone()).size(12).color(color))
-            .on_press(Message::ModuleSelectFunc(Some(fe.name.clone())))
-            .style(style)
-            .width(Length::Fill)
-            .into()
-    }).collect();
+    let fn_list: Vec<Element<Message>> = func_entries
+        .iter()
+        .map(|fe| {
+            let selected = mds.selected_func.as_deref() == Some(&fe.name);
+            let color = if fe.is_unreachable {
+                th::color::accent()
+            } else if selected {
+                th::color::green()
+            } else {
+                th::color::text()
+            };
+            let style = if selected {
+                th::btn_nav_active
+            } else {
+                th::btn_nav_inactive
+            };
+            button(text(fe.name.clone()).size(12).color(color))
+                .on_press(Message::ModuleSelectFunc(Some(fe.name.clone())))
+                .style(style)
+                .width(Length::Fill)
+                .into()
+        })
+        .collect();
 
-    let fn_sidebar = scrollable(column(fn_list).spacing(2)).width(180).height(Length::Fill);
+    let fn_sidebar = scrollable(column(fn_list).spacing(2))
+        .width(180)
+        .height(Length::Fill);
 
     // ── Right: source / edit panel ────────────────────────────────────────────
     let right_panel: Element<Message> = if mds.edit_mode {
@@ -182,10 +216,15 @@ pub fn view<'a>(
                 text(mds.selected_func.as_deref().unwrap_or("")).size(14),
                 Space::new().width(Length::Fill),
                 button(text("Save").size(12))
-                    .on_press(mds.selected_func.as_ref().map(|n| Message::ModuleSaveFunc {
-                        name: n.clone(),
-                        new_impl: mds.edit_content.text(),
-                    }).unwrap_or(Message::None))
+                    .on_press(
+                        mds.selected_func
+                            .as_ref()
+                            .map(|n| Message::ModuleSaveFunc {
+                                name: n.clone(),
+                                new_impl: mds.edit_content.text(),
+                            })
+                            .unwrap_or(Message::None)
+                    )
                     .style(th::btn_primary),
                 button(text("Cancel").size(12))
                     .on_press(Message::ModuleEditMode(false))
@@ -223,16 +262,23 @@ pub fn view<'a>(
         if let Some(f) = func {
             let lint_warnings = newc_core::lint::lint_file(&f.body);
 
-            let coverage_label: Option<String> = newc_core::coverage::module_summary(project_root, module_name)
-                .filter(|s| s.total > 0)
-                .map(|s| format!("Coverage: {:.0}% ({}/{} lines)", s.percent(), s.covered, s.total));
+            let coverage_label: Option<String> =
+                newc_core::coverage::module_summary(project_root, module_name)
+                    .filter(|s| s.total > 0)
+                    .map(|s| {
+                        format!(
+                            "Coverage: {:.0}% ({}/{} lines)",
+                            s.percent(),
+                            s.covered,
+                            s.total
+                        )
+                    });
 
             let mut col = column![
                 row![
                     text(f.name.clone()).size(15).color(th::color::green()),
                     Space::new().width(Length::Fill),
-                    button(text("✎ Edit").size(12))
-                        .on_press(Message::ModuleEditMode(true)),
+                    button(text("✎ Edit").size(12)).on_press(Message::ModuleEditMode(true)),
                     button(text("✏ Rename").size(12))
                         .on_press(Message::ModuleRenameStart(f.name.clone()))
                         .style(th::btn_secondary),
@@ -247,7 +293,9 @@ pub fn view<'a>(
                 ]
                 .spacing(6)
                 .align_y(iced::Alignment::Center),
-                text(f.signature.clone()).size(12).font(iced::Font::MONOSPACE)
+                text(f.signature.clone())
+                    .size(12)
+                    .font(iced::Font::MONOSPACE)
                     .color(th::color::cyan()),
             ]
             .spacing(6);
@@ -260,10 +308,13 @@ pub fn view<'a>(
                     col = col.push(
                         row![
                             text("  @param").size(11).color(th::color::yellow()),
-                            text(name.clone()).size(11).font(iced::Font::MONOSPACE).color(th::color::green()),
+                            text(name.clone())
+                                .size(11)
+                                .font(iced::Font::MONOSPACE)
+                                .color(th::color::green()),
                             text(desc.clone()).size(11).color(th::color::text_dim()),
                         ]
-                        .spacing(6)
+                        .spacing(6),
                     );
                 }
                 if let Some(ret) = &doc.returns {
@@ -272,7 +323,7 @@ pub fn view<'a>(
                             text("  @return").size(11).color(th::color::yellow()),
                             text(ret.clone()).size(11).color(th::color::text_dim()),
                         ]
-                        .spacing(6)
+                        .spacing(6),
                     );
                 }
             }
@@ -285,28 +336,35 @@ pub fn view<'a>(
                 let body_lines: Vec<&str> = f.body.lines().collect();
                 let function_name = f.name.clone();
                 col = col.push(
-                    column(lint_warnings.iter().map(|w| {
-                        let label = format!("[{}] L{}: {}", w.code, w.line_no, w.message);
-                        let has_fix = body_lines.get(w.line_no.saturating_sub(1))
-                            .is_some_and(|line| newc_core::lint::quick_fix(w.code, line).is_some());
-                        let mut r = row![text(label).size(11).color(th::color::yellow())]
-                            .spacing(6)
-                            .align_y(iced::Alignment::Center);
-                        if has_fix {
-                            r = r.push(
-                                button(text("Fix").size(10))
-                                    .on_press(Message::LintQuickFix {
-                                        module: module_name.to_string(),
-                                        function: function_name.clone(),
-                                        line_no: w.line_no,
-                                        code: w.code.to_string(),
-                                    })
-                                    .style(th::btn_secondary),
-                            );
-                        }
-                        r.into()
-                    }).collect::<Vec<Element<Message>>>())
-                    .spacing(2)
+                    column(
+                        lint_warnings
+                            .iter()
+                            .map(|w| {
+                                let label = format!("[{}] L{}: {}", w.code, w.line_no, w.message);
+                                let has_fix =
+                                    body_lines.get(w.line_no.saturating_sub(1)).is_some_and(
+                                        |line| newc_core::lint::quick_fix(w.code, line).is_some(),
+                                    );
+                                let mut r = row![text(label).size(11).color(th::color::yellow())]
+                                    .spacing(6)
+                                    .align_y(iced::Alignment::Center);
+                                if has_fix {
+                                    r = r.push(
+                                        button(text("Fix").size(10))
+                                            .on_press(Message::LintQuickFix {
+                                                module: module_name.to_string(),
+                                                function: function_name.clone(),
+                                                line_no: w.line_no,
+                                                code: w.code.to_string(),
+                                            })
+                                            .style(th::btn_secondary),
+                                    );
+                                }
+                                r.into()
+                            })
+                            .collect::<Vec<Element<Message>>>(),
+                    )
+                    .spacing(2),
                 );
             }
 
@@ -315,9 +373,11 @@ pub fn view<'a>(
             // Call tree
             if mds.show_call_tree && !mds.call_tree_lines.is_empty() {
                 col = col.push(text("Call tree:").size(12).color(th::color::cyan()));
-                let tree_rows: Vec<Element<Message>> = mds.call_tree_lines.iter().map(|l| {
-                    text(l.clone()).size(11).font(iced::Font::MONOSPACE).into()
-                }).collect();
+                let tree_rows: Vec<Element<Message>> = mds
+                    .call_tree_lines
+                    .iter()
+                    .map(|l| text(l.clone()).size(11).font(iced::Font::MONOSPACE).into())
+                    .collect();
                 col = col.push(scrollable(column(tree_rows).spacing(2)).height(120));
             }
 
@@ -331,19 +391,37 @@ pub fn view<'a>(
         let other_content = std::fs::read_to_string(&other_path).unwrap_or_default();
         row![
             column![
-                text(module_name.to_string()).size(12).color(th::color::text_dim()),
-                code_view(&src_content, state.config.code_font_size, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL)),
-            ].spacing(2).width(Length::FillPortion(1)),
+                text(module_name.to_string())
+                    .size(12)
+                    .color(th::color::text_dim()),
+                code_view(
+                    &src_content,
+                    state.config.code_font_size,
+                    mds.highlight_line,
+                    Some(crate::highlight::MODULE_CODE_SCROLL)
+                ),
+            ]
+            .spacing(2)
+            .width(Length::FillPortion(1)),
             column![
-                text(other_module.clone()).size(12).color(th::color::text_dim()),
+                text(other_module.clone())
+                    .size(12)
+                    .color(th::color::text_dim()),
                 code_view(&other_content, state.config.code_font_size, None, None),
-            ].spacing(2).width(Length::FillPortion(1)),
+            ]
+            .spacing(2)
+            .width(Length::FillPortion(1)),
         ]
         .spacing(8)
         .into()
     } else {
         // No selection — show full source with highlighting
-        code_view(&src_content, state.config.code_font_size, mds.highlight_line, Some(crate::highlight::MODULE_CODE_SCROLL))
+        code_view(
+            &src_content,
+            state.config.code_font_size,
+            mds.highlight_line,
+            Some(crate::highlight::MODULE_CODE_SCROLL),
+        )
     };
 
     let mut layout = column![header, toolbar];
@@ -355,7 +433,9 @@ pub fn view<'a>(
         layout = layout.push(
             container(
                 row![
-                    text(format!("Delete `{pending_delete_name}`?")).size(12).color(th::color::accent()),
+                    text(format!("Delete `{pending_delete_name}`?"))
+                        .size(12)
+                        .color(th::color::accent()),
                     Space::new().width(Length::Fill),
                     button(text("Confirm").size(11))
                         .on_press(Message::ModuleDeleteFuncConfirm)
@@ -365,10 +445,10 @@ pub fn view<'a>(
                         .style(th::btn_ghost),
                 ]
                 .spacing(8)
-                .align_y(iced::Alignment::Center)
+                .align_y(iced::Alignment::Center),
             )
             .padding(6)
-            .style(th::section_style)
+            .style(th::section_style),
         );
     }
     if state.show_rename_modal {
@@ -389,10 +469,10 @@ pub fn view<'a>(
                         .style(th::btn_ghost),
                 ]
                 .spacing(8)
-                .align_y(iced::Alignment::Center)
+                .align_y(iced::Alignment::Center),
             )
             .padding(6)
-            .style(th::section_style)
+            .style(th::section_style),
         );
     }
     if state.show_move_modal {
@@ -413,10 +493,10 @@ pub fn view<'a>(
                         .style(th::btn_ghost),
                 ]
                 .spacing(8)
-                .align_y(iced::Alignment::Center)
+                .align_y(iced::Alignment::Center),
             )
             .padding(6)
-            .style(th::section_style)
+            .style(th::section_style),
         );
     }
     let sidebar_cell = std::cell::RefCell::new(Some(fn_sidebar.into()));
@@ -435,9 +515,5 @@ pub fn view<'a>(
     .height(Length::Fill)
     .into();
 
-    layout
-        .push(grid)
-        .spacing(8)
-        .padding(12)
-        .into()
+    layout.push(grid).spacing(8).padding(12).into()
 }

@@ -8,7 +8,7 @@ use chrono::Local;
 
 use crate::config::ProjectConfig;
 use crate::error::{NewcError, Result};
-use crate::license::{spdx_line, License};
+use crate::license::{License, spdx_line};
 use crate::module::is_valid_c_ident;
 use crate::project::BuildSystem;
 use crate::templates;
@@ -119,11 +119,19 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
         || opts.modules.contains(&DefaultModule::UnityTest);
     match opts.build_system {
         BuildSystem::Make => {
-            let makefile = if has_tests { templates::MAKEFILE_WITH_TEST } else { templates::MAKEFILE };
+            let makefile = if has_tests {
+                templates::MAKEFILE_WITH_TEST
+            } else {
+                templates::MAKEFILE
+            };
             fs::write(root.join("Makefile"), makefile)?;
         }
         BuildSystem::CMake => {
-            let cmake = if has_tests { templates::CMAKE_LISTS_WITH_TEST } else { templates::CMAKE_LISTS };
+            let cmake = if has_tests {
+                templates::CMAKE_LISTS_WITH_TEST
+            } else {
+                templates::CMAKE_LISTS
+            };
             fs::write(root.join("CMakeLists.txt"), cmake)?;
             fs::write(root.join("CMakePresets.json"), templates::CMAKE_PRESETS)?;
         }
@@ -133,12 +141,24 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
     for module in &opts.modules {
         match module {
             DefaultModule::Input => {
-                write_src(root.join("include").join("input.h"), templates::input_h(author, &date))?;
-                write_src(root.join("src").join("input.c"), templates::input_c(author, &date))?;
+                write_src(
+                    root.join("include").join("input.h"),
+                    templates::input_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("input.c"),
+                    templates::input_c(author, &date),
+                )?;
             }
             DefaultModule::Math => {
-                write_src(root.join("include").join("math.h"), templates::math_h(author, &date))?;
-                write_src(root.join("src").join("math.c"), templates::math_c(author, &date))?;
+                write_src(
+                    root.join("include").join("math.h"),
+                    templates::math_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("math.c"),
+                    templates::math_c(author, &date),
+                )?;
             }
             DefaultModule::Display => {
                 write_src(
@@ -151,28 +171,64 @@ pub fn create_project(opts: &ScaffoldOptions, parent: &Path) -> Result<()> {
                 )?;
             }
             DefaultModule::Array => {
-                write_src(root.join("include").join("array.h"), templates::array_h(author, &date))?;
-                write_src(root.join("src").join("array.c"), templates::array_c(author, &date))?;
+                write_src(
+                    root.join("include").join("array.h"),
+                    templates::array_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("array.c"),
+                    templates::array_c(author, &date),
+                )?;
             }
             DefaultModule::Strings => {
-                write_src(root.join("include").join("strings.h"), templates::strings_h(author, &date))?;
-                write_src(root.join("src").join("strings.c"), templates::strings_c(author, &date))?;
+                write_src(
+                    root.join("include").join("strings.h"),
+                    templates::strings_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("strings.c"),
+                    templates::strings_c(author, &date),
+                )?;
             }
             DefaultModule::LinkedList => {
-                write_src(root.join("include").join("linked_list.h"), templates::linked_list_h(author, &date))?;
-                write_src(root.join("src").join("linked_list.c"), templates::linked_list_c(author, &date))?;
+                write_src(
+                    root.join("include").join("linked_list.h"),
+                    templates::linked_list_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("linked_list.c"),
+                    templates::linked_list_c(author, &date),
+                )?;
             }
             DefaultModule::Files => {
-                write_src(root.join("include").join("files.h"), templates::files_h(author, &date))?;
-                write_src(root.join("src").join("files.c"), templates::files_c(author, &date))?;
+                write_src(
+                    root.join("include").join("files.h"),
+                    templates::files_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("files.c"),
+                    templates::files_c(author, &date),
+                )?;
             }
             DefaultModule::TestUtils => {
-                write_src(root.join("include").join("test_utils.h"), templates::test_utils_h(author, &date))?;
-                write_src(root.join("src").join("test_utils.c"), templates::test_utils_c(author, &date))?;
+                write_src(
+                    root.join("include").join("test_utils.h"),
+                    templates::test_utils_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("test_utils.c"),
+                    templates::test_utils_c(author, &date),
+                )?;
             }
             DefaultModule::UnityTest => {
-                write_src(root.join("include").join("unity.h"), templates::unity_h(author, &date))?;
-                write_src(root.join("src").join("unity.c"), templates::unity_c(author, &date))?;
+                write_src(
+                    root.join("include").join("unity.h"),
+                    templates::unity_h(author, &date),
+                )?;
+                write_src(
+                    root.join("src").join("unity.c"),
+                    templates::unity_c(author, &date),
+                )?;
             }
         }
     }
@@ -251,8 +307,14 @@ mod tests {
         create_project(&opts("proj", DefaultModule::all()), tmp.path()).unwrap();
         let root = tmp.path().join("proj");
         for name in ["input", "math", "display", "array"] {
-            assert!(root.join(format!("src/{name}.c")).exists(), "{name}.c missing");
-            assert!(root.join(format!("include/{name}.h")).exists(), "{name}.h missing");
+            assert!(
+                root.join(format!("src/{name}.c")).exists(),
+                "{name}.c missing"
+            );
+            assert!(
+                root.join(format!("include/{name}.h")).exists(),
+                "{name}.h missing"
+            );
         }
     }
 

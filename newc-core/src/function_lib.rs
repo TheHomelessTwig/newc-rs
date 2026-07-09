@@ -81,7 +81,17 @@ impl FunctionLibrary {
         let mut lib = Self::default();
 
         // Built-in groups always present
-        for name in ["input", "math", "display", "array", "algorithms", "strings", "linked_list", "files", "test_utils"] {
+        for name in [
+            "input",
+            "math",
+            "display",
+            "array",
+            "algorithms",
+            "strings",
+            "linked_list",
+            "files",
+            "test_utils",
+        ] {
             lib.groups.push(FunctionGroup {
                 name: name.to_string(),
                 description: String::new(),
@@ -97,41 +107,43 @@ impl FunctionLibrary {
         // Load user groups from ~/.config/newc/groups.toml
         if let Some(path) = groups_path()
             && let Ok(content) = std::fs::read_to_string(&path)
-                && let Ok(file) = toml::from_str::<GroupsFile>(&content) {
-                    for g in file.groups {
-                        if !lib.groups.iter().any(|existing| existing.name == g.name) {
-                            lib.groups.push(g);
-                        }
-                    }
+            && let Ok(file) = toml::from_str::<GroupsFile>(&content)
+        {
+            for g in file.groups {
+                if !lib.groups.iter().any(|existing| existing.name == g.name) {
+                    lib.groups.push(g);
                 }
+            }
+        }
 
         // Load user function overrides from ~/.config/newc/functions/*.toml
         if let Some(user_dir) = user_functions_dir()
-            && let Ok(entries) = std::fs::read_dir(&user_dir) {
-                let mut paths: Vec<PathBuf> = entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("toml"))
-                    .map(|e| e.path())
-                    .collect();
-                paths.sort();
-                for path in paths {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        let module = path
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        lib.load_toml_str(&content, &module);
-                        // Auto-add group for any user module not already listed
-                        if !lib.groups.iter().any(|g| g.name == module) {
-                            lib.groups.push(FunctionGroup {
-                                name: module,
-                                description: String::new(),
-                                builtin: false,
-                            });
-                        }
+            && let Ok(entries) = std::fs::read_dir(&user_dir)
+        {
+            let mut paths: Vec<PathBuf> = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("toml"))
+                .map(|e| e.path())
+                .collect();
+            paths.sort();
+            for path in paths {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    let module = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    lib.load_toml_str(&content, &module);
+                    // Auto-add group for any user module not already listed
+                    if !lib.groups.iter().any(|g| g.name == module) {
+                        lib.groups.push(FunctionGroup {
+                            name: module,
+                            description: String::new(),
+                            builtin: false,
+                        });
                     }
                 }
             }
+        }
 
         lib
     }
@@ -151,12 +163,20 @@ impl FunctionLibrary {
     /// Create a new user-defined group.
     ///
     /// Returns `false` if a group with that name already exists.
-    pub fn create_group(&mut self, name: impl Into<String>, description: impl Into<String>) -> bool {
+    pub fn create_group(
+        &mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> bool {
         let name = name.into();
         if self.groups.iter().any(|g| g.name == name) {
             return false;
         }
-        self.groups.push(FunctionGroup { name, description: description.into(), builtin: false });
+        self.groups.push(FunctionGroup {
+            name,
+            description: description.into(),
+            builtin: false,
+        });
         true
     }
 
@@ -183,7 +203,11 @@ impl FunctionLibrary {
 
     /// Delete group. cascade=true also deletes all functions in the group.
     pub fn delete_group(&mut self, name: &str, cascade: bool) -> bool {
-        let Some(pos) = self.groups.iter().position(|g| g.name == name && !g.builtin) else {
+        let Some(pos) = self
+            .groups
+            .iter()
+            .position(|g| g.name == name && !g.builtin)
+        else {
             return false;
         };
         self.groups.remove(pos);
@@ -198,7 +222,9 @@ impl FunctionLibrary {
     /// # Errors
     /// Returns an error if serialisation or the write fails.
     pub fn save_groups(&self) -> Result<()> {
-        let Some(path) = groups_path() else { return Ok(()) };
+        let Some(path) = groups_path() else {
+            return Ok(());
+        };
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -226,7 +252,10 @@ impl FunctionLibrary {
 
     /// Return all functions belonging to the given module/group name.
     pub fn by_module(&self, module: &str) -> Vec<&FunctionTemplate> {
-        self.functions.iter().filter(|f| f.module == module).collect()
+        self.functions
+            .iter()
+            .filter(|f| f.module == module)
+            .collect()
     }
 
     /// Search by name, description, tags, and module (case-insensitive substring).
@@ -245,8 +274,7 @@ impl FunctionLibrary {
 
     /// Return a sorted, deduplicated list of module names present in the library.
     pub fn modules(&self) -> Vec<String> {
-        let mut mods: Vec<String> =
-            self.functions.iter().map(|f| f.module.clone()).collect();
+        let mut mods: Vec<String> = self.functions.iter().map(|f| f.module.clone()).collect();
         mods.sort();
         mods.dedup();
         mods
@@ -305,7 +333,9 @@ impl FunctionLibrary {
     /// # Errors
     /// Returns an error if the directory cannot be created or the file cannot be written.
     pub fn save_user_function(func: &FunctionTemplate) -> Result<()> {
-        let Some(dir) = user_functions_dir() else { return Ok(()) };
+        let Some(dir) = user_functions_dir() else {
+            return Ok(());
+        };
         std::fs::create_dir_all(&dir)?;
         let path = dir.join(format!("{}.toml", func.module));
         let mut file: LibraryFile = if path.exists() {
@@ -315,7 +345,10 @@ impl FunctionLibrary {
                 functions: Vec::new(),
             })
         } else {
-            LibraryFile { module: func.module.clone(), functions: Vec::new() }
+            LibraryFile {
+                module: func.module.clone(),
+                functions: Vec::new(),
+            }
         };
         file.functions.retain(|f| f.name != func.name);
         file.functions.push(func.clone());
@@ -333,45 +366,103 @@ pub fn detect_requires(impl_code: &str, lib: &FunctionLibrary) -> Vec<String> {
 
     let stdlib: &[(&str, &str)] = &[
         // stdio
-        ("printf(",   "stdio.h"), ("fprintf(",  "stdio.h"), ("scanf(",    "stdio.h"),
-        ("fscanf(",   "stdio.h"), ("sscanf(",   "stdio.h"), ("fgets(",    "stdio.h"),
-        ("fopen(",    "stdio.h"), ("fclose(",   "stdio.h"), ("fread(",    "stdio.h"),
-        ("fwrite(",   "stdio.h"), ("puts(",     "stdio.h"), ("getchar(",  "stdio.h"),
-        ("putchar(",  "stdio.h"), ("snprintf(", "stdio.h"), ("sprintf(",  "stdio.h"),
-        ("perror(",   "stdio.h"), ("rewind(",   "stdio.h"), ("feof(",     "stdio.h"),
-        ("FILE",      "stdio.h"), ("EOF",       "stdio.h"),
+        ("printf(", "stdio.h"),
+        ("fprintf(", "stdio.h"),
+        ("scanf(", "stdio.h"),
+        ("fscanf(", "stdio.h"),
+        ("sscanf(", "stdio.h"),
+        ("fgets(", "stdio.h"),
+        ("fopen(", "stdio.h"),
+        ("fclose(", "stdio.h"),
+        ("fread(", "stdio.h"),
+        ("fwrite(", "stdio.h"),
+        ("puts(", "stdio.h"),
+        ("getchar(", "stdio.h"),
+        ("putchar(", "stdio.h"),
+        ("snprintf(", "stdio.h"),
+        ("sprintf(", "stdio.h"),
+        ("perror(", "stdio.h"),
+        ("rewind(", "stdio.h"),
+        ("feof(", "stdio.h"),
+        ("FILE", "stdio.h"),
+        ("EOF", "stdio.h"),
         // stdlib
-        ("malloc(",   "stdlib.h"), ("calloc(",  "stdlib.h"), ("realloc(", "stdlib.h"),
-        ("free(",     "stdlib.h"), ("exit(",    "stdlib.h"), ("abort(",   "stdlib.h"),
-        ("atoi(",     "stdlib.h"), ("atof(",    "stdlib.h"), ("atol(",    "stdlib.h"),
-        ("rand(",     "stdlib.h"), ("srand(",   "stdlib.h"), ("abs(",     "stdlib.h"),
-        ("qsort(",    "stdlib.h"), ("bsearch(", "stdlib.h"), ("getenv(",  "stdlib.h"),
+        ("malloc(", "stdlib.h"),
+        ("calloc(", "stdlib.h"),
+        ("realloc(", "stdlib.h"),
+        ("free(", "stdlib.h"),
+        ("exit(", "stdlib.h"),
+        ("abort(", "stdlib.h"),
+        ("atoi(", "stdlib.h"),
+        ("atof(", "stdlib.h"),
+        ("atol(", "stdlib.h"),
+        ("rand(", "stdlib.h"),
+        ("srand(", "stdlib.h"),
+        ("abs(", "stdlib.h"),
+        ("qsort(", "stdlib.h"),
+        ("bsearch(", "stdlib.h"),
+        ("getenv(", "stdlib.h"),
         // string
-        ("strlen(",   "string.h"), ("strcpy(",  "string.h"), ("strncpy(", "string.h"),
-        ("strcmp(",   "string.h"), ("strncmp(", "string.h"), ("strcat(",  "string.h"),
-        ("strncat(",  "string.h"), ("strchr(",  "string.h"), ("strrchr(", "string.h"),
-        ("strstr(",   "string.h"), ("memset(",  "string.h"), ("memcpy(",  "string.h"),
-        ("memcmp(",   "string.h"), ("memmove(", "string.h"),
+        ("strlen(", "string.h"),
+        ("strcpy(", "string.h"),
+        ("strncpy(", "string.h"),
+        ("strcmp(", "string.h"),
+        ("strncmp(", "string.h"),
+        ("strcat(", "string.h"),
+        ("strncat(", "string.h"),
+        ("strchr(", "string.h"),
+        ("strrchr(", "string.h"),
+        ("strstr(", "string.h"),
+        ("memset(", "string.h"),
+        ("memcpy(", "string.h"),
+        ("memcmp(", "string.h"),
+        ("memmove(", "string.h"),
         // math
-        ("sqrt(",  "math.h"), ("pow(",   "math.h"), ("fabs(",  "math.h"),
-        ("sin(",   "math.h"), ("cos(",   "math.h"), ("tan(",   "math.h"),
-        ("asin(",  "math.h"), ("acos(",  "math.h"), ("atan(",  "math.h"),
-        ("atan2(", "math.h"), ("log(",   "math.h"), ("log2(",  "math.h"),
-        ("log10(", "math.h"), ("exp(",   "math.h"), ("floor(", "math.h"),
-        ("ceil(",  "math.h"), ("round(", "math.h"), ("fmod(",  "math.h"),
+        ("sqrt(", "math.h"),
+        ("pow(", "math.h"),
+        ("fabs(", "math.h"),
+        ("sin(", "math.h"),
+        ("cos(", "math.h"),
+        ("tan(", "math.h"),
+        ("asin(", "math.h"),
+        ("acos(", "math.h"),
+        ("atan(", "math.h"),
+        ("atan2(", "math.h"),
+        ("log(", "math.h"),
+        ("log2(", "math.h"),
+        ("log10(", "math.h"),
+        ("exp(", "math.h"),
+        ("floor(", "math.h"),
+        ("ceil(", "math.h"),
+        ("round(", "math.h"),
+        ("fmod(", "math.h"),
         // ctype
-        ("isdigit(", "ctype.h"), ("isalpha(", "ctype.h"), ("isspace(",  "ctype.h"),
-        ("toupper(", "ctype.h"), ("tolower(", "ctype.h"), ("isalnum(",  "ctype.h"),
-        ("ispunct(", "ctype.h"), ("isupper(", "ctype.h"), ("islower(",  "ctype.h"),
+        ("isdigit(", "ctype.h"),
+        ("isalpha(", "ctype.h"),
+        ("isspace(", "ctype.h"),
+        ("toupper(", "ctype.h"),
+        ("tolower(", "ctype.h"),
+        ("isalnum(", "ctype.h"),
+        ("ispunct(", "ctype.h"),
+        ("isupper(", "ctype.h"),
+        ("islower(", "ctype.h"),
         // time
-        ("time(",      "time.h"), ("clock(",     "time.h"), ("difftime(", "time.h"),
-        ("localtime(", "time.h"), ("strftime(",  "time.h"), ("mktime(",   "time.h"),
+        ("time(", "time.h"),
+        ("clock(", "time.h"),
+        ("difftime(", "time.h"),
+        ("localtime(", "time.h"),
+        ("strftime(", "time.h"),
+        ("mktime(", "time.h"),
         // assert
         ("assert(", "assert.h"),
         // stdarg
-        ("va_list", "stdarg.h"), ("va_start(", "stdarg.h"), ("va_end(", "stdarg.h"),
+        ("va_list", "stdarg.h"),
+        ("va_start(", "stdarg.h"),
+        ("va_end(", "stdarg.h"),
         // stdbool
-        ("bool ", "stdbool.h"), ("true", "stdbool.h"), ("false", "stdbool.h"),
+        ("bool ", "stdbool.h"),
+        ("true", "stdbool.h"),
+        ("false", "stdbool.h"),
     ];
 
     for (pattern, header) in stdlib {
@@ -406,13 +497,28 @@ fn groups_path() -> Option<PathBuf> {
 }
 
 const BUILTIN_TOML_FILES: &[(&str, &str)] = &[
-    ("input",       include_str!("../../assets/functions/input.toml")),
-    ("math",        include_str!("../../assets/functions/math.toml")),
-    ("display",     include_str!("../../assets/functions/display.toml")),
-    ("array",       include_str!("../../assets/functions/array.toml")),
-    ("algorithms",  include_str!("../../assets/functions/algorithms.toml")),
-    ("strings",     include_str!("../../assets/functions/strings.toml")),
-    ("linked_list", include_str!("../../assets/functions/linked_list.toml")),
-    ("files",       include_str!("../../assets/functions/files.toml")),
-    ("test_utils",  include_str!("../../assets/functions/test_utils.toml")),
+    ("input", include_str!("../../assets/functions/input.toml")),
+    ("math", include_str!("../../assets/functions/math.toml")),
+    (
+        "display",
+        include_str!("../../assets/functions/display.toml"),
+    ),
+    ("array", include_str!("../../assets/functions/array.toml")),
+    (
+        "algorithms",
+        include_str!("../../assets/functions/algorithms.toml"),
+    ),
+    (
+        "strings",
+        include_str!("../../assets/functions/strings.toml"),
+    ),
+    (
+        "linked_list",
+        include_str!("../../assets/functions/linked_list.toml"),
+    ),
+    ("files", include_str!("../../assets/functions/files.toml")),
+    (
+        "test_utils",
+        include_str!("../../assets/functions/test_utils.toml"),
+    ),
 ];

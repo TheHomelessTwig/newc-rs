@@ -5,25 +5,29 @@
 //! [`View`] determines which panel is rendered in the central area.
 //! [`Message`] is the exhaustive set of events that drive `update`.
 
-use std::path::PathBuf;
-use std::time::Instant;
 use iced::widget::{pane_grid, text_editor};
 use iced::window;
+use std::path::PathBuf;
+use std::time::Instant;
 
-use newc_core::{
-    config::{AppConfig, ProjectConfig}, diag::Diagnostic,
-    grep::SearchResult, main_builder::MainBuilderState,
-    meta::ProjectMeta, project::Project, stats::ProjectStats,
-    function_lib::FunctionTemplate,
-};
+use crate::build_runner::BuildLine;
+use crate::views::cref::CRefPane;
 use crate::views::header_editor::HeaderEditorState;
 use crate::views::import_c::ImportState;
 use crate::views::library::{LibraryPane, LibraryState};
-use crate::views::cref::CRefPane;
-use crate::views::snippets::SnippetsPane;
 use crate::views::module_detail::{ModuleDetailState, ModulePane};
 use crate::views::quick_search::QuickSearchState;
-use crate::build_runner::BuildLine;
+use crate::views::snippets::SnippetsPane;
+use newc_core::{
+    config::{AppConfig, ProjectConfig},
+    diag::Diagnostic,
+    function_lib::FunctionTemplate,
+    grep::SearchResult,
+    main_builder::MainBuilderState,
+    meta::ProjectMeta,
+    project::Project,
+    stats::ProjectStats,
+};
 
 /// Which view is currently displayed in the central panel.
 ///
@@ -40,10 +44,18 @@ pub enum View {
     ProjectDetail(Project),
     ProjectStats(Project),
     ProjectNotes(Project),
-    ModuleDetail { project: Project, module_name: String },
-    HeaderEditor { project: Project, module_name: String },
+    ModuleDetail {
+        project: Project,
+        module_name: String,
+    },
+    HeaderEditor {
+        project: Project,
+        module_name: String,
+    },
     MainBuilder(Project),
-    AddModule { project: Project },
+    AddModule {
+        project: Project,
+    },
     GitPanel(Project),
     BuildHistory(Project),
     UsageTracker(Project),
@@ -127,7 +139,10 @@ pub enum Message {
     QuickSearchCursor(usize),
     QuickSearchSelect(usize),
     /// Navigate directly to a CRef function from the quick-search overlay.
-    QuickSearchSelectFunc { name: String, header: String },
+    QuickSearchSelectFunc {
+        name: String,
+        header: String,
+    },
     QuickSearchClose,
 
     // Settings
@@ -159,7 +174,10 @@ pub enum Message {
     LibrarySave(FunctionTemplate),
     LibraryDelete(String),
     LibraryToggleStar(String),
-    LibraryUpdateNotes { name: String, notes: String },
+    LibraryUpdateNotes {
+        name: String,
+        notes: String,
+    },
     LibraryGroupNew,
     LibraryGroupDelete(String),
 
@@ -218,7 +236,12 @@ pub enum Message {
     ModuleGenerateDoc(String),
 
     // Lint quick-fix
-    LintQuickFix { module: String, function: String, line_no: usize, code: String },
+    LintQuickFix {
+        module: String,
+        function: String,
+        line_no: usize,
+        code: String,
+    },
 
     // GDB launcher
     LaunchDebugger,
@@ -278,11 +301,27 @@ pub enum Message {
     ComposerBlockDelete(usize),
     ComposerBlockDuplicate(usize),
     ComposerSelectBlock(usize),
-    ComposerEditField { block_index: usize, field: String, value: String },
-    ComposerAddChildBlock { parent: usize, block: newc_core::main_builder::MainBlock },
-    ComposerDeleteChildBlock { parent: usize, child: usize },
-    ComposerMoveChildUp { parent: usize, child: usize },
-    ComposerMoveChildDown { parent: usize, child: usize },
+    ComposerEditField {
+        block_index: usize,
+        field: String,
+        value: String,
+    },
+    ComposerAddChildBlock {
+        parent: usize,
+        block: newc_core::main_builder::MainBlock,
+    },
+    ComposerDeleteChildBlock {
+        parent: usize,
+        child: usize,
+    },
+    ComposerMoveChildUp {
+        parent: usize,
+        child: usize,
+    },
+    ComposerMoveChildDown {
+        parent: usize,
+        child: usize,
+    },
     ComposerToggleInclude(String),
     ComposerDragStart(usize),
     ComposerDragDrop(usize),
@@ -295,7 +334,10 @@ pub enum Message {
     ModuleSelectFunc(Option<String>),
     ModuleEditMode(bool),
     ModuleEditAction(text_editor::Action),
-    ModuleSaveFunc { name: String, new_impl: String },
+    ModuleSaveFunc {
+        name: String,
+        new_impl: String,
+    },
     ModuleDeleteFunc(String),
     ModuleRunCheck,
     ModuleShowCallTree(bool),
@@ -369,7 +411,10 @@ pub enum Message {
     LibraryInsertToModule,
 
     // Build-panel diagnostics click
-    DiagJumpTo { module: String, line: usize },
+    DiagJumpTo {
+        module: String,
+        line: usize,
+    },
 
     // Subscription ticks
     PollBuildOutput,
@@ -380,7 +425,10 @@ pub enum Message {
 
     // Graph canvas interaction
     GraphNodeSelect(String),
-    GraphPan { dx: f32, dy: f32 },
+    GraphPan {
+        dx: f32,
+        dy: f32,
+    },
     GraphZoom(f32),
     GraphReset,
     GraphExport,
@@ -432,15 +480,33 @@ pub enum ToastKind {
 impl Toast {
     /// Create a success toast (auto-dismisses after 3 s).
     pub fn success(msg: impl Into<String>) -> Self {
-        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Success, elapsed_ms: 0, duration_ms: 3000 }
+        Self {
+            id: next_toast_id(),
+            message: msg.into(),
+            kind: ToastKind::Success,
+            elapsed_ms: 0,
+            duration_ms: 3000,
+        }
     }
     /// Create an error toast (auto-dismisses after 5 s).
     pub fn error(msg: impl Into<String>) -> Self {
-        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Error, elapsed_ms: 0, duration_ms: 5000 }
+        Self {
+            id: next_toast_id(),
+            message: msg.into(),
+            kind: ToastKind::Error,
+            elapsed_ms: 0,
+            duration_ms: 5000,
+        }
     }
     /// Create an info toast (auto-dismisses after 2.5 s).
     pub fn info(msg: impl Into<String>) -> Self {
-        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Info, elapsed_ms: 0, duration_ms: 2500 }
+        Self {
+            id: next_toast_id(),
+            message: msg.into(),
+            kind: ToastKind::Info,
+            elapsed_ms: 0,
+            duration_ms: 2500,
+        }
     }
     /// Returns `true` when the toast's elapsed time has reached its duration.
     pub fn is_expired(&self) -> bool {
@@ -883,7 +949,12 @@ impl AppState {
     /// Return cached project stats, computing them if the cache is stale or empty.
     pub fn get_or_compute_stats(&mut self) -> Option<&ProjectStats> {
         let root = self.current_project()?.root.clone();
-        if self.cached_stats.as_ref().map(|(cached_root, _)| cached_root) != Some(&root) {
+        if self
+            .cached_stats
+            .as_ref()
+            .map(|(cached_root, _)| cached_root)
+            != Some(&root)
+        {
             let computed_stats = newc_core::stats::compute(&root);
             self.cached_stats = Some((root, computed_stats));
         }
@@ -899,10 +970,16 @@ fn projects_path() -> Option<std::path::PathBuf> {
 
 /// Load the persisted known-project list from `~/.config/newc/projects.toml`.
 pub fn load_known_projects() -> Vec<PathBuf> {
-    let Some(path) = projects_path() else { return Vec::new() };
-    let Ok(content) = std::fs::read_to_string(&path) else { return Vec::new() };
+    let Some(path) = projects_path() else {
+        return Vec::new();
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
     #[derive(serde::Deserialize)]
-    struct ProjectsList { projects: Vec<PathBuf> }
+    struct ProjectsList {
+        projects: Vec<PathBuf>,
+    }
     toml::from_str::<ProjectsList>(&content)
         .map(|pl| pl.projects)
         .unwrap_or_default()
@@ -914,10 +991,16 @@ fn recents_path() -> Option<std::path::PathBuf> {
 
 /// Load the persisted recent-projects list from `~/.config/newc/recents.toml`.
 pub fn load_recent_projects() -> Vec<PathBuf> {
-    let Some(path) = recents_path() else { return Vec::new() };
-    let Ok(content) = std::fs::read_to_string(&path) else { return Vec::new() };
+    let Some(path) = recents_path() else {
+        return Vec::new();
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
     #[derive(serde::Deserialize)]
-    struct RecentsList { recent: Vec<PathBuf> }
+    struct RecentsList {
+        recent: Vec<PathBuf>,
+    }
     toml::from_str::<RecentsList>(&content)
         .map(|r| r.recent)
         .unwrap_or_default()
@@ -930,7 +1013,9 @@ pub fn save_recent_projects(recent: &[PathBuf]) {
         let _ = std::fs::create_dir_all(parent);
     }
     #[derive(serde::Serialize)]
-    struct RecentsList<'a> { recent: &'a [PathBuf] }
+    struct RecentsList<'a> {
+        recent: &'a [PathBuf],
+    }
     if let Ok(content) = toml::to_string_pretty(&RecentsList { recent }) {
         let _ = std::fs::write(path, content);
     }
@@ -943,7 +1028,9 @@ pub fn save_known_projects(projects: &[PathBuf]) {
         let _ = std::fs::create_dir_all(parent);
     }
     #[derive(serde::Serialize)]
-    struct ProjectsList<'a> { projects: &'a [PathBuf] }
+    struct ProjectsList<'a> {
+        projects: &'a [PathBuf],
+    }
     if let Ok(content) = toml::to_string_pretty(&ProjectsList { projects }) {
         let _ = std::fs::write(path, content);
     }

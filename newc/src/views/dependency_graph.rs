@@ -6,13 +6,13 @@
 use std::collections::{HashMap, HashSet};
 
 use iced::widget::canvas::{self, Canvas, Path, Stroke};
-use iced::widget::{button, column, row, text, Space};
+use iced::widget::{Space, button, column, row, text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, mouse};
 use newc_core::project::Project;
 
-use crate::theme as th;
 use crate::state::{AppState, Message, View};
-use crate::views::call_graph::{GraphNode, GraphEdge, CallGraphData, CanvasState};
+use crate::theme as th;
+use crate::views::call_graph::{CallGraphData, CanvasState, GraphEdge, GraphNode};
 
 // ── Canvas program ─────────────────────────────────────────────────────────────
 
@@ -55,9 +55,12 @@ impl canvas::Program<Message> for DepGraphCanvas {
                     let ty = cy + to_node.y * z + (to_node.h * z) / 2.0;
 
                     let path = Path::line(Point::new(fx, fy), Point::new(tx, ty));
-                    frame.stroke(&path, Stroke::default()
-                        .with_color(th::color::cyan().scale_alpha(0.5))
-                        .with_width(1.5 * z));
+                    frame.stroke(
+                        &path,
+                        Stroke::default()
+                            .with_color(th::color::cyan().scale_alpha(0.5))
+                            .with_width(1.5 * z),
+                    );
 
                     // Arrowhead
                     let dx = tx - fx;
@@ -137,7 +140,10 @@ impl canvas::Program<Message> for DepGraphCanvas {
                         let nw = node.w * z;
                         let nh = node.h * z;
                         if pos.x >= nx && pos.x <= nx + nw && pos.y >= ny && pos.y <= ny + nh {
-                            return Some(canvas::Action::publish(Message::GraphNodeSelect(node.id.clone())).and_capture());
+                            return Some(
+                                canvas::Action::publish(Message::GraphNodeSelect(node.id.clone()))
+                                    .and_capture(),
+                            );
                         }
                     }
                 }
@@ -149,12 +155,15 @@ impl canvas::Program<Message> for DepGraphCanvas {
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if let Some(start) = state.drag_start
-                    && let Some(pos) = cursor.position_in(bounds) {
-                        let dx = pos.x - start.x;
-                        let dy = pos.y - start.y;
-                        state.drag_start = Some(pos);
-                        return Some(canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture());
-                    }
+                    && let Some(pos) = cursor.position_in(bounds)
+                {
+                    let dx = pos.x - start.x;
+                    let dy = pos.y - start.y;
+                    state.drag_start = Some(pos);
+                    return Some(
+                        canvas::Action::publish(Message::GraphPan { dx, dy }).and_capture(),
+                    );
+                }
                 None
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
@@ -168,8 +177,17 @@ impl canvas::Program<Message> for DepGraphCanvas {
         }
     }
 
-    fn mouse_interaction(&self, state: &CanvasState, _bounds: Rectangle, _cursor: mouse::Cursor) -> mouse::Interaction {
-        if state.drag_start.is_some() { mouse::Interaction::Grabbing } else { mouse::Interaction::default() }
+    fn mouse_interaction(
+        &self,
+        state: &CanvasState,
+        _bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if state.drag_start.is_some() {
+            mouse::Interaction::Grabbing
+        } else {
+            mouse::Interaction::default()
+        }
     }
 }
 
@@ -177,7 +195,9 @@ impl canvas::Program<Message> for DepGraphCanvas {
 
 pub fn build_dep_graph(project: &Project) -> CallGraphData {
     let dep_map = build_dep_map(project);
-    if dep_map.is_empty() { return CallGraphData::default(); }
+    if dep_map.is_empty() {
+        return CallGraphData::default();
+    }
 
     let modules: Vec<String> = {
         let mut v: Vec<String> = dep_map.keys().cloned().collect();
@@ -192,19 +212,37 @@ pub fn build_dep_graph(project: &Project) -> CallGraphData {
     let radius = (n * 100.0).max(200.0);
     use std::f32::consts::PI;
 
-    let nodes: Vec<GraphNode> = modules.iter().enumerate().map(|(i, name)| {
-        let angle = (i as f32 / n) * 2.0 * PI - PI / 2.0;
-        let x = radius * angle.cos() - NODE_W / 2.0;
-        let y = radius * angle.sin() - NODE_H / 2.0;
-        GraphNode { id: name.clone(), x, y, w: NODE_W, h: NODE_H, is_main: false, is_unreachable: false }
-    }).collect();
+    let nodes: Vec<GraphNode> = modules
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let angle = (i as f32 / n) * 2.0 * PI - PI / 2.0;
+            let x = radius * angle.cos() - NODE_W / 2.0;
+            let y = radius * angle.sin() - NODE_H / 2.0;
+            GraphNode {
+                id: name.clone(),
+                x,
+                y,
+                w: NODE_W,
+                h: NODE_H,
+                is_main: false,
+                is_unreachable: false,
+            }
+        })
+        .collect();
 
-    let edges: Vec<GraphEdge> = dep_map.iter().flat_map(|(from, deps)| {
-        deps.iter()
-            .filter(|d| modules.contains(d))
-            .map(|to| GraphEdge { from: from.clone(), to: to.clone() })
-            .collect::<Vec<_>>()
-    }).collect();
+    let edges: Vec<GraphEdge> = dep_map
+        .iter()
+        .flat_map(|(from, deps)| {
+            deps.iter()
+                .filter(|d| modules.contains(d))
+                .map(|to| GraphEdge {
+                    from: from.clone(),
+                    to: to.clone(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     CallGraphData { nodes, edges }
 }
@@ -215,17 +253,21 @@ fn build_dep_map(project: &Project) -> HashMap<String, Vec<String>> {
     for module in &project.modules {
         let mut deps = Vec::new();
         if module.source.exists()
-            && let Ok(src) = std::fs::read_to_string(&module.source) {
-                for line in src.lines() {
-                    let trimmed = line.trim();
-                    if let Some(rest) = trimmed.strip_prefix("#include \"") {
-                        let hdr = rest.trim_end_matches('"').trim_end_matches(".h").to_string();
-                        if hdr != module.name && module_names.contains(&hdr) && !deps.contains(&hdr) {
-                            deps.push(hdr);
-                        }
+            && let Ok(src) = std::fs::read_to_string(&module.source)
+        {
+            for line in src.lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("#include \"") {
+                    let hdr = rest
+                        .trim_end_matches('"')
+                        .trim_end_matches(".h")
+                        .to_string();
+                    if hdr != module.name && module_names.contains(&hdr) && !deps.contains(&hdr) {
+                        deps.push(hdr);
                     }
                 }
             }
+        }
         map.insert(module.name.clone(), deps);
     }
     map
@@ -246,14 +288,15 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let graph_data = build_dep_graph(project);
 
     let controls = row![
-        button(text("← Back"))
-            .on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
+        button(text("← Back")).on_press(Message::Navigate(View::ProjectDetail(project.clone()))),
         text(format!("Dependency Graph — {}", project.name))
-            .size(16).color(th::color::green()),
+            .size(16)
+            .color(th::color::green()),
         Space::new().width(Length::Fill),
         button(text("Reset").size(12)).on_press(Message::GraphReset),
         button(text("Export").size(12)).on_press(Message::GraphExport),
-        text("Scroll: zoom  Drag: pan  Click: select").size(11)
+        text("Scroll: zoom  Drag: pan  Click: select")
+            .size(11)
             .color(th::color::text_dim()),
     ]
     .spacing(8)
@@ -262,19 +305,37 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     let info: Element<Message> = if let Some(sel) = &state.graph_selected {
         let dep_map = build_dep_map(project);
         let deps = dep_map.get(sel).cloned().unwrap_or_default();
-        let depended_by: Vec<String> = dep_map.iter()
+        let depended_by: Vec<String> = dep_map
+            .iter()
             .filter(|(_, v)| v.contains(sel))
             .map(|(k, _)| k.clone())
             .collect();
-        text(format!("{}  →  deps: {}  |  used by: {}",
+        text(format!(
+            "{}  →  deps: {}  |  used by: {}",
             sel,
-            if deps.is_empty() { "none".into() } else { deps.join(", ") },
-            if depended_by.is_empty() { "none".into() } else { depended_by.join(", ") },
+            if deps.is_empty() {
+                "none".into()
+            } else {
+                deps.join(", ")
+            },
+            if depended_by.is_empty() {
+                "none".into()
+            } else {
+                depended_by.join(", ")
+            },
         ))
-        .size(12).color(th::color::cyan()).into()
+        .size(12)
+        .color(th::color::cyan())
+        .into()
     } else {
-        text(format!("{} modules, {} dependencies", graph_data.nodes.len(), graph_data.edges.len()))
-            .size(12).color(th::color::text_dim()).into()
+        text(format!(
+            "{} modules, {} dependencies",
+            graph_data.nodes.len(),
+            graph_data.edges.len()
+        ))
+        .size(12)
+        .color(th::color::text_dim())
+        .into()
     };
 
     let canvas_widget = Canvas::new(DepGraphCanvas {

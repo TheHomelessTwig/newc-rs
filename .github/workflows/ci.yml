@@ -44,6 +44,9 @@ jobs:
       - name: Clippy (no warnings)
         run: cargo clippy --all-targets --workspace -- -D warnings
 
+      - name: Format check
+        run: cargo fmt --check
+
   build-check:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

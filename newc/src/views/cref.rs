@@ -4,13 +4,17 @@ use iced::widget::{button, column, pane_grid, row, scrollable, text, text_input}
 use iced::{Color, Element, Length};
 use newc_core::cref;
 
-use crate::theme as th;
 use crate::highlight::code_view;
 use crate::state::Message;
+use crate::theme as th;
 
 /// Identifies which pane of the C Reference resizable pane-grid is being rendered.
 #[derive(Clone, Copy)]
-pub enum CRefPane { Headers, Functions, Detail }
+pub enum CRefPane {
+    Headers,
+    Functions,
+    Detail,
+}
 
 /// Renders the C Reference browser with header list, function list, and detail panels.
 pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
@@ -44,16 +48,13 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
                 .into(),
         );
     }
-    let header_panel = scrollable(
-        column(header_btns).spacing(2)
-    )
-    .height(Length::Fill)
-    .width(160);
+    let header_panel = scrollable(column(header_btns).spacing(2))
+        .height(Length::Fill)
+        .width(160);
 
     // ── Function list ─────────────────────────────────────────────────────────
-    let mut fn_btns: Vec<Element<Message>> = vec![
-        text("Functions").size(13).color(Color::WHITE).into(),
-    ];
+    let mut fn_btns: Vec<Element<Message>> =
+        vec![text("Functions").size(13).color(Color::WHITE).into()];
     for func in &results {
         fn_btns.push(
             button(
@@ -72,7 +73,12 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
         );
     }
     if results.is_empty() {
-        fn_btns.push(text("No results.").size(12).color(th::color::text_dim()).into());
+        fn_btns.push(
+            text("No results.")
+                .size(12)
+                .color(th::color::text_dim())
+                .into(),
+        );
     }
     let fn_panel = scrollable(column(fn_btns).spacing(2))
         .height(Length::Fill)
@@ -84,19 +90,28 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
             column![
                 row![
                     text(func.name).size(16).color(th::color::orange()),
-                    text(format!("<{}>", func.header))
-                        .color(th::color::cyan()),
+                    text(format!("<{}>", func.header)).color(th::color::cyan()),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
                 text("Signature").size(12).color(th::color::cyan()),
-                code_view(func.signature, (state.config.code_font_size - 1.0).max(8.0), None, None),
+                code_view(
+                    func.signature,
+                    (state.config.code_font_size - 1.0).max(8.0),
+                    None,
+                    None
+                ),
                 text("Description").size(12).color(th::color::cyan()),
                 text(func.description),
                 text("Returns").size(12).color(th::color::cyan()),
                 text(func.returns),
                 text("Example").size(12).color(th::color::cyan()),
-                code_view(func.example, (state.config.code_font_size - 1.0).max(8.0), None, None),
+                code_view(
+                    func.example,
+                    (state.config.code_font_size - 1.0).max(8.0),
+                    None,
+                    None
+                ),
             ]
             .spacing(8)
             .into()
@@ -148,11 +163,5 @@ pub fn view(state: &crate::state::AppState) -> Element<'_, Message> {
     .height(Length::Fill)
     .into();
 
-    column![
-        search_bar,
-        grid,
-    ]
-    .spacing(8)
-    .padding(12)
-    .into()
+    column![search_bar, grid,].spacing(8).padding(12).into()
 }

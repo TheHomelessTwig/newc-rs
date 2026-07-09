@@ -80,23 +80,43 @@ impl MainBlock {
     /// Single-line human-readable summary of the block (e.g. `"int x"`, `"foo(a, b)"`).
     pub fn summary(&self) -> String {
         match self {
-            MainBlock::VarDecl { type_name, name, is_array, array_size, .. } => {
+            MainBlock::VarDecl {
+                type_name,
+                name,
+                is_array,
+                array_size,
+                ..
+            } => {
                 if *is_array {
                     format!("{type_name} {name}[{array_size}]")
                 } else {
                     format!("{type_name} {name}")
                 }
             }
-            MainBlock::FunctionCall { func_name, args, assign_to, .. } => {
+            MainBlock::FunctionCall {
+                func_name,
+                args,
+                assign_to,
+                ..
+            } => {
                 let call = format!("{func_name}({})", args.join(", "));
-                if assign_to.is_empty() { call } else { format!("{assign_to} = {call}") }
+                if assign_to.is_empty() {
+                    call
+                } else {
+                    format!("{assign_to} = {call}")
+                }
             }
             MainBlock::Comment(s) => format!("// {}", s.lines().next().unwrap_or("")),
             MainBlock::RawCode(s) => s.lines().next().unwrap_or("").to_string(),
             MainBlock::BlankLine => String::new(),
             MainBlock::IfBlock { condition, .. } => format!("if ({condition})"),
             MainBlock::WhileLoop { condition, .. } => format!("while ({condition})"),
-            MainBlock::ForLoop { init, condition, increment, .. } => {
+            MainBlock::ForLoop {
+                init,
+                condition,
+                increment,
+                ..
+            } => {
                 format!("for ({init}; {condition}; {increment})")
             }
         }
@@ -105,7 +125,13 @@ impl MainBlock {
     /// Emit valid C source for this block, indented with a single leading tab.
     pub fn to_c(&self) -> String {
         match self {
-            MainBlock::VarDecl { type_name, name, init, is_array, array_size } => {
+            MainBlock::VarDecl {
+                type_name,
+                name,
+                init,
+                is_array,
+                array_size,
+            } => {
                 if *is_array {
                     if init.is_empty() {
                         format!("\t{type_name} {name}[{array_size}];")
@@ -118,7 +144,12 @@ impl MainBlock {
                     format!("\t{type_name} {name} = {init};")
                 }
             }
-            MainBlock::FunctionCall { func_name, args, assign_to, comment } => {
+            MainBlock::FunctionCall {
+                func_name,
+                args,
+                assign_to,
+                comment,
+            } => {
                 let call = format!("{func_name}({});", args.join(", "));
                 let stmt = if assign_to.is_empty() {
                     format!("\t{call}")
@@ -131,24 +162,31 @@ impl MainBlock {
                     format!("\t/* {comment} */\n{stmt}")
                 }
             }
-            MainBlock::Comment(s) => {
-                s.lines()
-                    .map(|l| format!("\t/* {l} */"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
+            MainBlock::Comment(s) => s
+                .lines()
+                .map(|l| format!("\t/* {l} */"))
+                .collect::<Vec<_>>()
+                .join("\n"),
             MainBlock::RawCode(s) => s
                 .lines()
                 .map(|l| format!("\t{l}"))
                 .collect::<Vec<_>>()
                 .join("\n"),
             MainBlock::BlankLine => String::new(),
-            MainBlock::IfBlock { condition, body, else_body } => {
+            MainBlock::IfBlock {
+                condition,
+                body,
+                else_body,
+            } => {
                 let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 if else_body.is_empty() {
                     format!("\tif ({condition}) {{\n{body_str}\n\t}}")
                 } else {
-                    let else_str = else_body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
+                    let else_str = else_body
+                        .iter()
+                        .map(indent_block)
+                        .collect::<Vec<_>>()
+                        .join("\n");
                     format!("\tif ({condition}) {{\n{body_str}\n\t}} else {{\n{else_str}\n\t}}")
                 }
             }
@@ -156,7 +194,12 @@ impl MainBlock {
                 let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 format!("\twhile ({condition}) {{\n{body_str}\n\t}}")
             }
-            MainBlock::ForLoop { init, condition, increment, body } => {
+            MainBlock::ForLoop {
+                init,
+                condition,
+                increment,
+                body,
+            } => {
                 let body_str = body.iter().map(indent_block).collect::<Vec<_>>().join("\n");
                 format!("\tfor ({init}; {condition}; {increment}) {{\n{body_str}\n\t}}")
             }
@@ -166,7 +209,8 @@ impl MainBlock {
 
 /// Add one extra tab level to all lines of a block's C output.
 fn indent_block(block: &MainBlock) -> String {
-    block.to_c()
+    block
+        .to_c()
         .lines()
         .map(|l| format!("\t{l}"))
         .collect::<Vec<_>>()
@@ -194,9 +238,15 @@ impl GlobalVar {
         let prefix = if self.is_static { "static " } else { "" };
         if self.is_array {
             if self.init.is_empty() {
-                format!("{prefix}{} {}[{}];", self.type_name, self.name, self.array_size)
+                format!(
+                    "{prefix}{} {}[{}];",
+                    self.type_name, self.name, self.array_size
+                )
             } else {
-                format!("{prefix}{} {}[{}] = {};", self.type_name, self.name, self.array_size, self.init)
+                format!(
+                    "{prefix}{} {}[{}] = {};",
+                    self.type_name, self.name, self.array_size, self.init
+                )
             }
         } else if self.init.is_empty() {
             format!("{prefix}{} {};", self.type_name, self.name)
@@ -217,8 +267,14 @@ pub struct FuncParam {
 ///
 /// Returns an empty vec if the signature contains no `(…)` or only `void`.
 pub fn parse_params(signature: &str) -> Vec<FuncParam> {
-    let start = match signature.find('(') { Some(i) => i, None => return Vec::new() };
-    let end   = match signature.rfind(')') { Some(i) => i, None => return Vec::new() };
+    let start = match signature.find('(') {
+        Some(i) => i,
+        None => return Vec::new(),
+    };
+    let end = match signature.rfind(')') {
+        Some(i) => i,
+        None => return Vec::new(),
+    };
     let inner = &signature[start + 1..end];
     split_args(inner)
         .into_iter()
@@ -228,7 +284,9 @@ pub fn parse_params(signature: &str) -> Vec<FuncParam> {
 
 fn parse_single_param(p: &str) -> Option<FuncParam> {
     let p = p.trim();
-    if p.is_empty() || p == "void" { return None; }
+    if p.is_empty() || p == "void" {
+        return None;
+    }
 
     // Handle trailing [] for array params: "int arr[]" or "int arr[10]"
     let (p_no_bracket, bracket_suffix) = if let Some(b) = p.find('[') {
@@ -245,7 +303,9 @@ fn parse_single_param(p: &str) -> Option<FuncParam> {
     let type_part = trimmed[..last_sep + 1].trim();
 
     let name = format!("{}{}", raw_name, bracket_suffix);
-    if raw_name.is_empty() { return None; }
+    if raw_name.is_empty() {
+        return None;
+    }
 
     Some(FuncParam {
         type_name: type_part.to_string(),
@@ -286,7 +346,11 @@ pub fn generate_main_c(
     let global_section = if globals.is_empty() {
         String::new()
     } else {
-        let g = globals.iter().map(|g| g.to_c()).collect::<Vec<_>>().join("\n");
+        let g = globals
+            .iter()
+            .map(|g| g.to_c())
+            .collect::<Vec<_>>()
+            .join("\n");
         format!("\n/* Global variables */\n{g}\n")
     };
 
@@ -325,7 +389,12 @@ impl MainBuilderState {
     /// Create an empty state pre-populated with the module headers found in `<root>/include/`.
     pub fn from_project(root: &std::path::Path) -> Self {
         let includes = detect_includes(root);
-        Self { blocks: Vec::new(), globals: Vec::new(), includes, argc_argv: false }
+        Self {
+            blocks: Vec::new(),
+            globals: Vec::new(),
+            includes,
+            argc_argv: false,
+        }
     }
 
     /// Load from existing src/main.c — parses globals and body into state.
@@ -333,17 +402,34 @@ impl MainBuilderState {
         let includes = detect_includes(root);
         let main_c = root.join("src").join("main.c");
         let Ok(source) = std::fs::read_to_string(&main_c) else {
-            return Self { blocks: Vec::new(), globals: Vec::new(), includes, argc_argv: false };
+            return Self {
+                blocks: Vec::new(),
+                globals: Vec::new(),
+                includes,
+                argc_argv: false,
+            };
         };
         let blocks = parse_main_body(&source);
         let globals = parse_globals(&source);
         let argc_argv = detect_argc_argv(&source);
-        Self { blocks, globals, includes, argc_argv }
+        Self {
+            blocks,
+            globals,
+            includes,
+            argc_argv,
+        }
     }
 
     /// Render the current state as a complete `main.c` source string.
     pub fn preview(&self, author: &str, date: &str) -> String {
-        generate_main_c(&self.blocks, &self.globals, author, date, &self.includes, self.argc_argv)
+        generate_main_c(
+            &self.blocks,
+            &self.globals,
+            author,
+            date,
+            &self.includes,
+            self.argc_argv,
+        )
     }
 }
 
@@ -353,19 +439,43 @@ fn parse_globals(source: &str) -> Vec<GlobalVar> {
     for line in source.lines() {
         let t = line.trim();
         // Stop at main() definition
-        if t.contains("main(") { break; }
+        if t.contains("main(") {
+            break;
+        }
         // Skip includes, comments, blank lines, preprocessor
-        if t.is_empty() || t.starts_with('#') || t.starts_with("/*")
-            || t.starts_with("*") || t.starts_with("//") { continue; }
+        if t.is_empty()
+            || t.starts_with('#')
+            || t.starts_with("/*")
+            || t.starts_with("*")
+            || t.starts_with("//")
+        {
+            continue;
+        }
 
         let is_static = t.starts_with("static ");
-        let t_no_static = if is_static { t.trim_start_matches("static").trim() } else { t };
+        let t_no_static = if is_static {
+            t.trim_start_matches("static").trim()
+        } else {
+            t
+        };
 
         // Convert VarDecl block to GlobalVar
-        if let Some(MainBlock::VarDecl { type_name, name, init, is_array, array_size }) =
-            try_parse_var_decl(t_no_static)
+        if let Some(MainBlock::VarDecl {
+            type_name,
+            name,
+            init,
+            is_array,
+            array_size,
+        }) = try_parse_var_decl(t_no_static)
         {
-            globals.push(GlobalVar { type_name, name, init, is_array, array_size, is_static });
+            globals.push(GlobalVar {
+                type_name,
+                name,
+                init,
+                is_array,
+                array_size,
+                is_static,
+            });
         }
     }
     globals
@@ -377,7 +487,11 @@ fn detect_includes(root: &std::path::Path) -> Vec<String> {
         .flatten()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("h"))
-        .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .filter_map(|e| {
+            e.path()
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+        })
         .collect();
     v.sort();
     v
@@ -447,20 +561,32 @@ fn parse_main_body(source: &str) -> Vec<MainBlock> {
         body_depth += opens - closes;
         // Block comment /* ... */
         if t.starts_with("/*") {
-            let mut comment = t.trim_start_matches("/*").trim_end_matches("*/").trim().to_string();
+            let mut comment = t
+                .trim_start_matches("/*")
+                .trim_end_matches("*/")
+                .trim()
+                .to_string();
             // Multi-line comment
             if !t.contains("*/") {
                 loop {
-                    if i >= body_lines.len() { break; }
+                    if i >= body_lines.len() {
+                        break;
+                    }
                     let next = body_lines[i].trim();
                     i += 1;
                     if next.contains("*/") {
                         let part = next.trim_end_matches("*/").trim_start_matches('*').trim();
-                        if !part.is_empty() { comment.push(' '); comment.push_str(part); }
+                        if !part.is_empty() {
+                            comment.push(' ');
+                            comment.push_str(part);
+                        }
                         break;
                     }
                     let part = next.trim_start_matches('*').trim();
-                    if !part.is_empty() { comment.push(' '); comment.push_str(part); }
+                    if !part.is_empty() {
+                        comment.push(' ');
+                        comment.push_str(part);
+                    }
                 }
             }
             blocks.push(MainBlock::Comment(comment));
@@ -468,7 +594,9 @@ fn parse_main_body(source: &str) -> Vec<MainBlock> {
         }
         // Line comment
         if t.starts_with("//") {
-            blocks.push(MainBlock::Comment(t.trim_start_matches("//").trim().to_string()));
+            blocks.push(MainBlock::Comment(
+                t.trim_start_matches("//").trim().to_string(),
+            ));
             continue;
         }
         // Variable declaration: starts with a type keyword + identifier + optional [size] + optional = init + ;
@@ -489,20 +617,31 @@ fn parse_main_body(source: &str) -> Vec<MainBlock> {
 }
 
 fn try_parse_var_decl(t: &str) -> Option<MainBlock> {
-    if !t.ends_with(';') { return None; }
+    if !t.ends_with(';') {
+        return None;
+    }
     let t = t.trim_end_matches(';').trim();
 
     // Must start with a known type word and not contain '('  (to exclude calls)
     static TYPE_WORDS: &[&str] = &[
-        "int", "double", "float", "char", "long", "short", "unsigned", "signed",
-        "size_t", "bool", "void",
+        "int", "double", "float", "char", "long", "short", "unsigned", "signed", "size_t", "bool",
+        "void",
     ];
     let starts_with_type = TYPE_WORDS.iter().any(|kw| {
-        t.starts_with(kw) && t.len() > kw.len()
-            && !t.chars().nth(kw.len()).map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false)
+        t.starts_with(kw)
+            && t.len() > kw.len()
+            && !t
+                .chars()
+                .nth(kw.len())
+                .map(|c| c.is_alphanumeric() || c == '_')
+                .unwrap_or(false)
     });
-    if !starts_with_type { return None; }
-    if t.contains('(') { return None; } // function pointer or call
+    if !starts_with_type {
+        return None;
+    }
+    if t.contains('(') {
+        return None;
+    } // function pointer or call
 
     // Split on '=' for init
     let (decl_part, init) = if let Some(eq) = t.find('=') {
@@ -513,20 +652,31 @@ fn try_parse_var_decl(t: &str) -> Option<MainBlock> {
 
     // Parse: type name[size]  or  type *name  or  type name
     let tokens: Vec<&str> = decl_part.split_whitespace().collect();
-    if tokens.len() < 2 { return None; }
+    if tokens.len() < 2 {
+        return None;
+    }
 
     let type_name = tokens[..tokens.len() - 1].join(" ");
     let name_part = tokens.last()?;
 
     let (name, is_array, array_size) = if let Some(bracket) = name_part.find('[') {
         let name = name_part[..bracket].trim_start_matches('*').to_string();
-        let size = name_part[bracket + 1..].trim_end_matches(']').trim().to_string();
+        let size = name_part[bracket + 1..]
+            .trim_end_matches(']')
+            .trim()
+            .to_string();
         (name, true, size)
     } else {
-        (name_part.trim_start_matches('*').to_string(), false, String::new())
+        (
+            name_part.trim_start_matches('*').to_string(),
+            false,
+            String::new(),
+        )
     };
 
-    if name.is_empty() { return None; }
+    if name.is_empty() {
+        return None;
+    }
 
     Some(MainBlock::VarDecl {
         type_name: type_name.trim_start_matches('*').to_string(),
@@ -538,7 +688,9 @@ fn try_parse_var_decl(t: &str) -> Option<MainBlock> {
 }
 
 fn try_parse_func_call(t: &str) -> Option<MainBlock> {
-    if !t.ends_with(';') { return None; }
+    if !t.ends_with(';') {
+        return None;
+    }
     let t = t.trim_end_matches(';').trim();
 
     // Optional: "assign_to = func(...)"
@@ -554,7 +706,9 @@ fn try_parse_func_call(t: &str) -> Option<MainBlock> {
     if func_name.is_empty() || !func_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return None;
     }
-    if !rest.ends_with(')') { return None; }
+    if !rest.ends_with(')') {
+        return None;
+    }
     let args_str = &rest[paren + 1..rest.len() - 1];
     let args = split_args(args_str);
 
@@ -589,18 +743,31 @@ fn split_args(s: &str) -> Vec<String> {
 
     for c in s.chars() {
         match c {
-            '"' => { in_str = !in_str; current.push(c); }
-            '(' | '[' | '{' if !in_str => { depth += 1; current.push(c); }
-            ')' | ']' | '}' if !in_str => { depth -= 1; current.push(c); }
+            '"' => {
+                in_str = !in_str;
+                current.push(c);
+            }
+            '(' | '[' | '{' if !in_str => {
+                depth += 1;
+                current.push(c);
+            }
+            ')' | ']' | '}' if !in_str => {
+                depth -= 1;
+                current.push(c);
+            }
             ',' if !in_str && depth == 0 => {
                 let t = current.trim().to_string();
-                if !t.is_empty() { args.push(t); }
+                if !t.is_empty() {
+                    args.push(t);
+                }
                 current.clear();
             }
             _ => current.push(c),
         }
     }
     let t = current.trim().to_string();
-    if !t.is_empty() { args.push(t); }
+    if !t.is_empty() {
+        args.push(t);
+    }
     args
 }

@@ -97,16 +97,25 @@ fn calculator_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "double".into(), name: "a".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "double".into(),
+            name: "a".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "double".into(), name: "b".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "double".into(),
+            name: "b".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "char".into(), name: "op".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "char".into(),
+            name: "op".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::BlankLine,
         MainBlock::FunctionCall {
@@ -137,16 +146,23 @@ fn calculator_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "math".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["input".into(), "math".into(), "display".into()],
+        argc_argv: false,
+    }
 }
 
 fn array_processor_builder() -> MainBuilderState {
-    let globals = vec![
-        GlobalVar {
-            type_name: "int".into(), name: "SIZE".into(),
-            init: "10".into(), is_array: false, array_size: String::new(), is_static: false,
-        },
-    ];
+    let globals = vec![GlobalVar {
+        type_name: "int".into(),
+        name: "SIZE".into(),
+        init: "10".into(),
+        is_array: false,
+        array_size: String::new(),
+        is_static: false,
+    }];
     let blocks = vec![
         MainBlock::FunctionCall {
             func_name: "print_header".into(),
@@ -156,13 +172,21 @@ fn array_processor_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "arr".into(),
-            init: String::new(), is_array: true, array_size: "SIZE".into(),
+            type_name: "int".into(),
+            name: "arr".into(),
+            init: String::new(),
+            is_array: true,
+            array_size: "SIZE".into(),
         },
         MainBlock::BlankLine,
         MainBlock::FunctionCall {
             func_name: "array_input_int".into(),
-            args: vec!["arr".into(), "SIZE".into(), "\"Enter value\"".into(), "1".into()],
+            args: vec![
+                "arr".into(),
+                "SIZE".into(),
+                "\"Enter value\"".into(),
+                "1".into(),
+            ],
             assign_to: String::new(),
             comment: "Fill array".into(),
         },
@@ -181,8 +205,11 @@ fn array_processor_builder() -> MainBuilderState {
         MainBlock::BlankLine,
         MainBlock::Comment("Statistics".into()),
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "sum".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "sum".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::FunctionCall {
             func_name: "array_sum".into(),
@@ -191,16 +218,28 @@ fn array_processor_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "array".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals,
+        includes: vec![
+            "input".into(),
+            "math".into(),
+            "array".into(),
+            "display".into(),
+        ],
+        argc_argv: false,
+    }
 }
 
 fn grade_manager_builder() -> MainBuilderState {
-    let globals = vec![
-        GlobalVar {
-            type_name: "int".into(), name: "NUM_STUDENTS".into(),
-            init: "5".into(), is_array: false, array_size: String::new(), is_static: false,
-        },
-    ];
+    let globals = vec![GlobalVar {
+        type_name: "int".into(),
+        name: "NUM_STUDENTS".into(),
+        init: "5".into(),
+        is_array: false,
+        array_size: String::new(),
+        is_static: false,
+    }];
     let blocks = vec![
         MainBlock::FunctionCall {
             func_name: "print_header".into(),
@@ -210,20 +249,31 @@ fn grade_manager_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "double".into(), name: "grades".into(),
-            init: String::new(), is_array: true, array_size: "NUM_STUDENTS".into(),
+            type_name: "double".into(),
+            name: "grades".into(),
+            init: String::new(),
+            is_array: true,
+            array_size: "NUM_STUDENTS".into(),
         },
         MainBlock::BlankLine,
         MainBlock::FunctionCall {
             func_name: "array_input_double".into(),
-            args: vec!["grades".into(), "NUM_STUDENTS".into(), "\"Enter grade\"".into(), "1".into()],
+            args: vec![
+                "grades".into(),
+                "NUM_STUDENTS".into(),
+                "\"Enter grade\"".into(),
+                "1".into(),
+            ],
             assign_to: String::new(),
             comment: "Collect grades".into(),
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "double".into(), name: "avg".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "double".into(),
+            name: "avg".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::FunctionCall {
             func_name: "array_average_double".into(),
@@ -240,7 +290,12 @@ fn grade_manager_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "math".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals,
+        includes: vec!["input".into(), "math".into(), "display".into()],
+        argc_argv: false,
+    }
 }
 
 fn menu_driven_builder() -> MainBuilderState {
@@ -253,8 +308,11 @@ fn menu_driven_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "choice".into(),
-            init: "0".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "choice".into(),
+            init: "0".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::BlankLine,
         MainBlock::WhileLoop {
@@ -283,7 +341,12 @@ fn menu_driven_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["input".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["input".into(), "display".into()],
+        argc_argv: false,
+    }
 }
 
 fn file_parser_builder() -> MainBuilderState {
@@ -296,12 +359,18 @@ fn file_parser_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "FILE *".into(), name: "fp".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "FILE *".into(),
+            name: "fp".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "char".into(), name: "line".into(),
-            init: String::new(), is_array: true, array_size: "256".into(),
+            type_name: "char".into(),
+            name: "line".into(),
+            init: String::new(),
+            is_array: true,
+            array_size: "256".into(),
         },
         MainBlock::BlankLine,
         MainBlock::RawCode("fp = fopen(\"data.txt\", \"r\");".into()),
@@ -335,7 +404,12 @@ fn file_parser_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["display".into()],
+        argc_argv: false,
+    }
 }
 
 fn linked_list_builder() -> MainBuilderState {
@@ -348,8 +422,11 @@ fn linked_list_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "Node *".into(), name: "head".into(),
-            init: "NULL".into(), is_array: false, array_size: String::new(),
+            type_name: "Node *".into(),
+            name: "head".into(),
+            init: "NULL".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::BlankLine,
         MainBlock::Comment("Insert nodes".into()),
@@ -394,16 +471,23 @@ fn linked_list_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["display".into()],
+        argc_argv: false,
+    }
 }
 
 fn student_records_builder() -> MainBuilderState {
-    let globals = vec![
-        GlobalVar {
-            type_name: "int".into(), name: "MAX_STUDENTS".into(),
-            init: "50".into(), is_array: false, array_size: String::new(), is_static: false,
-        },
-    ];
+    let globals = vec![GlobalVar {
+        type_name: "int".into(),
+        name: "MAX_STUDENTS".into(),
+        init: "50".into(),
+        is_array: false,
+        array_size: String::new(),
+        is_static: false,
+    }];
     let blocks = vec![
         MainBlock::FunctionCall {
             func_name: "print_header".into(),
@@ -413,17 +497,26 @@ fn student_records_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "Student".into(), name: "students".into(),
-            init: String::new(), is_array: true, array_size: "MAX_STUDENTS".into(),
+            type_name: "Student".into(),
+            name: "students".into(),
+            init: String::new(),
+            is_array: true,
+            array_size: "MAX_STUDENTS".into(),
         },
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "count".into(),
-            init: "0".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "count".into(),
+            init: "0".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::BlankLine,
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "choice".into(),
-            init: "0".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "choice".into(),
+            init: "0".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::WhileLoop {
             condition: "choice != 5".into(),
@@ -451,7 +544,12 @@ fn student_records_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals,
+        includes: vec!["input".into(), "display".into()],
+        argc_argv: false,
+    }
 }
 
 fn recursion_builder() -> MainBuilderState {
@@ -465,12 +563,18 @@ fn recursion_builder() -> MainBuilderState {
         MainBlock::BlankLine,
         MainBlock::Comment("--- Factorial ---".into()),
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "n".into(),
-            init: "5".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "n".into(),
+            init: "5".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "result".into(),
-            init: String::new(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "result".into(),
+            init: String::new(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::RawCode("result = factorial(n);".into()),
         MainBlock::RawCode("printf(\"factorial(%d) = %d\\n\", n, result);".into()),
@@ -478,7 +582,9 @@ fn recursion_builder() -> MainBuilderState {
         MainBlock::Comment("--- Fibonacci ---".into()),
         MainBlock::RawCode("printf(\"fib(10) = %d\\n\", fibonacci(10));".into()),
         MainBlock::BlankLine,
-        MainBlock::Comment("TODO: implement factorial(int n) and fibonacci(int n) in a module".into()),
+        MainBlock::Comment(
+            "TODO: implement factorial(int n) and fibonacci(int n) in a module".into(),
+        ),
         MainBlock::BlankLine,
         MainBlock::FunctionCall {
             func_name: "press_enter_to_exit".into(),
@@ -487,7 +593,12 @@ fn recursion_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["display".into()],
+        argc_argv: false,
+    }
 }
 
 fn cli_args_builder() -> MainBuilderState {
@@ -508,19 +619,19 @@ fn cli_args_builder() -> MainBuilderState {
             init: "int i = 1".into(),
             condition: "i < argc".into(),
             increment: "i++".into(),
-            body: vec![
-                MainBlock::IfBlock {
-                    condition: "strcmp(argv[i], \"--help\") == 0".into(),
-                    body: vec![
-                        MainBlock::RawCode("fprintf(stderr, \"Usage: %s <argument>\\n\", argv[0]);".into()),
-                        MainBlock::RawCode("return 0;".into()),
-                    ],
-                    else_body: vec![
-                        MainBlock::Comment("TODO: handle other flags".into()),
-                        MainBlock::RawCode("printf(\"Arg %d: %s\\n\", i, argv[i]);".into()),
-                    ],
-                },
-            ],
+            body: vec![MainBlock::IfBlock {
+                condition: "strcmp(argv[i], \"--help\") == 0".into(),
+                body: vec![
+                    MainBlock::RawCode(
+                        "fprintf(stderr, \"Usage: %s <argument>\\n\", argv[0]);".into(),
+                    ),
+                    MainBlock::RawCode("return 0;".into()),
+                ],
+                else_body: vec![
+                    MainBlock::Comment("TODO: handle other flags".into()),
+                    MainBlock::RawCode("printf(\"Arg %d: %s\\n\", i, argv[i]);".into()),
+                ],
+            }],
         },
         MainBlock::BlankLine,
         MainBlock::FunctionCall {
@@ -530,16 +641,23 @@ fn cli_args_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: true }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["display".into()],
+        argc_argv: true,
+    }
 }
 
 fn state_machine_builder() -> MainBuilderState {
-    let globals = vec![
-        GlobalVar {
-            type_name: "int".into(), name: "MAX_COINS".into(),
-            init: "10".into(), is_array: false, array_size: String::new(), is_static: false,
-        },
-    ];
+    let globals = vec![GlobalVar {
+        type_name: "int".into(),
+        name: "MAX_COINS".into(),
+        init: "10".into(),
+        is_array: false,
+        array_size: String::new(),
+        is_static: false,
+    }];
     let blocks = vec![
         MainBlock::FunctionCall {
             func_name: "print_header".into(),
@@ -549,25 +667,35 @@ fn state_machine_builder() -> MainBuilderState {
         },
         MainBlock::BlankLine,
         MainBlock::Comment("State: IDLE -> SELECTING -> DISPENSING -> IDLE".into()),
-        MainBlock::RawCode("typedef enum { STATE_IDLE, STATE_SELECTING, STATE_DISPENSING } MachineState;".into()),
+        MainBlock::RawCode(
+            "typedef enum { STATE_IDLE, STATE_SELECTING, STATE_DISPENSING } MachineState;".into(),
+        ),
         MainBlock::VarDecl {
-            type_name: "MachineState".into(), name: "state".into(),
-            init: "STATE_IDLE".into(), is_array: false, array_size: String::new(),
+            type_name: "MachineState".into(),
+            name: "state".into(),
+            init: "STATE_IDLE".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "coins".into(),
-            init: "0".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "coins".into(),
+            init: "0".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::VarDecl {
-            type_name: "int".into(), name: "choice".into(),
-            init: "0".into(), is_array: false, array_size: String::new(),
+            type_name: "int".into(),
+            name: "choice".into(),
+            init: "0".into(),
+            is_array: false,
+            array_size: String::new(),
         },
         MainBlock::BlankLine,
         MainBlock::WhileLoop {
             condition: "state != STATE_DISPENSING".into(),
-            body: vec![
-                MainBlock::RawCode(
-                    "switch (state) {\n\
+            body: vec![MainBlock::RawCode(
+                "switch (state) {\n\
                     \t\t\tcase STATE_IDLE:\n\
                     \t\t\t\tprintf(\"Insert coins (you have %d): \", coins);\n\
                     \t\t\t\tcoins++;\n\
@@ -579,9 +707,9 @@ fn state_machine_builder() -> MainBuilderState {
                     \t\t\t\tif (choice == 1 || choice == 2) state = STATE_DISPENSING;\n\
                     \t\t\t\tbreak;\n\
                     \t\t\tdefault: break;\n\
-                    \t\t}".into()
-                ),
-            ],
+                    \t\t}"
+                    .into(),
+            )],
         },
         MainBlock::BlankLine,
         MainBlock::RawCode("printf(\"Dispensing item %d. Thank you!\\n\", choice);".into()),
@@ -593,7 +721,12 @@ fn state_machine_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals, includes: vec!["input".into(), "display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals,
+        includes: vec!["input".into(), "display".into()],
+        argc_argv: false,
+    }
 }
 
 fn binary_file_builder() -> MainBuilderState {
@@ -662,7 +795,12 @@ fn binary_file_builder() -> MainBuilderState {
             comment: String::new(),
         },
     ];
-    MainBuilderState { blocks, globals: Vec::new(), includes: vec!["display".into()], argc_argv: false }
+    MainBuilderState {
+        blocks,
+        globals: Vec::new(),
+        includes: vec!["display".into()],
+        argc_argv: false,
+    }
 }
 
 fn unit_test_runner_builder() -> MainBuilderState {

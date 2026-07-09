@@ -5,10 +5,13 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use newc_core::{
-    analysis, doc, lint, module, project_template,
+    analysis, doc,
     license::License,
+    lint, module,
     project::BuildSystem,
-    scaffold::{self, DefaultModule, ScaffoldOptions}, stats, sync,
+    project_template,
+    scaffold::{self, DefaultModule, ScaffoldOptions},
+    stats, sync,
 };
 
 use crate::updater;
@@ -129,9 +132,7 @@ pub enum Command {
     Test,
     /// Internal: run the GUI in-process (spawned by `newc` itself; not for direct use)
     #[command(hide = true)]
-    InternalGui {
-        path: Option<PathBuf>,
-    },
+    InternalGui { path: Option<PathBuf> },
     /// Internal: write man page(s) to a directory (used by the release pipeline)
     #[command(hide = true)]
     InternalMan {
@@ -142,9 +143,19 @@ pub enum Command {
 
 pub fn run(cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::New { name, git, template, build_system, license } => {
-            cmd_new(&name, git, template.as_deref(), &build_system, license.as_deref())
-        }
+        Command::New {
+            name,
+            git,
+            template,
+            build_system,
+            license,
+        } => cmd_new(
+            &name,
+            git,
+            template.as_deref(),
+            &build_system,
+            license.as_deref(),
+        ),
         Command::Add { module: name } => cmd_add(&name),
         Command::Remove { module, yes } => cmd_remove(module.as_deref(), yes),
         Command::List { json } => cmd_list(json),
@@ -178,9 +189,7 @@ fn cmd_man(out_dir: &std::path::Path) -> anyhow::Result<()> {
 fn cmd_update(check_only: bool) -> anyhow::Result<()> {
     if check_only {
         match updater::check()? {
-            Some(v) => println!(
-                "Update available: v{v}  (run `newc update` to install)"
-            ),
+            Some(v) => println!("Update available: v{v}  (run `newc update` to install)"),
             None => println!("Up to date (v{}).", updater::current_version()),
         }
     } else {
@@ -207,7 +216,11 @@ fn cmd_new(
         Some(id) => Some(License::from_spdx_id(id).ok_or_else(|| {
             anyhow::anyhow!(
                 "Unknown license '{id}'. Supported: {}",
-                License::all().iter().map(|l| l.spdx_id()).collect::<Vec<_>>().join(", ")
+                License::all()
+                    .iter()
+                    .map(|l| l.spdx_id())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         })?),
         None => None,
@@ -226,7 +239,9 @@ fn cmd_new(
     if let Some(tpl_name) = template {
         let templates = project_template::all_templates();
         let tpl_name_lower = tpl_name.to_lowercase();
-        let tpl = templates.iter().find(|t| t.name.to_lowercase() == tpl_name_lower);
+        let tpl = templates
+            .iter()
+            .find(|t| t.name.to_lowercase() == tpl_name_lower);
         if let Some(tpl) = tpl {
             let root = current_dir.join(name);
             let builder_state = (tpl.builder)();
@@ -237,7 +252,14 @@ fn cmd_new(
             println!("Seeded main.c from template: {}", tpl.name);
         } else {
             eprintln!("Warning: template '{tpl_name}' not found — skipping seed");
-            eprintln!("Available: {}", templates.iter().map(|t| t.name).collect::<Vec<_>>().join(", "));
+            eprintln!(
+                "Available: {}",
+                templates
+                    .iter()
+                    .map(|t| t.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
     Ok(())
@@ -265,7 +287,11 @@ fn cmd_remove(module_name: Option<&str>, yes: bool) -> anyhow::Result<()> {
             if !modules.iter().any(|m| m.name == n) {
                 anyhow::bail!(
                     "No module named '{n}'. Available: {}",
-                    modules.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(", ")
+                    modules
+                        .iter()
+                        .map(|m| m.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
             n.to_string()
@@ -461,8 +487,14 @@ fn cmd_stats(json: bool) -> anyhow::Result<()> {
         println!("{:<20} {:>8} {:>8}", m.name, m.functions, m.loc);
     }
     println!("{}", "-".repeat(38));
-    println!("{:<20} {:>8} {:>8}", "TOTAL", project_stats.total_functions, project_stats.total_loc);
-    println!("Source lines (incl. main): {}", project_stats.total_source_lines);
+    println!(
+        "{:<20} {:>8} {:>8}",
+        "TOTAL", project_stats.total_functions, project_stats.total_loc
+    );
+    println!(
+        "Source lines (incl. main): {}",
+        project_stats.total_source_lines
+    );
     Ok(())
 }
 
@@ -476,8 +508,7 @@ fn cmd_funcs(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
     let mut paths: Vec<_> = entries
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.path().extension().and_then(|x| x.to_str()) == Some("c")
-                && e.file_name() != "main.c"
+            e.path().extension().and_then(|x| x.to_str()) == Some("c") && e.file_name() != "main.c"
         })
         .map(|e| e.path())
         .collect();
@@ -490,12 +521,17 @@ fn cmd_funcs(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         if let Some(f) = module_filter
-            && !mod_name.eq_ignore_ascii_case(f) {
-                continue;
-            }
-        let Ok(content) = std::fs::read_to_string(path) else { continue };
+            && !mod_name.eq_ignore_ascii_case(f)
+        {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
         let fns = sync::extract_function_implementations(&content);
-        if fns.is_empty() { continue; }
+        if fns.is_empty() {
+            continue;
+        }
         if json {
             json_out.push(serde_json::json!({
                 "module": mod_name,
@@ -523,7 +559,9 @@ fn cmd_lint(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
     // Collect lint targets: every .c in src/ and .h in include/
     let mut targets: Vec<(PathBuf, bool)> = Vec::new();
     for (dir, ext) in [("src", "c"), ("include", "h")] {
-        let Ok(entries) = std::fs::read_dir(root.join(dir)) else { continue };
+        let Ok(entries) = std::fs::read_dir(root.join(dir)) else {
+            continue;
+        };
         for e in entries.filter_map(|e| e.ok()) {
             let path = e.path();
             if path.extension().and_then(|x| x.to_str()) == Some(ext) {
@@ -540,10 +578,13 @@ fn cmd_lint(module_filter: Option<&str>, json: bool) -> anyhow::Result<()> {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         if let Some(f) = module_filter
-            && !stem.eq_ignore_ascii_case(f) {
-                continue;
-            }
-        let Ok(content) = std::fs::read_to_string(path) else { continue };
+            && !stem.eq_ignore_ascii_case(f)
+        {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
         let warnings = if *is_header {
             lint::lint_header(&content)
         } else {
@@ -653,7 +694,9 @@ fn run_make(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
         .status()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!("make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)")
+                anyhow::anyhow!(
+                    "make not found. Install Make (e.g. `winget install GnuWin32.Make` on Windows)"
+                )
             } else {
                 anyhow::anyhow!("Failed to run make: {e}")
             }
@@ -665,7 +708,9 @@ fn run_make(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
 }
 
 fn run_cmake(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
-    use newc_core::build::{cmake_build_target, cmake_configure_args, cmake_needs_reconfigure, HELP_LINES};
+    use newc_core::build::{
+        HELP_LINES, cmake_build_target, cmake_configure_args, cmake_needs_reconfigure,
+    };
     use std::process::Command;
 
     if target == "help" {
@@ -677,7 +722,9 @@ fn run_cmake(root: &std::path::Path, target: &str) -> anyhow::Result<()> {
 
     let cmake_err = |e: std::io::Error| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            anyhow::anyhow!("cmake not found. Install CMake (e.g. `winget install Kitware.CMake` on Windows)")
+            anyhow::anyhow!(
+                "cmake not found. Install CMake (e.g. `winget install Kitware.CMake` on Windows)"
+            )
         } else {
             anyhow::anyhow!("Failed to run cmake: {e}")
         }

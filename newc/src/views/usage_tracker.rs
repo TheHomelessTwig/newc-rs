@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use iced::widget::{button, column, row, scrollable, text, text_input, Space};
+use iced::widget::{Space, button, column, row, scrollable, text, text_input};
 use iced::{Element, Length};
 use newc_core::{function_lib::FunctionLibrary, project::Project};
 
-use crate::theme as th;
 use crate::state::{AppState, Message, View};
+use crate::theme as th;
 
 /// Renders the usage tracker screen listing each library function and the files that call it.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
@@ -43,8 +43,7 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         return column![
             header,
             search_row,
-            text("No library function usage found.")
-                .color(th::color::text_dim()),
+            text("No library function usage found.").color(th::color::text_dim()),
         ]
         .spacing(8)
         .padding(16)
@@ -52,26 +51,39 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
     }
 
     // Collect owned data to avoid lifetime issues
-    struct UsageEntry { fname: String, files: String }
+    struct UsageEntry {
+        fname: String,
+        files: String,
+    }
     let entries: Vec<UsageEntry> = {
         let mut v: Vec<UsageEntry> = usage_map
             .into_iter()
             .filter(|(fname, _)| q.is_empty() || fname.to_lowercase().contains(&q))
-            .map(|(fname, files)| UsageEntry { fname, files: files.join(", ") })
+            .map(|(fname, files)| UsageEntry {
+                fname,
+                files: files.join(", "),
+            })
             .collect();
         v.sort_by(|a, b| a.fname.cmp(&b.fname));
         v
     };
 
-    let rows: Vec<Element<Message>> = entries.into_iter().map(|e| {
-        row![
-            Space::new().width(8),
-            text(e.fname).width(200).size(12).font(iced::Font::MONOSPACE).color(th::color::cyan()),
-            text(e.files).size(12).color(th::color::text_dim()),
-        ]
-        .spacing(4)
-        .into()
-    }).collect();
+    let rows: Vec<Element<Message>> = entries
+        .into_iter()
+        .map(|e| {
+            row![
+                Space::new().width(8),
+                text(e.fname)
+                    .width(200)
+                    .size(12)
+                    .font(iced::Font::MONOSPACE)
+                    .color(th::color::cyan()),
+                text(e.files).size(12).color(th::color::text_dim()),
+            ]
+            .spacing(4)
+            .into()
+        })
+        .collect();
 
     let content = if rows.is_empty() {
         column![text("No matches.").color(th::color::text_dim())]
@@ -79,14 +91,10 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         column(rows).spacing(4)
     };
 
-    column![
-        header,
-        search_row,
-        scrollable(content).height(Length::Fill),
-    ]
-    .spacing(8)
-    .padding(16)
-    .into()
+    column![header, search_row, scrollable(content).height(Length::Fill),]
+        .spacing(8)
+        .padding(16)
+        .into()
 }
 
 fn compute_usage(project: &Project) -> HashMap<String, Vec<String>> {
@@ -107,13 +115,19 @@ fn compute_usage(project: &Project) -> HashMap<String, Vec<String>> {
     paths.sort();
 
     for path in &paths {
-        let Ok(content) = std::fs::read_to_string(path) else { continue };
-        let file_name = path.file_name()
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let file_name = path
+            .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         for fname in &func_names {
             if content.contains(&format!("{fname}(")) {
-                usage.entry(fname.clone()).or_default().push(file_name.clone());
+                usage
+                    .entry(fname.clone())
+                    .or_default()
+                    .push(file_name.clone());
             }
         }
     }

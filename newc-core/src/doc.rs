@@ -12,16 +12,28 @@ use crate::sync::{extract_function_implementations, sync_module};
 
 /// Split a parameter list on top-level commas (no nested parens expected in C param lists).
 fn split_params(params: &str) -> Vec<&str> {
-    params.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect()
+    params
+        .split(',')
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
 /// Extract the parameter name from a single parameter declaration, e.g.
 /// `"const char *prompt"` -> `"prompt"`, `"int n"` -> `"n"`.
 fn param_name(param: &str) -> Option<&str> {
-    let trimmed = param.trim_end_matches(']').trim_end_matches(|c: char| c.is_ascii_digit());
+    let trimmed = param
+        .trim_end_matches(']')
+        .trim_end_matches(|c: char| c.is_ascii_digit());
     let trimmed = trimmed.trim_end_matches('[');
-    let name = trimmed.rsplit(|c: char| c == '*' || c.is_whitespace()).next()?;
-    if name.is_empty() || name == "void" { None } else { Some(name) }
+    let name = trimmed
+        .rsplit(|c: char| c == '*' || c.is_whitespace())
+        .next()?;
+    if name.is_empty() || name == "void" {
+        None
+    } else {
+        Some(name)
+    }
 }
 
 /// Build a `/** @brief ... */` Doxygen stub for a C function signature.
@@ -33,7 +45,11 @@ pub fn generate_stub(signature: &str) -> String {
     let open = sig.find('(').unwrap_or(sig.len());
     let close = sig.rfind(')').unwrap_or(sig.len());
     let head = &sig[..open];
-    let params_str = if close > open { &sig[open + 1..close] } else { "" };
+    let params_str = if close > open {
+        &sig[open + 1..close]
+    } else {
+        ""
+    };
 
     let return_type = head
         .rsplit_once(|c: char| c.is_whitespace() || c == '*')
@@ -73,7 +89,12 @@ pub fn parse_doc_comment(comment: &str) -> Option<ParsedDoc> {
 
     let mut doc = ParsedDoc::default();
     for raw_line in trimmed.lines() {
-        let line = raw_line.trim().trim_start_matches('*').trim_start_matches("/**").trim_end_matches("*/").trim();
+        let line = raw_line
+            .trim()
+            .trim_start_matches('*')
+            .trim_start_matches("/**")
+            .trim_end_matches("*/")
+            .trim();
         if let Some(rest) = line.strip_prefix("@brief") {
             doc.brief = rest.trim().to_string();
         } else if let Some(rest) = line.strip_prefix("@param") {
@@ -101,9 +122,10 @@ pub fn insert_stub(root: &Path, module: &str, fname: &str) -> Result<()> {
     let content = std::fs::read_to_string(&src_path)?;
 
     let funcs = extract_function_implementations(&content);
-    let func = funcs.iter().find(|f| f.name == fname).ok_or_else(|| {
-        NewcError::Other(format!("function '{fname}' not found in {module}"))
-    })?;
+    let func = funcs
+        .iter()
+        .find(|f| f.name == fname)
+        .ok_or_else(|| NewcError::Other(format!("function '{fname}' not found in {module}")))?;
 
     if !func.comment.trim().is_empty() {
         return Err(NewcError::Other(format!("'{fname}' already has a comment")));
@@ -143,7 +165,10 @@ mod tests {
         let comment = "/**\n * @brief Reads an int\n * @param prompt the prompt text\n * @return the parsed int\n */";
         let doc = parse_doc_comment(comment).unwrap();
         assert_eq!(doc.brief, "Reads an int");
-        assert_eq!(doc.params, vec![("prompt".to_string(), "the prompt text".to_string())]);
+        assert_eq!(
+            doc.params,
+            vec![("prompt".to_string(), "the prompt text".to_string())]
+        );
         assert_eq!(doc.returns, Some("the parsed int".to_string()));
     }
 

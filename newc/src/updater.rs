@@ -15,7 +15,7 @@
 //! dependency tree for two infrequent GET requests. `curl` ships by default on
 //! Linux, macOS, and Windows 10+.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -29,18 +29,16 @@ pub fn current_version() -> &'static str {
 
 fn platform_asset() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux",   "x86_64")  => Some("newc-x86_64-linux"),
-        ("linux",   "aarch64") => Some("newc-aarch64-linux"),
-        ("macos",   "aarch64") => Some("newc-aarch64-macos"),
-        ("windows", "x86_64")  => Some("newc-x86_64-windows.exe"),
-        _                      => None,
+        ("linux", "x86_64") => Some("newc-x86_64-linux"),
+        ("linux", "aarch64") => Some("newc-aarch64-linux"),
+        ("macos", "aarch64") => Some("newc-aarch64-macos"),
+        ("windows", "x86_64") => Some("newc-x86_64-windows.exe"),
+        _ => None,
     }
 }
 
 pub(crate) fn semver_gt(a: &str, b: &str) -> bool {
-    let parse = |v: &str| -> Vec<u64> {
-        v.split('.').filter_map(|p| p.parse().ok()).collect()
-    };
+    let parse = |v: &str| -> Vec<u64> { v.split('.').filter_map(|p| p.parse().ok()).collect() };
     parse(a) > parse(b)
 }
 
@@ -214,13 +212,23 @@ mod tests {
     use super::semver_gt;
 
     #[test]
-    fn newer_patch() { assert!(semver_gt("0.2.9", "0.2.8")); }
+    fn newer_patch() {
+        assert!(semver_gt("0.2.9", "0.2.8"));
+    }
     #[test]
-    fn newer_minor() { assert!(semver_gt("0.3.0", "0.2.9")); }
+    fn newer_minor() {
+        assert!(semver_gt("0.3.0", "0.2.9"));
+    }
     #[test]
-    fn newer_major() { assert!(semver_gt("1.0.0", "0.9.9")); }
+    fn newer_major() {
+        assert!(semver_gt("1.0.0", "0.9.9"));
+    }
     #[test]
-    fn same_version_not_newer() { assert!(!semver_gt("0.2.9", "0.2.9")); }
+    fn same_version_not_newer() {
+        assert!(!semver_gt("0.2.9", "0.2.9"));
+    }
     #[test]
-    fn older_version_not_newer() { assert!(!semver_gt("0.2.8", "0.2.9")); }
+    fn older_version_not_newer() {
+        assert!(!semver_gt("0.2.8", "0.2.9"));
+    }
 }

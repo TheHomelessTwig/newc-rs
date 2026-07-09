@@ -222,7 +222,10 @@ impl AppConfig {
         if self.workspaces.iter().any(|w| w.name == name) {
             return false;
         }
-        self.workspaces.push(Workspace { name, paths: Vec::new() });
+        self.workspaces.push(Workspace {
+            name,
+            paths: Vec::new(),
+        });
         true
     }
 
@@ -234,7 +237,10 @@ impl AppConfig {
                 ws.paths.push(path);
             }
         } else {
-            self.workspaces.push(Workspace { name: name.to_string(), paths: vec![path] });
+            self.workspaces.push(Workspace {
+                name: name.to_string(),
+                paths: vec![path],
+            });
         }
     }
 
@@ -253,7 +259,11 @@ impl AppConfig {
 
     /// Remove `path` from the `"__archived__"` workspace.
     pub fn unarchive(&mut self, path: &PathBuf) {
-        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.name == "__archived__") {
+        if let Some(ws) = self
+            .workspaces
+            .iter_mut()
+            .find(|w| w.name == "__archived__")
+        {
             ws.paths.retain(|p| p != path);
         }
     }
@@ -296,7 +306,16 @@ impl AppConfig {
             } else {
                 // cmd /c start uses /d for working directory; empty string is the window title
                 std::process::Command::new("cmd")
-                    .args(["/c", "start", "", terminal.as_str(), "/d", &root_str, editor, "."])
+                    .args([
+                        "/c",
+                        "start",
+                        "",
+                        terminal.as_str(),
+                        "/d",
+                        &root_str,
+                        editor,
+                        ".",
+                    ])
                     .spawn()
                     .ok();
             }

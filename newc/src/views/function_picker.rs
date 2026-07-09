@@ -1,11 +1,11 @@
 //! Inline function picker widget — searchable checklist of library functions with dependency resolution.
 
-use iced::widget::{checkbox, column, row, scrollable, text, text_input, Space};
-use iced::{Element};
+use iced::Element;
+use iced::widget::{Space, checkbox, column, row, scrollable, text, text_input};
 use newc_core::function_lib::FunctionLibrary;
 
-use crate::theme as th;
 use crate::state::Message;
+use crate::theme as th;
 
 /// Renders the function picker panel used when inserting functions from the library into a module.
 pub fn view<'a>(
@@ -45,19 +45,22 @@ pub fn view<'a>(
         checked: bool,
     }
 
-    let func_data: Vec<FuncRow> = modules.iter().flat_map(|module| {
-        candidates
-            .iter()
-            .filter(|f| &f.module == module)
-            .map(|func| FuncRow {
-                module: module.clone(),
-                name: func.name.clone(),
-                description: func.description.clone(),
-                is_dep: resolved.contains(&func.name) && !selected.contains(&func.name),
-                checked: selected.contains(&func.name) || resolved.contains(&func.name),
-            })
-            .collect::<Vec<_>>()
-    }).collect();
+    let func_data: Vec<FuncRow> = modules
+        .iter()
+        .flat_map(|module| {
+            candidates
+                .iter()
+                .filter(|f| &f.module == module)
+                .map(|func| FuncRow {
+                    module: module.clone(),
+                    name: func.name.clone(),
+                    description: func.description.clone(),
+                    is_dep: resolved.contains(&func.name) && !selected.contains(&func.name),
+                    checked: selected.contains(&func.name) || resolved.contains(&func.name),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     // Group headers
     let mut func_rows: Vec<Element<Message>> = Vec::new();
@@ -65,9 +68,7 @@ pub fn view<'a>(
     for fd in func_data {
         if fd.module != current_module {
             current_module = fd.module.clone();
-            func_rows.push(
-                text(fd.module).size(13).color(th::color::cyan()).into(),
-            );
+            func_rows.push(text(fd.module).size(13).color(th::color::cyan()).into());
         }
         let name = fd.name.clone();
         let name2 = fd.name.clone();
@@ -78,7 +79,11 @@ pub fn view<'a>(
                 Message::LibrarySelect(None)
             }
         });
-        let label_color = if fd.is_dep { th::color::purple() } else { th::color::text() };
+        let label_color = if fd.is_dep {
+            th::color::purple()
+        } else {
+            th::color::text()
+        };
         func_rows.push(
             row![
                 Space::new().width(20),

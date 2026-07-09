@@ -1,11 +1,11 @@
 //! Scrollable log of past build records for a project (last 100 kept).
 
-use iced::widget::{button, column, row, scrollable, text, Space};
-use iced::{Element};
+use iced::Element;
+use iced::widget::{Space, button, column, row, scrollable, text};
 use newc_core::{build_history, project::Project};
 
-use crate::theme as th;
 use crate::state::{Message, View};
+use crate::theme as th;
 
 /// Renders the build history table screen for the given project.
 pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Element<'a, Message> {
@@ -26,8 +26,7 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
         return column![
             header,
             Space::new().height(16),
-            text("No build history yet. Run a build first.")
-                .color(th::color::text_dim()),
+            text("No build history yet. Run a build first.").color(th::color::text_dim()),
         ]
         .spacing(8)
         .padding(16)
@@ -46,26 +45,32 @@ pub fn view<'a>(_state: &'a crate::state::AppState, project: &'a Project) -> Ele
     ]
     .spacing(8);
 
-    let rows: Vec<Element<Message>> = records.iter().rev().map(|rec| {
-        let result_color = if rec.succeeded() {
-            th::color::green()
-        } else {
-            th::color::accent()
-        };
-        let result_text = if rec.succeeded() {
-            "✓ OK".to_string()
-        } else {
-            rec.exit_code.map(|c| format!("✗ exit {c}")).unwrap_or_else(|| "✗ killed".into())
-        };
-        row![
-            text(rec.timestamp.clone()).size(12).width(180),
-            text(rec.target.clone()).width(120),
-            text(result_text).width(100).color(result_color),
-            text(rec.duration_str()).width(80),
-        ]
-        .spacing(8)
-        .into()
-    }).collect();
+    let rows: Vec<Element<Message>> = records
+        .iter()
+        .rev()
+        .map(|rec| {
+            let result_color = if rec.succeeded() {
+                th::color::green()
+            } else {
+                th::color::accent()
+            };
+            let result_text = if rec.succeeded() {
+                "✓ OK".to_string()
+            } else {
+                rec.exit_code
+                    .map(|c| format!("✗ exit {c}"))
+                    .unwrap_or_else(|| "✗ killed".into())
+            };
+            row![
+                text(rec.timestamp.clone()).size(12).width(180),
+                text(rec.target.clone()).width(120),
+                text(result_text).width(100).color(result_color),
+                text(rec.duration_str()).width(80),
+            ]
+            .spacing(8)
+            .into()
+        })
+        .collect();
 
     column![
         header,

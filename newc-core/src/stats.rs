@@ -71,17 +71,28 @@ pub fn compute(root: &Path) -> ProjectStats {
             extract_signatures(&content).len()
         };
         if name != "main" {
-            module_stats.push(ModuleStats { name, functions, loc, source_lines });
+            module_stats.push(ModuleStats {
+                name,
+                functions,
+                loc,
+                source_lines,
+            });
         }
     }
 
     let total_functions = module_stats.iter().map(|m| m.functions).sum();
     let total_loc = module_stats.iter().map(|m| m.loc).sum::<usize>() + main_loc;
-    let total_source_lines = module_stats.iter().map(|m| m.source_lines).sum::<usize>() + main_source;
+    let total_source_lines =
+        module_stats.iter().map(|m| m.source_lines).sum::<usize>() + main_source;
 
     module_stats.sort_by_key(|m| std::cmp::Reverse(m.functions));
 
-    ProjectStats { total_functions, total_loc, total_source_lines, module_stats }
+    ProjectStats {
+        total_functions,
+        total_loc,
+        total_source_lines,
+        module_stats,
+    }
 }
 
 /// Non-blank, non-comment-only lines.

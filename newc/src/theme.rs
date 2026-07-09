@@ -161,40 +161,84 @@ pub mod color {
 
     use super::resolved;
 
-    pub fn bg_deep() -> Color { resolved().bg_deep }
-    pub fn bg_base() -> Color { resolved().bg_base }
-    pub fn bg_panel() -> Color { resolved().bg_panel }
-    pub fn bg_card() -> Color { resolved().bg_card }
-    pub fn bg_raised() -> Color { resolved().bg_raised }
-    pub fn bg_hover() -> Color { resolved().bg_hover }
-    pub fn bg_active() -> Color { resolved().bg_active }
+    pub fn bg_deep() -> Color {
+        resolved().bg_deep
+    }
+    pub fn bg_base() -> Color {
+        resolved().bg_base
+    }
+    pub fn bg_panel() -> Color {
+        resolved().bg_panel
+    }
+    pub fn bg_card() -> Color {
+        resolved().bg_card
+    }
+    pub fn bg_raised() -> Color {
+        resolved().bg_raised
+    }
+    pub fn bg_hover() -> Color {
+        resolved().bg_hover
+    }
+    pub fn bg_active() -> Color {
+        resolved().bg_active
+    }
 
-    pub fn border() -> Color { resolved().border }
-    pub fn border_dim() -> Color { resolved().border_dim }
-    pub fn border_accent() -> Color { resolved().border_accent }
+    pub fn border() -> Color {
+        resolved().border
+    }
+    pub fn border_dim() -> Color {
+        resolved().border_dim
+    }
+    pub fn border_accent() -> Color {
+        resolved().border_accent
+    }
 
-    pub fn text() -> Color { resolved().text }
-    pub fn text_dim() -> Color { resolved().text_dim }
-    pub fn text_hint() -> Color { resolved().text_hint }
+    pub fn text() -> Color {
+        resolved().text
+    }
+    pub fn text_dim() -> Color {
+        resolved().text_dim
+    }
+    pub fn text_hint() -> Color {
+        resolved().text_hint
+    }
 
-    pub fn accent() -> Color { resolved().accent }
-    pub fn green() -> Color { resolved().green }
-    pub fn cyan() -> Color { resolved().cyan }
-    pub fn yellow() -> Color { resolved().yellow }
-    pub fn purple() -> Color { resolved().purple }
-    pub fn orange() -> Color { resolved().orange }
-    pub fn red() -> Color { resolved().red }
+    pub fn accent() -> Color {
+        resolved().accent
+    }
+    pub fn green() -> Color {
+        resolved().green
+    }
+    pub fn cyan() -> Color {
+        resolved().cyan
+    }
+    pub fn yellow() -> Color {
+        resolved().yellow
+    }
+    pub fn purple() -> Color {
+        resolved().purple
+    }
+    pub fn orange() -> Color {
+        resolved().orange
+    }
+    pub fn red() -> Color {
+        resolved().red
+    }
 }
 
 // ── Separator ─────────────────────────────────────────────────────────────────
 
 /// 1px horizontal divider.
 pub fn separator<'a, Message: 'a>() -> iced::widget::Container<'a, Message> {
-    container(iced::widget::Space::new().width(iced::Length::Fill).height(1))
-        .style(|_| container::Style {
-            background: Some(Background::Color(color::border_dim())),
-            ..Default::default()
-        })
+    container(
+        iced::widget::Space::new()
+            .width(iced::Length::Fill)
+            .height(1),
+    )
+    .style(|_| container::Style {
+        background: Some(Background::Color(color::border_dim())),
+        ..Default::default()
+    })
 }
 
 // ── Container styles ──────────────────────────────────────────────────────────
@@ -204,7 +248,11 @@ pub fn deep_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_deep)),
-        border: Border { color: c.border_dim, width: 0.0, radius: 0.0.into() },
+        border: Border {
+            color: c.border_dim,
+            width: 0.0,
+            radius: 0.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -214,7 +262,11 @@ pub fn panel_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_panel)),
-        border: Border { color: c.border, width: 1.0, radius: 0.0.into() },
+        border: Border {
+            color: c.border,
+            width: 1.0,
+            radius: 0.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -224,7 +276,11 @@ pub fn card_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_card)),
-        border: Border { color: c.border, width: 1.0, radius: 6.0.into() },
+        border: Border {
+            color: c.border,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -234,7 +290,11 @@ pub fn card_raised_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_raised)),
-        border: Border { color: c.border, width: 1.0, radius: 6.0.into() },
+        border: Border {
+            color: c.border,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.0, 0.0, if c.is_dark { 0.4 } else { 0.15 }),
             offset: iced::Vector::new(0.0, 2.0),
@@ -249,7 +309,11 @@ pub fn section_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_card)),
-        border: Border { color: c.border_dim, width: 1.0, radius: 4.0.into() },
+        border: Border {
+            color: c.border_dim,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -259,7 +323,11 @@ pub fn accent_left_border(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_card)),
-        border: Border { color: c.accent, width: 3.0, radius: 0.0.into() },
+        border: Border {
+            color: c.accent,
+            width: 3.0,
+            radius: 0.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -269,7 +337,11 @@ pub fn selected_row_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.accent.scale_alpha(0.1))),
-        border: Border { color: c.accent, width: 1.0, radius: 3.0.into() },
+        border: Border {
+            color: c.accent,
+            width: 1.0,
+            radius: 3.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -295,7 +367,11 @@ pub fn code_block_style(_: &iced::Theme) -> container::Style {
     let c = resolved();
     container::Style {
         background: Some(Background::Color(c.bg_deep)),
-        border: Border { color: c.border_dim, width: 1.0, radius: 4.0.into() },
+        border: Border {
+            color: c.border_dim,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -303,30 +379,27 @@ pub fn code_block_style(_: &iced::Theme) -> container::Style {
 // ── Button styles ─────────────────────────────────────────────────────────────
 
 /// Filled accent-coloured button — primary actions (save, submit).
-pub fn btn_primary(
-    _theme: &iced::Theme,
-    status: button::Status,
-) -> button::Style {
+pub fn btn_primary(_theme: &iced::Theme, status: button::Status) -> button::Style {
     let c = resolved();
     let bg = match status {
-        button::Status::Active   => c.accent,
-        button::Status::Hovered  => c.accent.scale_alpha(0.85),
-        button::Status::Pressed  => c.accent.scale_alpha(0.70),
+        button::Status::Active => c.accent,
+        button::Status::Hovered => c.accent.scale_alpha(0.85),
+        button::Status::Pressed => c.accent.scale_alpha(0.70),
         button::Status::Disabled => c.accent.scale_alpha(0.35),
     };
     button::Style {
         background: Some(Background::Color(bg)),
         text_color: c.on_accent,
-        border: Border { radius: 4.0.into(), ..Default::default() },
+        border: Border {
+            radius: 4.0.into(),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
 
 /// Outline button with no background by default — secondary actions.
-pub fn btn_secondary(
-    _theme: &iced::Theme,
-    status: button::Status,
-) -> button::Style {
+pub fn btn_secondary(_theme: &iced::Theme, status: button::Status) -> button::Style {
     let c = resolved();
     let bg = match status {
         button::Status::Hovered | button::Status::Pressed => Some(Background::Color(c.bg_hover)),
@@ -338,17 +411,22 @@ pub fn btn_secondary(
     };
     button::Style {
         background: bg,
-        text_color: if matches!(status, button::Status::Disabled) { c.text_hint } else { c.text },
-        border: Border { color: border_color, width: 1.0, radius: 4.0.into() },
+        text_color: if matches!(status, button::Status::Disabled) {
+            c.text_hint
+        } else {
+            c.text
+        },
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         ..Default::default()
     }
 }
 
 /// Borderless button — only shows a background tint on hover/press.
-pub fn btn_ghost(
-    _theme: &iced::Theme,
-    status: button::Status,
-) -> button::Style {
+pub fn btn_ghost(_theme: &iced::Theme, status: button::Status) -> button::Style {
     let c = resolved();
     let bg = match status {
         button::Status::Hovered | button::Status::Pressed => Some(Background::Color(c.bg_hover)),
@@ -356,51 +434,57 @@ pub fn btn_ghost(
     };
     button::Style {
         background: bg,
-        text_color: if matches!(status, button::Status::Disabled) { c.text_hint } else { c.text_dim },
-        border: Border { radius: 4.0.into(), ..Default::default() },
+        text_color: if matches!(status, button::Status::Disabled) {
+            c.text_hint
+        } else {
+            c.text_dim
+        },
+        border: Border {
+            radius: 4.0.into(),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
 
 /// Red-tinted button for destructive actions (delete, remove).
-pub fn btn_danger(
-    _theme: &iced::Theme,
-    status: button::Status,
-) -> button::Style {
+pub fn btn_danger(_theme: &iced::Theme, status: button::Status) -> button::Style {
     let c = resolved();
     let bg = match status {
-        button::Status::Active   => Some(Background::Color(c.red.scale_alpha(0.12))),
-        button::Status::Hovered  => Some(Background::Color(c.red.scale_alpha(0.22))),
-        button::Status::Pressed  => Some(Background::Color(c.red.scale_alpha(0.31))),
+        button::Status::Active => Some(Background::Color(c.red.scale_alpha(0.12))),
+        button::Status::Hovered => Some(Background::Color(c.red.scale_alpha(0.22))),
+        button::Status::Pressed => Some(Background::Color(c.red.scale_alpha(0.31))),
         button::Status::Disabled => None,
     };
     button::Style {
         background: bg,
         text_color: c.red,
-        border: Border { color: c.red, width: 1.0, radius: 4.0.into() },
+        border: Border {
+            color: c.red,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         ..Default::default()
     }
 }
 
 /// Top-bar navigation button in its active (current view) state.
-pub fn btn_nav_active(
-    _theme: &iced::Theme,
-    _status: button::Status,
-) -> button::Style {
+pub fn btn_nav_active(_theme: &iced::Theme, _status: button::Status) -> button::Style {
     let c = resolved();
     button::Style {
         background: Some(Background::Color(c.accent.scale_alpha(0.14))),
         text_color: c.accent,
-        border: Border { color: c.accent, width: 1.0, radius: 4.0.into() },
+        border: Border {
+            color: c.accent,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         ..Default::default()
     }
 }
 
 /// Top-bar navigation button in its inactive (other view) state.
-pub fn btn_nav_inactive(
-    _theme: &iced::Theme,
-    status: button::Status,
-) -> button::Style {
+pub fn btn_nav_inactive(_theme: &iced::Theme, status: button::Status) -> button::Style {
     let c = resolved();
     let bg = match status {
         button::Status::Hovered | button::Status::Pressed => Some(Background::Color(c.bg_hover)),
@@ -409,7 +493,10 @@ pub fn btn_nav_inactive(
     button::Style {
         background: bg,
         text_color: c.text_dim,
-        border: Border { radius: 4.0.into(), ..Default::default() },
+        border: Border {
+            radius: 4.0.into(),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -417,10 +504,7 @@ pub fn btn_nav_inactive(
 // ── Text input styles ─────────────────────────────────────────────────────────
 
 /// Uniform text-input style: card background, dim border that turns accent on focus.
-pub fn input_style(
-    _theme: &iced::Theme,
-    status: text_input::Status,
-) -> text_input::Style {
+pub fn input_style(_theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let c = resolved();
     let border_color = match status {
         text_input::Status::Focused { .. } => c.accent,
@@ -429,7 +513,11 @@ pub fn input_style(
     };
     text_input::Style {
         background: Background::Color(c.bg_card),
-        border: Border { color: border_color, width: 1.0, radius: 4.0.into() },
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
         icon: c.text_dim,
         placeholder: c.text_hint,
         value: c.text,
@@ -466,7 +554,10 @@ pub fn hint_text(s: impl ToString) -> iced::widget::Text<'static> {
 
 /// 12 px monospace text in the default text colour.
 pub fn mono(s: impl ToString) -> iced::widget::Text<'static> {
-    text(s.to_string()).size(12).font(Font::MONOSPACE).color(color::text())
+    text(s.to_string())
+        .size(12)
+        .font(Font::MONOSPACE)
+        .color(color::text())
 }
 
 // ── Toast helpers ─────────────────────────────────────────────────────────────
@@ -484,7 +575,11 @@ pub fn toast_style(kind: &crate::state::ToastKind) -> container::Style {
     };
     container::Style {
         background: Some(Background::Color(border_color.scale_alpha(0.07))),
-        border: Border { color: border_color, width: 2.0, radius: 6.0.into() },
+        border: Border {
+            color: border_color,
+            width: 2.0,
+            radius: 6.0.into(),
+        },
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.0, 0.0, if c.is_dark { 0.5 } else { 0.2 }),
             offset: iced::Vector::new(0.0, 2.0),

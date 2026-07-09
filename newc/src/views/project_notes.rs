@@ -1,11 +1,11 @@
 //! Project notes screen — full-screen auto-saving text editor for free-form notes.
 
-use iced::widget::{button, column, row, text, text_editor, Space};
+use iced::widget::{Space, button, column, row, text, text_editor};
 use iced::{Element, Length};
 use newc_core::project::Project;
 
-use crate::theme as th;
 use crate::state::{AppState, Message, View};
+use crate::theme as th;
 
 /// Renders the project notes editor screen.
 pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Message> {
@@ -24,8 +24,5 @@ pub fn view<'a>(state: &'a AppState, project: &'a Project) -> Element<'a, Messag
         .on_action(Message::NotesEdit)
         .height(Length::Fill);
 
-    column![header, editor]
-        .spacing(8)
-        .padding(12)
-        .into()
+    column![header, editor].spacing(8).padding(12).into()
 }

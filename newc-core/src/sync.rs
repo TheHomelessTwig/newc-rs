@@ -15,9 +15,8 @@ use crate::error::{NewcError, Result};
 
 // Match a C function definition: return-type name(params) on one line, followed by '{' on the
 // very next line (Allman brace style enforced by newc's generated code).
-static FUNC_DEF: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^([a-zA-Z][^;{#\n]*\([^;{\n]*\))\s*\n\{").unwrap()
-});
+static FUNC_DEF: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^([a-zA-Z][^;{#\n]*\([^;{\n]*\))\s*\n\{").unwrap());
 
 /// A parsed function extracted from a `.c` file.
 #[derive(Debug, Clone)]
@@ -85,7 +84,11 @@ pub fn extract_function_implementations(source: &str) -> Vec<ExtractedFunction> 
             && !sig_line.trim().starts_with("#")
             && !sig_line.contains(';')
             && sig_line.contains('(')
-            && sig_line.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+            && sig_line
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_alphabetic())
+                .unwrap_or(false)
         {
             // Peek: next non-blank line must be `{`
             let mut k = j + 1;
@@ -135,7 +138,10 @@ pub fn extract_function_implementations(source: &str) -> Vec<ExtractedFunction> 
 
 fn extract_name_from_sig(sig: &str) -> Option<String> {
     let before_paren = sig.split('(').next()?;
-    let name = before_paren.split_whitespace().last()?.trim_start_matches('*');
+    let name = before_paren
+        .split_whitespace()
+        .last()?
+        .trim_start_matches('*');
     if name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.is_empty() {
         Some(name.to_string())
     } else {
@@ -203,9 +209,7 @@ pub fn sync_module(root: &Path, name: &str) -> Result<()> {
         .join("\n\n");
 
     let new_header = if preserved.trim().is_empty() {
-        format!(
-            "#ifndef {guard}\n#define {guard}\n\n{protos}\n\n#endif\n"
-        )
+        format!("#ifndef {guard}\n#define {guard}\n\n{protos}\n\n#endif\n")
     } else {
         format!(
             "#ifndef {guard}\n#define {guard}\n\n/* SYNC_IGNORE_START */\n{preserved}\n/* SYNC_IGNORE_END */\n\n{protos}\n\n#endif\n"

@@ -76,8 +76,8 @@ pub fn load(root: &Path) -> ProjectMeta {
 /// Returns an error if TOML serialisation or the file write fails.
 pub fn save(root: &Path, meta: &ProjectMeta) -> Result<()> {
     let path = root.join(".newc_meta.toml");
-    let content = toml::to_string_pretty(meta)
-        .map_err(|e| crate::error::NewcError::Other(e.to_string()))?;
+    let content =
+        toml::to_string_pretty(meta).map_err(|e| crate::error::NewcError::Other(e.to_string()))?;
     std::fs::write(path, content)?;
     Ok(())
 }

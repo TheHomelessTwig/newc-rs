@@ -9,14 +9,14 @@
 //! ([`configure_wsl2_gpu`]), selecting a virtio/gfxstream ICD when a DRI device
 //! is present, or falling back to software rendering otherwise.
 
-mod cli;
 mod app;
-mod highlight;
-mod state;
 mod build_runner;
+mod cli;
+mod highlight;
 mod lsp;
-mod updater;
+mod state;
 mod theme;
+mod updater;
 pub mod views;
 
 use clap::Parser;
@@ -29,7 +29,8 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         None => {
             let current_dir = std::env::current_dir().ok();
-            let initial = current_dir.filter(|dir| newc_core::project::Project::is_newc_project(dir));
+            let initial =
+                current_dir.filter(|dir| newc_core::project::Project::is_newc_project(dir));
             launch_gui(initial)
         }
         Some(Command::Gui { path }) => {
@@ -76,14 +77,15 @@ fn is_wsl2() -> bool {
         .unwrap_or(false)
 }
 
-
 /// Configure Vulkan / GPU environment variables for WSL2.
 ///
 /// Prefers hardware ICD files (`virtio_icd.json`, `gfxstream_vk_icd.json`) when
 /// `/dev/dri` is present and falls back to `lvp_icd.json` (LLVMpipe) or the
 /// wgpu `gl` backend + softpipe as a last resort.
 fn configure_wsl2_gpu() {
-    unsafe { std::env::remove_var("WAYLAND_DISPLAY"); }
+    unsafe {
+        std::env::remove_var("WAYLAND_DISPLAY");
+    }
 
     let icd_dir = std::path::Path::new("/usr/share/vulkan/icd.d");
     let has_gpu = std::path::Path::new("/dev/dri").is_dir();
