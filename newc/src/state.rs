@@ -375,7 +375,8 @@ pub enum Message {
     PollBuildOutput,
     StatusTick,
     ToastTick,
-    ToastDismiss(usize),
+    /// Dismiss the toast with this [`Toast::id`].
+    ToastDismiss(u64),
 
     // Graph canvas interaction
     GraphNodeSelect(String),
@@ -383,6 +384,16 @@ pub enum Message {
     GraphZoom(f32),
     GraphReset,
     GraphExport,
+
+    // Global shortcuts / window lifecycle
+    /// Ctrl+S — save whatever editor the current view has open.
+    SaveShortcut,
+    /// Esc — close the topmost overlay (quick search, shortcuts, error).
+    EscapePressed,
+    /// Main window resized (tracked for persistence).
+    WindowResized(iced::window::Id, iced::Size),
+    /// Async archive export finished: `Ok(path)` or `Err(message)`.
+    ArchiveDone(Result<String, String>),
 
     None,
 }
@@ -393,12 +404,21 @@ pub enum Message {
 /// advanced by [`Message::ToastTick`] at 100 ms intervals.
 #[derive(Debug, Clone)]
 pub struct Toast {
+    /// Unique id — dismissal targets this rather than a vec index, which can
+    /// shift when other toasts expire mid-tick.
+    pub id: u64,
     pub message: String,
     pub kind: ToastKind,
     /// Milliseconds elapsed since the toast was created.
     pub elapsed_ms: u32,
     /// Total display duration before auto-dismiss.
     pub duration_ms: u32,
+}
+
+fn next_toast_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Visual severity of a [`Toast`] — controls border colour and background tint.
@@ -412,15 +432,15 @@ pub enum ToastKind {
 impl Toast {
     /// Create a success toast (auto-dismisses after 3 s).
     pub fn success(msg: impl Into<String>) -> Self {
-        Self { message: msg.into(), kind: ToastKind::Success, elapsed_ms: 0, duration_ms: 3000 }
+        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Success, elapsed_ms: 0, duration_ms: 3000 }
     }
     /// Create an error toast (auto-dismisses after 5 s).
     pub fn error(msg: impl Into<String>) -> Self {
-        Self { message: msg.into(), kind: ToastKind::Error, elapsed_ms: 0, duration_ms: 5000 }
+        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Error, elapsed_ms: 0, duration_ms: 5000 }
     }
     /// Create an info toast (auto-dismisses after 2.5 s).
     pub fn info(msg: impl Into<String>) -> Self {
-        Self { message: msg.into(), kind: ToastKind::Info, elapsed_ms: 0, duration_ms: 2500 }
+        Self { id: next_toast_id(), message: msg.into(), kind: ToastKind::Info, elapsed_ms: 0, duration_ms: 2500 }
     }
     /// Returns `true` when the toast's elapsed time has reached its duration.
     pub fn is_expired(&self) -> bool {
@@ -652,6 +672,15 @@ impl AppState {
             .map(|d| !d.join("newc").join(".onboarded").exists())
             .unwrap_or(false);
         let known_projects = load_known_projects();
+        // Saved pane-split ratio for `key` at traversal position `idx`, or the default
+        let saved_ratios = config.pane_ratios.clone();
+        let ratio = move |key: &str, idx: usize, default: f32| -> f32 {
+            saved_ratios
+                .get(key)
+                .and_then(|v| v.get(idx))
+                .copied()
+                .unwrap_or(default)
+        };
         let active_theme = config.theme.clone();
         Self {
             view: View::Home,
@@ -696,35 +725,35 @@ impl AppState {
             show_import: false,
             library_panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
                 axis: pane_grid::Axis::Vertical,
-                ratio: 0.15,
+                ratio: ratio("library", 0, 0.15),
                 a: Box::new(pane_grid::Configuration::Pane(LibraryPane::Groups)),
                 b: Box::new(pane_grid::Configuration::Split {
                     axis: pane_grid::Axis::Vertical,
-                    ratio: 0.24,
+                    ratio: ratio("library", 1, 0.24),
                     a: Box::new(pane_grid::Configuration::Pane(LibraryPane::Functions)),
                     b: Box::new(pane_grid::Configuration::Pane(LibraryPane::Detail)),
                 }),
             }),
             cref_panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
                 axis: pane_grid::Axis::Vertical,
-                ratio: 0.16,
+                ratio: ratio("cref", 0, 0.16),
                 a: Box::new(pane_grid::Configuration::Pane(CRefPane::Headers)),
                 b: Box::new(pane_grid::Configuration::Split {
                     axis: pane_grid::Axis::Vertical,
-                    ratio: 0.22,
+                    ratio: ratio("cref", 1, 0.22),
                     a: Box::new(pane_grid::Configuration::Pane(CRefPane::Functions)),
                     b: Box::new(pane_grid::Configuration::Pane(CRefPane::Detail)),
                 }),
             }),
             snippets_panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
                 axis: pane_grid::Axis::Vertical,
-                ratio: 0.28,
+                ratio: ratio("snippets", 0, 0.28),
                 a: Box::new(pane_grid::Configuration::Pane(SnippetsPane::List)),
                 b: Box::new(pane_grid::Configuration::Pane(SnippetsPane::Code)),
             }),
             module_panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
                 axis: pane_grid::Axis::Vertical,
-                ratio: 0.20,
+                ratio: ratio("module", 0, 0.20),
                 a: Box::new(pane_grid::Configuration::Pane(ModulePane::Sidebar)),
                 b: Box::new(pane_grid::Configuration::Pane(ModulePane::Panel)),
             }),
