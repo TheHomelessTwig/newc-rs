@@ -180,13 +180,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # continue-on-error: until TheHomelessTwig.newc exists in the *merged*
-      # microsoft/winget-pkgs (first submission is a pending PR, not merged
-      # yet), this action errors out — that shouldn't block the independent
-      # Homebrew steps below.
       - name: Publish to winget
         uses: vedantmgoyal2009/winget-releaser@v2
-        continue-on-error: true
         with:
           identifier: TheHomelessTwig.newc
           installers-regex: 'newc-x86_64-windows\.exe$'
